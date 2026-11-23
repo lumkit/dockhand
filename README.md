@@ -18,6 +18,7 @@ macOS 没有系统级 MTP 挂载 API。项目内嵌了 MIT/Apache-2.0 的
 - 侧边栏分组内的条目支持拖拽排序，顺序会持久化到本地设置
 - MTP 存储行可点击展开“相片 / 下载 / 电影 / 音乐 / 图片”快捷入口；
   展开状态和快捷入口顺序都会持久化
+- MTP 大目录先建立轻量排序索引，再按 300 行分页加载，滚动到底自动追加
 - 构建源码需要 Rust 1.90+；最终 App 不需要用户安装 Rust
 
 * [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.

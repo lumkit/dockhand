@@ -29,6 +29,7 @@ fun DualPaneBrowser(
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
     onRetry: (PaneId) -> Unit,
+    onLoadMore: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
     onForward: (PaneId) -> Unit,
     onGoUp: (PaneId) -> Unit,
@@ -74,6 +75,7 @@ fun DualPaneBrowser(
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Left, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Left, it) },
                 onRetry = { onRetry(PaneId.Left) },
+                onLoadMore = { onLoadMore(PaneId.Left) },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -90,6 +92,7 @@ fun DualPaneBrowser(
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Right, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Right, it) },
                 onRetry = { onRetry(PaneId.Right) },
+                onLoadMore = { onLoadMore(PaneId.Right) },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),

@@ -5,6 +5,7 @@
     <string name="text_mounted_disks">挂载磁盘</string>
     <string name="text_no_mounted_disks">未连接挂载磁盘</string>
     <string name="text_mtp_devices">MTP设备</string>
+    <string name="text_settings">设置</string>
 
     <!-- 侧边栏固定入口 -->
     <string name="text_desktop">桌面</string>
@@ -21,6 +22,8 @@
     <string name="text_empty_folder">此文件夹为空</string>
     <string name="text_read_failed">读取失败</string>
     <string name="text_retry">重试</string>
+    <string name="text_loading_more">加载更多…</string>
+    <string name="action_copy_path">复制路径</string>
     <string name="text_item_count">%1$d项</string>
     <string name="error_name_empty">名称不能为空</string>
     <string name="error_name_invalid">名称不合法：%1$s</string>

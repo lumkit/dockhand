@@ -8,16 +8,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -25,13 +29,16 @@ import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
+import kotlinx.coroutines.flow.distinctUntilChanged
 import dockhand.shared.generated.resources.text_empty_folder
+import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
 import io.github.dockhand.domain.model.FileEntry
@@ -47,8 +54,10 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Folder
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
 
 private const val INACTIVE_PANE_ALPHA = 0.55f
 
@@ -62,6 +71,7 @@ private const val INACTIVE_PANE_ALPHA = 0.55f
  * 鼠标进入面板不再切换焦点；单击面板或条目才设置为焦点列表。
  * 双击目录进入目录；双击文件的打开动作和右键操作窗口后续接入。
  */
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun FileBrowserPane(
     pane: FilePaneState,
@@ -71,6 +81,7 @@ fun FileBrowserPane(
     onEntryDoubleClick: (FileEntry) -> Unit,
     onEntrySecondaryClick: (FileEntry) -> Unit,
     onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
 ) {
@@ -78,6 +89,17 @@ fun FileBrowserPane(
 
     Box(
         modifier = modifier
+            // 初始 pass 只观察、不消费，滚动条拖动也会先切到当前面板。
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) {
+                            currentOnFocus()
+                        }
+                    }
+                }
+            }
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { currentOnFocus() })
             }
@@ -115,8 +137,35 @@ fun FileBrowserPane(
                     }
 
                     else -> {
+                        val listState = rememberLazyListState()
+                        val currentHasMore by rememberUpdatedState(pane.hasMore)
+                        val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
+                        val currentLoadMore by rememberUpdatedState(onLoadMore)
+
+                        LaunchedEffect(listState) {
+                            snapshotFlow {
+                                val layoutInfo = listState.layoutInfo
+                                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                                val total = layoutInfo.totalItemsCount
+                                total > 0 && lastVisible >= total - 3
+                            }
+                                .distinctUntilChanged()
+                                .collect { nearEnd ->
+                                    if (nearEnd && currentHasMore && !currentLoadingMore) {
+                                        currentLoadMore()
+                                    }
+                                }
+                        }
+
+                        LaunchedEffect(pane.location) {
+                            listState.scrollToItem(0)
+                        }
+
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScrollBar(listState),
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         ) {
                             items(pane.entries, key = { it.id }) { row ->
@@ -127,6 +176,26 @@ fun FileBrowserPane(
                                     onDoubleClick = { onEntryDoubleClick(row.entry) },
                                     onSecondaryClick = { onEntrySecondaryClick(row.entry) },
                                 )
+                            }
+
+                            if (pane.isLoadingMore) {
+                                item(key = "load-more") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        InfiniteProgressIndicator(size = 20.dp)
+                                        Text(
+                                            text = stringResource(Res.string.text_loading_more),
+                                            modifier = Modifier.padding(start = 8.dp),
+                                            style = MiuixTheme.textStyles.body2,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

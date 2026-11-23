@@ -206,8 +206,9 @@ async fn list_entries(
     device_key: u64,
     storage_id: u64,
     path: String,
+    include_metadata: bool,
 ) -> Result<Value, String> {
-    let (_device, storage) = open_storage(device_key, storage_id, true).await?;
+    let (_device, storage) = open_storage(device_key, storage_id, include_metadata).await?;
     let parent = resolve_folder(&storage, &path).await?;
 
     let token = mtp_rs::CancelToken::new();
@@ -342,7 +343,21 @@ pub extern "C" fn dockhand_mtp_list(
     let path = read_c_string(path);
     run_operation(async move {
         let path = path?;
-        list_entries(request_id, device_key, storage_id, path).await
+        list_entries(request_id, device_key, storage_id, path, true).await
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_list_fast(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    path: *const c_char,
+) -> *mut c_char {
+    let path = read_c_string(path);
+    run_operation(async move {
+        let path = path?;
+        list_entries(request_id, device_key, storage_id, path, false).await
     })
 }
 

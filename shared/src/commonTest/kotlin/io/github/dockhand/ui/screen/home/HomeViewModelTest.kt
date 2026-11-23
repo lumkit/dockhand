@@ -1,6 +1,7 @@
 package io.github.dockhand.ui.screen.home
 
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileListPage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
@@ -187,6 +188,74 @@ class HomeViewModelTest {
         assertTrue(source.id in viewModel.state.value.mtpExpandedSources)
         assertEquals(source.id, viewModel.state.value.leftPane.location?.source?.id)
         assertEquals("/", viewModel.state.value.leftPane.location?.path)
+    }
+
+    @Test
+    fun mtpFirstPageAndLoadMoreAppendEntries() = runBlocking {
+        val source = FileSource("mtp:1:65537", "MTP", FileSourceKind.Mtp)
+        val root = FileLocation(source, "/")
+        val allEntries = (1..650).map { index ->
+            FileEntry(
+                id = root.path + "file-$index",
+                name = "file-$index.txt",
+                location = FileLocation(source, "/file-$index.txt"),
+                isDirectory = false,
+                size = index.toLong(),
+            )
+        }
+        val repository = object : FileBrowserRepository {
+            override fun observePlaces(): Flow<List<FilePlace>> = flowOf(
+                listOf(
+                    FilePlace(
+                        id = source.id,
+                        label = source.name,
+                        location = root,
+                        kind = FilePlaceKind.MtpStorage,
+                        group = FilePlaceGroup.Mtp,
+                    )
+                )
+            )
+
+            override fun observeChanges(location: FileLocation): Flow<Unit> = flowOf()
+
+            override suspend fun list(location: FileLocation): List<FileEntry> = allEntries
+
+            override suspend fun listPage(
+                location: FileLocation,
+                offset: Int,
+                limit: Int,
+            ): FileListPage {
+                val page = allEntries.drop(offset).take(limit)
+                return FileListPage(
+                    entries = page,
+                    hasMore = offset + page.size < allEntries.size,
+                    total = allEntries.size,
+                )
+            }
+
+            override suspend fun createDirectory(parent: FileLocation, name: String) = Unit
+
+            override suspend fun createFile(parent: FileLocation, name: String) = Unit
+
+            override suspend fun copy(
+                entries: List<FileEntry>,
+                destinationDirectory: FileLocation,
+                overwrite: Boolean,
+            ) = Unit
+        }
+        val viewModel = HomeViewModel(
+            files = repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        assertEquals(300, viewModel.state.value.leftPane.entries.size)
+        assertTrue(viewModel.state.value.leftPane.hasMore)
+
+        viewModel.onLoadMore(PaneId.Left)
+
+        assertEquals(600, viewModel.state.value.leftPane.entries.size)
+        assertTrue(viewModel.state.value.leftPane.hasMore)
     }
 
     @Test

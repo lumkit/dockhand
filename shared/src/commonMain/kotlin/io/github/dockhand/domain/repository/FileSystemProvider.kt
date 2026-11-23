@@ -1,6 +1,7 @@
 package io.github.dockhand.domain.repository
 
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileListPage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FileSource
@@ -29,6 +30,24 @@ interface FileSystemProvider {
 
     /** 列出目录内容。调用方负责排序，provider 只返回原始条目。 */
     suspend fun list(location: FileLocation): List<FileEntry>
+
+    /**
+     * 分页列出目录内容；默认实现基于 [list] 切片。
+     * MTP 等后端可以覆盖，实现“先排序索引、再分页”。
+     */
+    suspend fun listPage(
+        location: FileLocation,
+        offset: Int,
+        limit: Int,
+    ): FileListPage {
+        val all = list(location)
+        val page = all.drop(offset).take(limit)
+        return FileListPage(
+            entries = page,
+            hasMore = offset + page.size < all.size,
+            total = all.size,
+        )
+    }
 
     /** 在 [parent] 下新建一个文件夹。名称冲突时抛 [io.github.dockhand.domain.model.FileBrowserException]。 */
     suspend fun createDirectory(parent: FileLocation, name: String)

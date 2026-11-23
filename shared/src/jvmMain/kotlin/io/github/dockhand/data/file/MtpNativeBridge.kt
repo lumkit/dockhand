@@ -85,6 +85,16 @@ internal object MtpNativeBridge {
             ValueLayout.ADDRESS,
         ),
     )
+    private val fastListHandle: MethodHandle = downcall(
+        "dockhand_mtp_list_fast",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+        ),
+    )
     private val cancelListHandle: MethodHandle = downcall(
         "dockhand_mtp_cancel_list",
         FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG),
@@ -159,24 +169,48 @@ internal object MtpNativeBridge {
         path: String,
     ): BridgeResult<List<NativeMtpEntry>> {
         return withStringArg(path) { pathSegment ->
-            val data = callJson(listHandle, requestId, deviceKey, storageId, pathSegment)
-            when (val result = parse(data)) {
-                is BridgeResult.Failure -> result
-                is BridgeResult.Success -> BridgeResult.Success(
-                    result.value.jsonArray.mapNotNull { element ->
-                        val item = element.jsonObject
-                        val handle = item["handle"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
-                        NativeMtpEntry(
-                            handle = handle,
-                            storageId = item["storageId"]?.jsonPrimitive?.longOrNull ?: storageId,
-                            name = item["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                            isDirectory = item["isDirectory"]?.jsonPrimitive?.booleanOrNull ?: false,
-                            size = item["size"]?.jsonPrimitive?.longOrNull ?: 0L,
-                            modifiedLocal = item["modifiedLocal"]?.jsonPrimitive?.contentOrNull,
-                        )
-                    }
-                )
-            }
+            parseEntries(
+                data = callJson(listHandle, requestId, deviceKey, storageId, pathSegment),
+                storageId = storageId,
+            )
+        }
+    }
+
+    /**
+     * 只读取名称/目录/大小等索引字段，不逐对象读取修改时间。
+     * 用于 MTP 大目录分页前的全量排序索引。
+     */
+    fun listFast(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        path: String,
+    ): BridgeResult<List<NativeMtpEntry>> {
+        return withStringArg(path) { pathSegment ->
+            parseEntries(
+                data = callJson(fastListHandle, requestId, deviceKey, storageId, pathSegment),
+                storageId = storageId,
+            )
+        }
+    }
+
+    private fun parseEntries(data: String, storageId: Long): BridgeResult<List<NativeMtpEntry>> {
+        return when (val result = parse(data)) {
+            is BridgeResult.Failure -> result
+            is BridgeResult.Success -> BridgeResult.Success(
+                result.value.jsonArray.mapNotNull { element ->
+                    val item = element.jsonObject
+                    val handle = item["handle"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
+                    NativeMtpEntry(
+                        handle = handle,
+                        storageId = item["storageId"]?.jsonPrimitive?.longOrNull ?: storageId,
+                        name = item["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        isDirectory = item["isDirectory"]?.jsonPrimitive?.booleanOrNull ?: false,
+                        size = item["size"]?.jsonPrimitive?.longOrNull ?: 0L,
+                        modifiedLocal = item["modifiedLocal"]?.jsonPrimitive?.contentOrNull,
+                    )
+                }
+            )
         }
     }
 

@@ -31,6 +31,10 @@ data class FilePaneState(
     val entries: List<FileRowUi> = emptyList(),
     val selectedIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
+    /** 分页后端是否还有下一页。 */
+    val hasMore: Boolean = false,
+    /** 正在追加下一页。 */
+    val isLoadingMore: Boolean = false,
     val errorMessage: String? = null,
     val backStack: List<FileLocation> = emptyList(),
     val forwardStack: List<FileLocation> = emptyList(),

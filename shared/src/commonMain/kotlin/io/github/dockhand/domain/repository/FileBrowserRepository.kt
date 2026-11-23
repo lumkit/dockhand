@@ -2,6 +2,7 @@ package io.github.dockhand.domain.repository
 
 import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileListPage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FileSource
@@ -20,6 +21,16 @@ interface FileBrowserRepository {
     fun observePlaces(): Flow<List<FilePlace>>
 
     suspend fun list(location: FileLocation): List<FileEntry>
+
+    suspend fun listPage(
+        location: FileLocation,
+        offset: Int,
+        limit: Int,
+    ): FileListPage {
+        val all = list(location)
+        val page = all.drop(offset).take(limit)
+        return FileListPage(page, offset + page.size < all.size, all.size)
+    }
 
     fun observeChanges(location: FileLocation): Flow<Unit>
 
@@ -58,6 +69,12 @@ class DefaultFileBrowserRepository(
 
     override suspend fun list(location: FileLocation): List<FileEntry> =
         providerFor(location.source).list(location)
+
+    override suspend fun listPage(
+        location: FileLocation,
+        offset: Int,
+        limit: Int,
+    ): FileListPage = providerFor(location.source).listPage(location, offset, limit)
 
     override fun observeChanges(location: FileLocation): Flow<Unit> =
         providerFor(location.source).observeChanges(location)

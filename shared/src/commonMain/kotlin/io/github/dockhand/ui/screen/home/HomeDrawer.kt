@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_no_mounted_disks
 import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
+import dockhand.shared.generated.resources.text_settings
 import dockhand.shared.generated.resources.text_storage_usage
 import io.github.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
@@ -60,6 +62,8 @@ import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.orderedByIds
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
@@ -80,6 +84,7 @@ import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -120,97 +125,123 @@ fun HomeDrawerContent(
     }
     val shortcuts = remember(mtpShortcutOrder) { orderedMtpShortcuts(mtpShortcutOrder) }
 
-    LazyColumn(modifier = modifier) {
-        DEFAULT_FILE_PLACE_GROUP_ORDER.forEach { group ->
-            item(key = "header:${group.name}") {
-                SmallTitle(
-                    text = when (group) {
-                        FilePlaceGroup.Local -> stringResource(Res.string.text_local)
-                        FilePlaceGroup.Mounted -> stringResource(Res.string.text_mounted_disks)
-                        FilePlaceGroup.Mtp -> stringResource(Res.string.text_mtp_devices)
-                    },
-                )
-            }
-
-            val groupPlaces = placesByGroup[group].orEmpty()
-            if (groupPlaces.isEmpty()) {
-                item(key = "empty:${group.name}") {
-                    PlaceGroupHint(
-                        when (group) {
-                            FilePlaceGroup.Local -> stringResource(Res.string.text_no_local_places)
-                            FilePlaceGroup.Mounted -> stringResource(Res.string.text_no_mounted_disks)
-                            FilePlaceGroup.Mtp -> stringResource(Res.string.text_no_mtp_devices)
-                        }
-                    )
-                }
-            } else if (group == FilePlaceGroup.Mtp) {
-                groupPlaces.forEach { storage ->
-                    val expanded = storage.id in mtpExpandedSources
-                    val activeShortcut = activeLocation?.let { location ->
-                        MTP_SHORTCUT_SPECS.any { shortcutMatches(location, storage, it) }
-                    } == true
-                    val storageDragging = draggingPlaceId == storage.id
-                    val storageSelected = storage.id == activePlaceId && !activeShortcut
-
-                    item(key = "place:${storage.id}") {
-                        PlaceRow(
-                            place = storage,
-                            selected = storageSelected,
-                            expanded = expanded,
-                            modifier = if (storageDragging) Modifier else Modifier.animateItem(),
-                            onClick = { onMtpStorageClick(storage, storageSelected) },
-                            onMove = onPlaceMove,
-                            onDragStateChange = { dragging ->
-                                draggingPlaceId = if (dragging) storage.id else null
-                            },
-                        )
-                    }
-
-                    if (expanded) {
-                        shortcuts.forEach { spec ->
-                            val shortcut = spec.toPlace(storage)
-                            val selected = activeLocation?.let {
-                                shortcutMatches(it, storage, spec)
-                            } == true
-                            val shortcutDragging = draggingPlaceId == shortcut.id
-
-                            item(key = "shortcut:${shortcut.id}") {
-                                PlaceRow(
-                                    place = shortcut,
-                                    selected = selected,
-                                    modifier = if (shortcutDragging) Modifier else Modifier.animateItem(),
-                                    indent = true,
-                                    onClick = { onPlaceClick(shortcut) },
-                                    onMove = { _, direction ->
-                                        onMtpShortcutMove(spec.id, direction)
-                                    },
-                                    onDragStateChange = { dragging ->
-                                        draggingPlaceId = if (dragging) shortcut.id else null
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                items(groupPlaces, key = { it.id }) { place ->
-                    val isDragging = draggingPlaceId == place.id
-                    PlaceRow(
-                        place = place,
-                        selected = place.id == activePlaceId,
-                        modifier = if (isDragging) Modifier else Modifier.animateItem(),
-                        onClick = { onPlaceClick(place) },
-                        onMove = onPlaceMove,
-                        onDragStateChange = { dragging ->
-                            draggingPlaceId = if (dragging) place.id else null
+    Column(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth()
+            .weight(1f)
+        ) {
+            DEFAULT_FILE_PLACE_GROUP_ORDER.forEach { group ->
+                item(key = "header:${group.name}") {
+                    SmallTitle(
+                        text = when (group) {
+                            FilePlaceGroup.Local -> stringResource(Res.string.text_local)
+                            FilePlaceGroup.Mounted -> stringResource(Res.string.text_mounted_disks)
+                            FilePlaceGroup.Mtp -> stringResource(Res.string.text_mtp_devices)
                         },
                     )
                 }
-            }
 
-            item {
-                Spacer(Modifier.height(8.dp))
+                val groupPlaces = placesByGroup[group].orEmpty()
+                if (groupPlaces.isEmpty()) {
+                    item(key = "empty:${group.name}") {
+                        PlaceGroupHint(
+                            when (group) {
+                                FilePlaceGroup.Local -> stringResource(Res.string.text_no_local_places)
+                                FilePlaceGroup.Mounted -> stringResource(Res.string.text_no_mounted_disks)
+                                FilePlaceGroup.Mtp -> stringResource(Res.string.text_no_mtp_devices)
+                            }
+                        )
+                    }
+                } else if (group == FilePlaceGroup.Mtp) {
+                    groupPlaces.forEach { storage ->
+                        val expanded = storage.id in mtpExpandedSources
+                        val activeShortcut = activeLocation?.let { location ->
+                            MTP_SHORTCUT_SPECS.any { shortcutMatches(location, storage, it) }
+                        } == true
+                        val storageDragging = draggingPlaceId == storage.id
+                        val storageSelected = storage.id == activePlaceId && !activeShortcut
+
+                        item(key = "place:${storage.id}") {
+                            PlaceRow(
+                                place = storage,
+                                selected = storageSelected,
+                                expanded = expanded,
+                                modifier = if (storageDragging) Modifier else Modifier.animateItem(),
+                                onClick = { onMtpStorageClick(storage, storageSelected) },
+                                onMove = onPlaceMove,
+                                onDragStateChange = { dragging ->
+                                    draggingPlaceId = if (dragging) storage.id else null
+                                },
+                            )
+                        }
+
+                        if (expanded) {
+                            shortcuts.forEach { spec ->
+                                val shortcut = spec.toPlace(storage)
+                                val selected = activeLocation?.let {
+                                    shortcutMatches(it, storage, spec)
+                                } == true
+                                val shortcutDragging = draggingPlaceId == shortcut.id
+
+                                item(key = "shortcut:${shortcut.id}") {
+                                    PlaceRow(
+                                        place = shortcut,
+                                        selected = selected,
+                                        modifier = if (shortcutDragging) Modifier else Modifier.animateItem(),
+                                        indent = true,
+                                        onClick = { onPlaceClick(shortcut) },
+                                        onMove = { _, direction ->
+                                            onMtpShortcutMove(spec.id, direction)
+                                        },
+                                        onDragStateChange = { dragging ->
+                                            draggingPlaceId = if (dragging) shortcut.id else null
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(groupPlaces, key = { it.id }) { place ->
+                        val isDragging = draggingPlaceId == place.id
+                        PlaceRow(
+                            place = place,
+                            selected = place.id == activePlaceId,
+                            modifier = if (isDragging) Modifier else Modifier.animateItem(),
+                            onClick = { onPlaceClick(place) },
+                            onMove = onPlaceMove,
+                            onDragStateChange = { dragging ->
+                                draggingPlaceId = if (dragging) place.id else null
+                            },
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(8.dp))
+                }
             }
+        }
+
+        HorizontalDivider()
+
+        Button(
+            onClick = {
+
+            },
+            modifier = Modifier.fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Settings,
+                contentDescription = null,
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text(
+                text = stringResource(Res.string.text_settings)
+            )
         }
     }
 }

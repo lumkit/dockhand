@@ -2,6 +2,7 @@ package io.github.dockhand.data.file
 
 import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileListPage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import kotlin.coroutines.resume
@@ -39,6 +42,11 @@ class MtpFileSystemProvider(
 ) : FileSystemProvider {
 
     private val requestIds = AtomicLong()
+    private val indexMutex = Mutex()
+    private val indexedDirectories = object : LinkedHashMap<FileLocation, List<FileEntry>>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<FileLocation, List<FileEntry>>): Boolean =
+            size > 2
+    }
 
     override val kind: FileSourceKind = FileSourceKind.Mtp
 
@@ -71,31 +79,108 @@ class MtpFileSystemProvider(
     override suspend fun list(location: FileLocation): List<FileEntry> = withContext(Dispatchers.IO) {
         val target = targetOf(location.source)
         val requestId = requestIds.incrementAndGet()
+        val entries = awaitList(
+            requestId = requestId,
+            deviceKey = target.deviceKey,
+            storageId = target.storageId,
+            path = location.path,
+            fast = false,
+            location = location,
+        )
+        entries
+    }
 
+    /**
+     * MTP 大目录分页：
+     * 1. 第一次请求用轻量 prop-list 建立全量索引；
+     * 2. 按“目录优先 + 名称”排序后缓存；
+     * 3. 后续页直接从缓存切片，不再访问 USB。
+     */
+    override suspend fun listPage(
+        location: FileLocation,
+        offset: Int,
+        limit: Int,
+    ): FileListPage = withContext(Dispatchers.IO) {
+        val all = indexMutex.withLock {
+            val cached = indexedDirectories[location]
+            if (offset == 0 || cached == null) {
+                val target = targetOf(location.source)
+                val requestId = requestIds.incrementAndGet()
+                val fastEntries = awaitList(
+                    requestId = requestId,
+                    deviceKey = target.deviceKey,
+                    storageId = target.storageId,
+                    path = location.path,
+                    fast = true,
+                    location = location,
+                ).sortedWith(ENTRY_ORDER)
+
+                // 小目录继续走完整元数据，保留修改时间；大目录不做 5 万次
+                // GetObjectInfo，时间先留空，优先保证分页可用。
+                val entries = if (fastEntries.size <= DETAILED_METADATA_LIMIT) {
+                    awaitList(
+                        requestId = requestIds.incrementAndGet(),
+                        deviceKey = target.deviceKey,
+                        storageId = target.storageId,
+                        path = location.path,
+                        fast = false,
+                        location = location,
+                    ).sortedWith(ENTRY_ORDER)
+                } else {
+                    fastEntries
+                }
+
+                indexedDirectories[location] = entries
+                entries
+            } else {
+                cached
+            }
+        }
+
+        val page = all.drop(offset).take(limit)
+        FileListPage(
+            entries = page,
+            hasMore = offset + page.size < all.size,
+            total = all.size,
+        )
+    }
+
+    private suspend fun awaitList(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        path: String,
+        fast: Boolean,
+        location: FileLocation,
+    ): List<FileEntry> = suspendCancellableCoroutine { continuation ->
         // 原生 list 是阻塞调用，不能依赖 Job.invokeOnCompletion：
         // 那要等阻塞返回后才触发。invokeOnCancellation 在取消时立即触发，
         // 可以把 requestId 传给 Rust，让 list 在下一个 USB roundtrip 退出。
-        suspendCancellableCoroutine { continuation ->
-            continuation.invokeOnCancellation {
-                runCatching { MtpNativeBridge.cancelList(requestId) }
-            }
+        continuation.invokeOnCancellation {
+            runCatching { MtpNativeBridge.cancelList(requestId) }
+        }
 
-            val result = runCatching {
-                when (val bridge = invokeList(requestId, target.deviceKey, target.storageId, location.path)) {
-                    is BridgeResult.Failure -> throw FileBrowserException("MTP 读取失败：${bridge.message}")
-                    is BridgeResult.Success -> bridge.value
-                        .asSequence()
-                        .filter { it.name.isNotEmpty() }
-                        .map { entry -> entry.toFileEntry(location.source, location.path) }
-                        .toList()
+        val result = runCatching {
+            when (
+                val bridge = if (fast) {
+                    invokeFastList(requestId, deviceKey, storageId, path)
+                } else {
+                    invokeList(requestId, deviceKey, storageId, path)
                 }
+            ) {
+                is BridgeResult.Failure -> throw FileBrowserException("MTP 读取失败：${bridge.message}")
+                is BridgeResult.Success -> bridge.value
+                    .asSequence()
+                    .filter { it.name.isNotEmpty() }
+                    .map { entry -> entry.toFileEntry(location.source, location.path) }
+                    .toList()
             }
+        }
 
-            if (continuation.isActive) {
-                result
-                    .onSuccess { continuation.resume(it) }
-                    .onFailure { continuation.resumeWithException(it) }
-            }
+        if (continuation.isActive) {
+            result
+                .onSuccess { continuation.resume(it) }
+                .onFailure { continuation.resumeWithException(it) }
         }
     }
 
@@ -182,6 +267,17 @@ class MtpFileSystemProvider(
         path: String,
     ): BridgeResult<List<NativeMtpEntry>> = try {
         MtpNativeBridge.list(requestId, deviceKey, storageId, path)
+    } catch (error: Throwable) {
+        BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
+    }
+
+    private fun invokeFastList(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        path: String,
+    ): BridgeResult<List<NativeMtpEntry>> = try {
+        MtpNativeBridge.listFast(requestId, deviceKey, storageId, path)
     } catch (error: Throwable) {
         BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
     }
@@ -282,5 +378,8 @@ class MtpFileSystemProvider(
 
     private companion object {
         const val SOURCE_PREFIX = "mtp:"
+        const val DETAILED_METADATA_LIMIT = 1_000
+        val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }
+            .thenBy { it.name.lowercase() }
     }
 }

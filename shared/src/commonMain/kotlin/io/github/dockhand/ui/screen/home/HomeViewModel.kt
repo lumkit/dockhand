@@ -60,6 +60,7 @@ class HomeViewModel(
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
     private val loadJobs = mutableMapOf<PaneId, Job>()
+    private val moreJobs = mutableMapOf<PaneId, Job>()
     private val watchJobs = mutableMapOf<PaneId, Job>()
     private val placesJob: Job
     private val drawerPlaceOrderJob: Job? = settings?.let { repository ->
@@ -268,6 +269,8 @@ class HomeViewModel(
                     entries = emptyList(),
                     selectedIds = emptySet(),
                     isLoading = true,
+                    hasMore = false,
+                    isLoadingMore = false,
                     errorMessage = null,
                     backStack = latest.backStack.dropLast(1),
                     forwardStack = listOf(current) + latest.forwardStack,
@@ -293,6 +296,8 @@ class HomeViewModel(
                     entries = emptyList(),
                     selectedIds = emptySet(),
                     isLoading = true,
+                    hasMore = false,
+                    isLoadingMore = false,
                     errorMessage = null,
                     backStack = listOf(current) + latest.backStack,
                     forwardStack = latest.forwardStack.drop(1),
@@ -307,10 +312,72 @@ class HomeViewModel(
         val pane = _state.value.pane(paneId)
         val location = pane.location ?: return
         _state.update { state ->
-            state.updatePane(paneId) { it.copy(isLoading = true, errorMessage = null) }
+            state.updatePane(paneId) {
+                it.copy(isLoading = true, isLoadingMore = false, errorMessage = null)
+            }
         }
         watch(paneId, location)
         load(paneId, location)
+    }
+
+    /** 滚动到底时追加下一页；目前只对 MTP 启用。 */
+    fun onLoadMore(paneId: PaneId) {
+        val pane = _state.value.pane(paneId)
+        val location = pane.location ?: return
+        if (
+            location.source.kind != FileSourceKind.Mtp ||
+            !pane.hasMore ||
+            pane.isLoadingMore ||
+            pane.isLoading
+        ) {
+            return
+        }
+
+        val offset = pane.entries.size
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(isLoadingMore = true) }
+        }
+
+        moreJobs[paneId]?.cancel()
+        moreJobs[paneId] = scope.launch {
+            try {
+                val page = files.listPage(location, offset, PAGE_SIZE)
+                val sorted = page.entries.sortedWith(ENTRY_ORDER)
+                val itemCountTexts = sorted
+                    .mapNotNull { it.childCount }
+                    .distinct()
+                    .associateWith { getString(Res.string.text_item_count, it) }
+                val rows = withContext(computeDispatcher) {
+                    sorted.toRowUi(
+                        timeZone = TimeZone.currentSystemDefault(),
+                        itemCountTexts = itemCountTexts,
+                    )
+                }
+
+                _state.update { state ->
+                    val current = state.pane(paneId)
+                    if (current.location != location || current.entries.size != offset) state
+                    else state.updatePane(paneId) {
+                        it.copy(
+                            entries = current.entries + rows,
+                            hasMore = page.hasMore,
+                            isLoadingMore = false,
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { state ->
+                    if (state.pane(paneId).location == location) {
+                        state.updatePane(paneId) { it.copy(isLoadingMore = false) }
+                    } else {
+                        state
+                    }
+                }
+                setOperationError(e.userMessage())
+            }
+        }
     }
 
     // ---- 文件操作 ----
@@ -398,6 +465,8 @@ class HomeViewModel(
                     entries = emptyList(),
                     selectedIds = emptySet(),
                     isLoading = true,
+                    hasMore = false,
+                    isLoadingMore = false,
                     errorMessage = null,
                     backStack = backStack,
                     forwardStack = if (recordHistory) emptyList() else pane.forwardStack,
@@ -414,6 +483,11 @@ class HomeViewModel(
      */
     private fun watch(paneId: PaneId, location: FileLocation) {
         watchJobs[paneId]?.cancel()
+        // MTP 大目录分页时，4 秒一次的全量轮询会重新占用 MTP 会话；
+        // MTP 改为手动刷新，避免分页读取被轮询打断。
+        if (location.source.kind == FileSourceKind.Mtp) {
+            return
+        }
         watchJobs[paneId] = scope.launch {
             try {
                 files.observeChanges(location)
@@ -433,9 +507,16 @@ class HomeViewModel(
 
     private fun load(paneId: PaneId, location: FileLocation) {
         loadJobs[paneId]?.cancel()
+        moreJobs[paneId]?.cancel()
         loadJobs[paneId] = scope.launch {
             try {
-                val entries = files.list(location)
+                // MTP 目录先加载第一页；本地目录保持一次性列表。
+                val page = if (location.source.kind == FileSourceKind.Mtp) {
+                    files.listPage(location, 0, PAGE_SIZE)
+                } else {
+                    null
+                }
+                val entries = page?.entries ?: files.list(location)
 
                 // 列表加载阶段一次性完成排序 + summary 格式化。
                 // LazyColumn 滚动/重组时只读 FileRowUi.summary，不再做任何时间或大小计算。
@@ -457,6 +538,8 @@ class HomeViewModel(
                         it.copy(
                             entries = rows,
                             isLoading = false,
+                            hasMore = page?.hasMore ?: false,
+                            isLoadingMore = false,
                             errorMessage = null,
                         )
                     }
@@ -471,6 +554,8 @@ class HomeViewModel(
                         it.copy(
                             entries = emptyList(),
                             isLoading = false,
+                            hasMore = false,
+                            isLoadingMore = false,
                             errorMessage = message,
                         )
                     }
@@ -488,6 +573,8 @@ class HomeViewModel(
         loadJobs.clear()
         watchJobs.values.forEach { it.cancel() }
         watchJobs.clear()
+        moreJobs.values.forEach { it.cancel() }
+        moreJobs.clear()
         super.onCleared()
     }
 
@@ -497,6 +584,7 @@ class HomeViewModel(
             ?: getString(Res.string.text_read_failed)
 
     private companion object {
+        const val PAGE_SIZE = 300
         val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }
             .thenBy { it.name.lowercase() }
     }

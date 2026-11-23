@@ -60,6 +60,7 @@ fun HomeScreen() {
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
+        onLoadMore = homeViewModel::onLoadMore,
         onBack = homeViewModel::onBack,
         onForward = homeViewModel::onForward,
         onGoUp = homeViewModel::onGoUp,
@@ -81,7 +82,9 @@ private fun HomeScreenContent(
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
+    onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
     onRetry: (PaneId) -> Unit,
+    onLoadMore: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
     onForward: (PaneId) -> Unit,
     onGoUp: (PaneId) -> Unit,
@@ -101,6 +104,7 @@ private fun HomeScreenContent(
                     HomeTopBar(
                         location = uiState.focusedLocation,
                         onBreadcrumbClick = onBreadcrumbClick,
+                        onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
                     ) {
                         TopBarActions()
                     }
@@ -151,6 +155,7 @@ private fun HomeScreenContent(
                         HomeTopBar(
                             location = uiState.focusedLocation,
                             onBreadcrumbClick = onBreadcrumbClick,
+                            onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
                         ) {
                             TopBarActions()
                         }
@@ -192,6 +197,7 @@ private fun HomeScreenContent(
                             onEntryDoubleClick = onEntryDoubleClick,
                             onEntrySecondaryClick = onEntrySecondaryClick,
                             onRetry = onRetry,
+                            onLoadMore = onLoadMore,
                             onBack = onBack,
                             onForward = onForward,
                             onGoUp = onGoUp,
