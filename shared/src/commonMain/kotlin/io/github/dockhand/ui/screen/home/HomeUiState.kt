@@ -1,0 +1,86 @@
+package io.github.dockhand.ui.screen.home
+
+import androidx.compose.runtime.Immutable
+import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileLocation
+import io.github.dockhand.domain.model.FilePlace
+import io.github.dockhand.domain.model.breadcrumbs
+
+enum class PaneId {
+    Left,
+    Right,
+    ;
+
+    val other: PaneId
+        get() = if (this == Left) Right else Left
+}
+
+/**
+ * 单个文件面板的状态。
+ *
+ * 两个面板完全对称，都用这个模型；[id] 只用于区分左右，
+ * 后续做“复制到另一侧”时可以直接用 [PaneId.other]。
+ */
+@Immutable
+data class FilePaneState(
+    val id: PaneId,
+    val location: FileLocation? = null,
+    /** 已预处理好 summary 的行数据；LazyColumn 只负责渲染。 */
+    val entries: List<FileRowUi> = emptyList(),
+    val selectedIds: Set<String> = emptySet(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val backStack: List<FileLocation> = emptyList(),
+    val forwardStack: List<FileLocation> = emptyList(),
+) {
+    val canGoBack: Boolean get() = backStack.isNotEmpty()
+    val canGoForward: Boolean get() = forwardStack.isNotEmpty()
+    val canGoUp: Boolean get() = location?.breadcrumbs()?.size?.let { it > 1 } ?: false
+
+    val selectedEntries: List<FileEntry>
+        get() = entries.asSequence()
+            .filter { it.id in selectedIds }
+            .map { it.entry }
+            .toList()
+
+    val hasSelection: Boolean get() = selectedIds.isNotEmpty()
+
+    val isEmpty: Boolean
+        get() = !isLoading && errorMessage == null && entries.isEmpty()
+}
+
+@Immutable
+data class HomeUiState(
+    val places: List<FilePlace> = emptyList(),
+    val placesError: String? = null,
+    /** 新建/传输等一次性操作的错误，由顶部工具栏展示。 */
+    val operationError: String? = null,
+    val leftPane: FilePaneState = FilePaneState(PaneId.Left),
+    val rightPane: FilePaneState = FilePaneState(PaneId.Right),
+    val focusedPane: PaneId = PaneId.Left,
+) {
+    fun pane(id: PaneId): FilePaneState = when (id) {
+        PaneId.Left -> leftPane
+        PaneId.Right -> rightPane
+    }
+
+    val focusedPaneState: FilePaneState
+        get() = pane(focusedPane)
+
+    val focusedLocation: FileLocation?
+        get() = focusedPaneState.location
+
+    /** 两个面板都还没有首屏路径。 */
+    val isBootstrapping: Boolean
+        get() = places.isEmpty() && leftPane.location == null && rightPane.location == null
+}
+
+internal fun HomeUiState.withPane(id: PaneId, pane: FilePaneState): HomeUiState = when (id) {
+    PaneId.Left -> copy(leftPane = pane)
+    PaneId.Right -> copy(rightPane = pane)
+}
+
+internal fun HomeUiState.updatePane(
+    id: PaneId,
+    transform: (FilePaneState) -> FilePaneState,
+): HomeUiState = withPane(id, transform(pane(id)))

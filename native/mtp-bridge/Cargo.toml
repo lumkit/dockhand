@@ -1,0 +1,15 @@
+[package]
+name = "dockhand-mtp"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "dockhand_mtp"
+crate-type = ["cdylib"]
+
+[dependencies]
+mtp-rs = "0.38"
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io"] }

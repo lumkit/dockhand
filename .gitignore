@@ -1,0 +1,74 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# IDE / editor
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.fleet/
+out/
+
+# Gradle
+.gradle/
+build/
+**/build/
+!**/src/**/build/
+local.properties
+gradle-app.setting
+.gradletasknamecache
+
+# Kotlin
+.kotlin/
+
+# Compose Desktop / distribution
+*.dmg
+*.pkg
+*.app/
+captures/
+
+# Rust / native bridge
+**/target/
+native/**/*.dylib
+native/**/*.so
+native/**/*.dll
+native/**/*.a
+native/**/*.o
+
+# Native / Xcode
+.externalNativeBuild/
+.cxx/
+xcuserdata/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+
+# Logs / crash dumps
+*.log
+hs_err_pid*
+replay_pid*
+*.hprof
+
+# Local environment / signing secrets
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+
+# Node
+node_modules/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
