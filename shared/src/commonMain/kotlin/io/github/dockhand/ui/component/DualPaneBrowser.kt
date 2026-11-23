@@ -26,6 +26,8 @@ fun DualPaneBrowser(
     uiState: HomeUiState,
     onPaneFocus: (PaneId) -> Unit,
     onEntryClick: (PaneId, FileEntry) -> Unit,
+    onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
+    onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
     onRetry: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
     onForward: (PaneId) -> Unit,
@@ -69,6 +71,8 @@ fun DualPaneBrowser(
                 isFocused = uiState.focusedPane == PaneId.Left,
                 onFocus = { onPaneFocus(PaneId.Left) },
                 onEntryClick = { onEntryClick(PaneId.Left, it) },
+                onEntryDoubleClick = { onEntryDoubleClick(PaneId.Left, it) },
+                onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Left, it) },
                 onRetry = { onRetry(PaneId.Left) },
                 modifier = Modifier
                     .weight(1f)
@@ -83,6 +87,8 @@ fun DualPaneBrowser(
                 isFocused = uiState.focusedPane == PaneId.Right,
                 onFocus = { onPaneFocus(PaneId.Right) },
                 onEntryClick = { onEntryClick(PaneId.Right, it) },
+                onEntryDoubleClick = { onEntryDoubleClick(PaneId.Right, it) },
+                onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Right, it) },
                 onRetry = { onRetry(PaneId.Right) },
                 modifier = Modifier
                     .weight(1f)

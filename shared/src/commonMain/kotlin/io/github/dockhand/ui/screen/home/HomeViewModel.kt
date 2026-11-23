@@ -96,19 +96,36 @@ class HomeViewModel(
     }
 
     /**
-     * 列表项单击：
-     *  - 先把该面板设为焦点，HomeTopBar 立刻切到它的路径；
-     *  - 目录：在焦点面板中进入该路径；
-     *  - 文件：只更新选中项，交给后续的打开/传输动作处理。
+     * 列表项单击：只把面板设为焦点并选中该条目，不执行打开/进入。
      */
     fun onEntryClick(paneId: PaneId, entry: FileEntry) {
         onPaneFocus(paneId)
+        selectEntry(paneId, entry)
+    }
+
+    /**
+     * 列表项双击：目录进入，文件预留给后续的打开动作。
+     */
+    fun onEntryDoubleClick(paneId: PaneId, entry: FileEntry) {
+        onPaneFocus(paneId)
+        selectEntry(paneId, entry)
         if (entry.isDirectory) {
             navigate(paneId, entry.location)
-        } else {
-            _state.update { state ->
-                state.updatePane(paneId) { it.copy(selectedIds = setOf(entry.id)) }
-            }
+        }
+        // TODO: 文件双击打开由后续的打开方式/预览窗口接入。
+    }
+
+    /**
+     * 列表项右键：先聚焦并选中，具体的文件夹/文件操作窗口后续接入。
+     */
+    fun onEntrySecondaryClick(paneId: PaneId, entry: FileEntry) {
+        onPaneFocus(paneId)
+        selectEntry(paneId, entry)
+    }
+
+    private fun selectEntry(paneId: PaneId, entry: FileEntry) {
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(selectedIds = setOf(entry.id)) }
         }
     }
 

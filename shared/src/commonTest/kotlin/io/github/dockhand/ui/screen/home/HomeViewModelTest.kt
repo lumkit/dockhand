@@ -46,7 +46,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun clickingDirectoryNavigatesFocusedPaneAndUpdatesTopBarPath() = runBlocking {
+    fun doubleClickingDirectoryNavigatesFocusedPaneAndUpdatesTopBarPath() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(
             files = fixture.repository,
@@ -55,7 +55,7 @@ class HomeViewModelTest {
         )
         val documents = viewModel.state.value.leftPane.entries.first { it.name == "Documents" }
 
-        viewModel.onEntryClick(PaneId.Left, documents.entry)
+        viewModel.onEntryDoubleClick(PaneId.Left, documents.entry)
 
         assertEquals(PaneId.Left, viewModel.state.value.focusedPane)
         assertEquals(fixture.documents.path, viewModel.state.value.focusedLocation?.path)
@@ -63,7 +63,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun clickingInactivePaneSwitchesFocusAndNavigatesIt() = runBlocking {
+    fun doubleClickingInactivePaneSwitchesFocusAndNavigatesIt() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(
             files = fixture.repository,
@@ -72,7 +72,7 @@ class HomeViewModelTest {
         )
         val usersFolder = viewModel.state.value.rightPane.entries.first { it.name == "Users" }
 
-        viewModel.onEntryClick(PaneId.Right, usersFolder.entry)
+        viewModel.onEntryDoubleClick(PaneId.Right, usersFolder.entry)
 
         assertEquals(PaneId.Right, viewModel.state.value.focusedPane)
         assertEquals(fixture.users.path, viewModel.state.value.focusedLocation?.path)
@@ -81,7 +81,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun clickingFileSelectsWithoutNavigating() = runBlocking {
+    fun singleClickingFileSelectsWithoutNavigating() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(
             files = fixture.repository,
@@ -94,6 +94,41 @@ class HomeViewModelTest {
 
         assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
         assertEquals(setOf(file.id), viewModel.state.value.leftPane.selectedIds)
+    }
+
+    @Test
+    fun singleClickingDirectoryOnlySelectsAndFocusesPane() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val documents = viewModel.state.value.leftPane.entries.first { it.name == "Documents" }
+
+        viewModel.onEntryClick(PaneId.Left, documents.entry)
+
+        assertEquals(PaneId.Left, viewModel.state.value.focusedPane)
+        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(setOf(documents.id), viewModel.state.value.leftPane.selectedIds)
+    }
+
+    @Test
+    fun secondaryClickingEntryOnlySelectsAndFocusesPane() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val usersFolder = viewModel.state.value.rightPane.entries.first { it.name == "Users" }
+
+        viewModel.onEntrySecondaryClick(PaneId.Right, usersFolder.entry)
+
+        assertEquals(PaneId.Right, viewModel.state.value.focusedPane)
+        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.root.path, viewModel.state.value.rightPane.location?.path)
+        assertEquals(setOf(usersFolder.id), viewModel.state.value.rightPane.selectedIds)
     }
 
     @Test
@@ -127,7 +162,7 @@ class HomeViewModelTest {
             externalScope = scope,
         )
 
-        viewModel.onEntryClick(
+        viewModel.onEntryDoubleClick(
             PaneId.Left,
             viewModel.state.value.leftPane.entries.first { it.name == "Documents" }.entry
         )
@@ -211,7 +246,7 @@ class HomeViewModelTest {
             externalScope = scope,
         )
 
-        viewModel.onEntryClick(
+        viewModel.onEntryDoubleClick(
             PaneId.Left,
             viewModel.state.value.leftPane.entries.first { it.name == "Documents" }.entry
         )
