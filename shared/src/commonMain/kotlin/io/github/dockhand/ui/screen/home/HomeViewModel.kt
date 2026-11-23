@@ -13,6 +13,11 @@ import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.model.orderedByIds
 import io.github.dockhand.domain.model.parentBreadcrumb
 import io.github.dockhand.domain.repository.FileBrowserRepository
+import dockhand.shared.generated.resources.Res
+import dockhand.shared.generated.resources.error_name_empty
+import dockhand.shared.generated.resources.error_name_invalid
+import dockhand.shared.generated.resources.text_item_count
+import dockhand.shared.generated.resources.text_read_failed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +32,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
+import org.jetbrains.compose.resources.getString
 
 /**
  * 主页 ViewModel。
@@ -62,6 +68,24 @@ class HomeViewModel(
                 .catch { }
                 .collect { order ->
                     _state.update { it.copy(drawerPlaceOrder = order) }
+                }
+        }
+    }
+    private val mtpExpandedJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.mtpExpandedSources
+                .catch { }
+                .collect { sources ->
+                    _state.update { it.copy(mtpExpandedSources = sources) }
+                }
+        }
+    }
+    private val mtpShortcutOrderJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.mtpShortcutOrder
+                .catch { }
+                .collect { order ->
+                    _state.update { it.copy(mtpShortcutOrder = order) }
                 }
         }
     }
@@ -149,15 +173,18 @@ class HomeViewModel(
         navigate(paneId, place.location)
     }
 
-    /** 拖动侧边栏条目：只调整同一分组内部的顺序，并异步持久化。 */
-    fun onMovePlace(place: FilePlace, direction: Int) {
+    /**
+     * 拖动侧边栏条目：只调整同一分组内部的顺序，并异步持久化。
+     * @return 是否真的发生了移动；到达分组边界时返回 false。
+     */
+    fun onMovePlace(place: FilePlace, direction: Int): Boolean {
         val state = _state.value
         val groupPlaces = state.places
             .filter { it.group == place.group }
             .orderedByIds(state.drawerPlaceOrder[place.group].orEmpty())
         val from = groupPlaces.indexOfFirst { it.id == place.id }
         val to = from + direction
-        if (from < 0 || to !in groupPlaces.indices) return
+        if (from < 0 || to !in groupPlaces.indices) return false
 
         val orderedIds = groupPlaces.map { it.id }.toMutableList()
         orderedIds.removeAt(from)
@@ -167,6 +194,49 @@ class HomeViewModel(
         scope.launch {
             settings?.setDrawerPlaceOrder(place.group, orderedIds)
         }
+        return true
+    }
+
+    /**
+     * 点击 MTP 存储行：
+     * - 已选中：只切换展开/折叠；
+     * - 未选中：焦点面板回到存储根目录，不改变展开状态。
+     */
+    fun onMtpStorageClick(place: FilePlace, selected: Boolean) {
+        if (selected) {
+            onToggleMtpExpanded(place.id)
+        } else {
+            navigate(_state.value.focusedPane, place.location)
+        }
+    }
+
+    /** 展开/折叠 MTP 存储的快捷入口。 */
+    fun onToggleMtpExpanded(sourceId: String) {
+        val state = _state.value
+        val expanded = if (sourceId in state.mtpExpandedSources) {
+            state.mtpExpandedSources - sourceId
+        } else {
+            state.mtpExpandedSources + sourceId
+        }
+        _state.update { it.copy(mtpExpandedSources = expanded) }
+        scope.launch {
+            settings?.setMtpExpandedSources(expanded)
+        }
+    }
+
+    /** 拖动 MTP 快捷入口：只调整快捷入口顺序，并异步持久化。 */
+    fun onMoveMtpShortcut(shortcutId: String, direction: Int): Boolean {
+        val current = _state.value.mtpShortcutOrder.toMutableList()
+        val from = current.indexOf(shortcutId)
+        val to = from + direction
+        if (from < 0 || to !in current.indices) return false
+        current.removeAt(from)
+        current.add(to, shortcutId)
+        _state.update { it.copy(mtpShortcutOrder = current) }
+        scope.launch {
+            settings?.setMtpShortcutOrder(current)
+        }
+        return true
     }
 
     fun onBreadcrumbClick(breadcrumb: FileBreadcrumb) {
@@ -252,12 +322,16 @@ class HomeViewModel(
     fun onCreate(paneId: PaneId, name: String, createFile: Boolean) {
         val location = _state.value.pane(paneId).location ?: return
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
-            setOperationError("名称不能为空")
-            return
-        }
-        if ('/' in trimmed || trimmed == "." || trimmed == "..") {
-            setOperationError("名称不合法：$name")
+        if (trimmed.isEmpty() || '/' in trimmed || trimmed == "." || trimmed == "..") {
+            scope.launch {
+                setOperationError(
+                    if (trimmed.isEmpty()) {
+                        getString(Res.string.error_name_empty)
+                    } else {
+                        getString(Res.string.error_name_invalid, name)
+                    }
+                )
+            }
             return
         }
 
@@ -365,9 +439,16 @@ class HomeViewModel(
 
                 // 列表加载阶段一次性完成排序 + summary 格式化。
                 // LazyColumn 滚动/重组时只读 FileRowUi.summary，不再做任何时间或大小计算。
+                val sorted = entries.sortedWith(ENTRY_ORDER)
+                val itemCountTexts = sorted
+                    .mapNotNull { it.childCount }
+                    .distinct()
+                    .associateWith { getString(Res.string.text_item_count, it) }
                 val rows = withContext(computeDispatcher) {
-                    entries.sortedWith(ENTRY_ORDER)
-                        .toRowUi(TimeZone.currentSystemDefault())
+                    sorted.toRowUi(
+                        timeZone = TimeZone.currentSystemDefault(),
+                        itemCountTexts = itemCountTexts,
+                    )
                 }
 
                 _state.update { state ->
@@ -383,13 +464,14 @@ class HomeViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                val message = e.userMessage()
                 _state.update { state ->
                     if (state.pane(paneId).location != location) state
                     else state.updatePane(paneId) {
                         it.copy(
                             entries = emptyList(),
                             isLoading = false,
-                            errorMessage = e.userMessage(),
+                            errorMessage = message,
                         )
                     }
                 }
@@ -400,6 +482,8 @@ class HomeViewModel(
     override fun onCleared() {
         placesJob.cancel()
         drawerPlaceOrderJob?.cancel()
+        mtpExpandedJob?.cancel()
+        mtpShortcutOrderJob?.cancel()
         loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
         watchJobs.values.forEach { it.cancel() }
@@ -407,8 +491,10 @@ class HomeViewModel(
         super.onCleared()
     }
 
-    private fun Throwable.userMessage(): String =
-        (this as? FileBrowserException)?.message ?: message ?: "读取失败"
+    private suspend fun Throwable.userMessage(): String =
+        (this as? FileBrowserException)?.message
+            ?: message
+            ?: getString(Res.string.text_read_failed)
 
     private companion object {
         val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }

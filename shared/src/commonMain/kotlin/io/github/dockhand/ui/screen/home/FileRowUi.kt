@@ -24,10 +24,17 @@ data class FileRowUi(
  * 在 IO/Default 线程把一页 [FileEntry] 转成可直接渲染的 [FileRowUi]。
  * 时区只取一次，避免每一行都查系统时区。
  */
-internal fun List<FileEntry>.toRowUi(timeZone: TimeZone): List<FileRowUi> =
+internal fun List<FileEntry>.toRowUi(
+    timeZone: TimeZone,
+    itemCountTexts: Map<Int, String>,
+): List<FileRowUi> =
     map { entry ->
         FileRowUi(
             entry = entry,
-            summary = fileEntrySummary(entry, timeZone),
+            summary = fileEntrySummary(
+                entry = entry,
+                timeZone = timeZone,
+                itemCountText = entry.childCount?.let(itemCountTexts::get),
+            ),
         )
     }

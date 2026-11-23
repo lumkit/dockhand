@@ -27,8 +27,8 @@ import io.github.dockhand.domain.model.FileBreadcrumb
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.ui.component.DualPaneBrowser
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Surface
@@ -56,6 +56,8 @@ fun HomeScreen() {
         onEntryDoubleClick = homeViewModel::onEntryDoubleClick,
         onEntrySecondaryClick = homeViewModel::onEntrySecondaryClick,
         onPlaceMove = homeViewModel::onMovePlace,
+        onMtpStorageClick = homeViewModel::onMtpStorageClick,
+        onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
         onBack = homeViewModel::onBack,
@@ -75,7 +77,9 @@ private fun HomeScreenContent(
     onEntryClick: (PaneId, FileEntry) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
-    onPlaceMove: (FilePlace, Int) -> Unit,
+    onPlaceMove: (FilePlace, Int) -> Boolean,
+    onMtpStorageClick: (FilePlace, Boolean) -> Unit,
+    onMtpShortcutMove: (String, Int) -> Boolean,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onRetry: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
@@ -120,13 +124,17 @@ private fun HomeScreenContent(
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(240.dp)
+                    .width(280.dp)
             ) {
                 HomeDrawerContent(
                     places = uiState.places,
                     activeLocation = uiState.focusedLocation,
                     placeOrder = uiState.drawerPlaceOrder,
+                    mtpExpandedSources = uiState.mtpExpandedSources,
+                    mtpShortcutOrder = uiState.mtpShortcutOrder,
                     onPlaceMove = onPlaceMove,
+                    onMtpStorageClick = onMtpStorageClick,
+                    onMtpShortcutMove = onMtpShortcutMove,
                     onPlaceClick = onPlaceClick,
                     modifier = Modifier.padding(drawerPaddingValues),
                 )
@@ -173,7 +181,7 @@ private fun HomeScreenContent(
                                     color = MiuixTheme.colorScheme.error,
                                 )
                             } else {
-                                CircularProgressIndicator()
+                                InfiniteProgressIndicator()
                             }
                         }
                     } else {

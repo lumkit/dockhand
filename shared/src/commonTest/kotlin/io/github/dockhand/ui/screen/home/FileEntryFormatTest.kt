@@ -21,7 +21,7 @@ class FileEntryFormatTest {
 
         assertEquals(
             "2024-01-02 03:04:05 · 3项",
-            fileEntrySummary(entry, TimeZone.UTC),
+            fileEntrySummary(entry, TimeZone.UTC, itemCountText = "3项"),
         )
     }
 
@@ -39,7 +39,7 @@ class FileEntryFormatTest {
     fun folderShowsCountWhenTimeIsMissing() {
         val entry = folder(childCount = 0).copy(modifiedAt = null)
 
-        assertEquals("0项", fileEntrySummary(entry, TimeZone.UTC))
+        assertEquals("0项", fileEntrySummary(entry, TimeZone.UTC, itemCountText = "0项"))
     }
 
     @Test

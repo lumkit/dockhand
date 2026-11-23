@@ -46,7 +46,7 @@ internal data class NativeMtpEntry(
     val name: String,
     val isDirectory: Boolean,
     val size: Long,
-    val modifiedAt: Long?,
+    val modifiedLocal: String?,
 )
 
 internal sealed interface BridgeResult<out T> {
@@ -81,8 +81,13 @@ internal object MtpNativeBridge {
             ValueLayout.ADDRESS,
             ValueLayout.JAVA_LONG,
             ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
             ValueLayout.ADDRESS,
         ),
+    )
+    private val cancelListHandle: MethodHandle = downcall(
+        "dockhand_mtp_cancel_list",
+        FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG),
     )
     private val mkdirHandle: MethodHandle = downcall(
         "dockhand_mtp_mkdir",
@@ -147,9 +152,14 @@ internal object MtpNativeBridge {
         BridgeResult.Failure("MTP 原生桥加载失败：${error.message ?: error.javaClass.simpleName}")
     }
 
-    fun list(deviceKey: Long, storageId: Long, path: String): BridgeResult<List<NativeMtpEntry>> {
+    fun list(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        path: String,
+    ): BridgeResult<List<NativeMtpEntry>> {
         return withStringArg(path) { pathSegment ->
-            val data = callJson(listHandle, deviceKey, storageId, pathSegment)
+            val data = callJson(listHandle, requestId, deviceKey, storageId, pathSegment)
             when (val result = parse(data)) {
                 is BridgeResult.Failure -> result
                 is BridgeResult.Success -> BridgeResult.Success(
@@ -162,11 +172,18 @@ internal object MtpNativeBridge {
                             name = item["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                             isDirectory = item["isDirectory"]?.jsonPrimitive?.booleanOrNull ?: false,
                             size = item["size"]?.jsonPrimitive?.longOrNull ?: 0L,
-                            modifiedAt = item["modifiedAt"]?.jsonPrimitive?.longOrNull,
+                            modifiedLocal = item["modifiedLocal"]?.jsonPrimitive?.contentOrNull,
                         )
                     }
                 )
             }
+        }
+    }
+
+    /** 取消一个正在执行的 list 请求；不等待列表完成。 */
+    fun cancelList(requestId: Long) {
+        runCatching {
+            cancelListHandle.invokeWithArguments(requestId)
         }
     }
 

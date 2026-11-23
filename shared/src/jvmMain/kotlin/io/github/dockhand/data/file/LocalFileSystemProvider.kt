@@ -320,12 +320,20 @@ class LocalFileSystemProvider(
                     if (storeName != null && storeName == rootStoreName) return@mapNotNull null
                 }
 
+                val capacity = runCatching {
+                    Files.getFileStore(path).let { store -> store.totalSpace to store.usableSpace }
+                }.getOrNull()
+                val totalBytes = capacity?.first?.takeIf { it > 0 }
+                val freeBytes = capacity?.second?.takeIf { it >= 0 }
+
                 FilePlace(
                     id = "local:volume:$name",
                     label = name,
                     location = FileLocation(source, path.toAbsolutePath().normalize().toString()),
                     kind = FilePlaceKind.Volume,
                     group = FilePlaceGroup.Mounted,
+                    totalBytes = totalBytes,
+                    freeBytes = freeBytes,
                 )
             }.sortedBy { it.label.lowercase() }
         }

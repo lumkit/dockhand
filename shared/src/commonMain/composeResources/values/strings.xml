@@ -11,6 +11,7 @@
     <string name="text_documents">文稿</string>
     <string name="text_downloads">下载</string>
     <string name="text_pictures">图片</string>
+    <string name="text_camera">相片</string>
     <string name="text_music">音乐</string>
     <string name="text_movies">影片</string>
     <string name="text_no_mtp_devices">未连接 MTP 设备</string>
@@ -20,6 +21,13 @@
     <string name="text_empty_folder">此文件夹为空</string>
     <string name="text_read_failed">读取失败</string>
     <string name="text_retry">重试</string>
+    <string name="text_item_count">%1$d项</string>
+    <string name="error_name_empty">名称不能为空</string>
+    <string name="error_name_invalid">名称不合法：%1$s</string>
+
+    <!-- 挂载磁盘容量 -->
+    <string name="text_storage_usage">%1$d%% · %2$s已用，%3$s可用</string>
+    <string name="text_capacity_unknown">容量未知</string>
 
     <!-- 文件工具栏 -->
     <string name="tooltip_back">后退</string>

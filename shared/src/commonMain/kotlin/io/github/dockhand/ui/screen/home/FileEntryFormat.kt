@@ -57,10 +57,11 @@ internal fun formatModifiedTime(
 internal fun fileEntrySummary(
     entry: FileEntry,
     timeZone: TimeZone,
+    itemCountText: String? = null,
 ): String? {
     val modified = formatModifiedTime(entry.modifiedAt, timeZone)
     val detail = if (entry.isDirectory) {
-        entry.childCount?.let { "${it}项" }
+        itemCountText
     } else {
         entry.size?.let(::formatFileSize)
     }

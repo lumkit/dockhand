@@ -9,13 +9,23 @@ import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.FileSource
 import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.repository.FileSystemProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * MTP 文件后端，基于内嵌的 mtp-rs Rust bridge。
@@ -28,12 +38,14 @@ class MtpFileSystemProvider(
     private val changesRefreshMs: Long = 4_000L,
 ) : FileSystemProvider {
 
+    private val requestIds = AtomicLong()
+
     override val kind: FileSourceKind = FileSourceKind.Mtp
 
     override fun observePlaces(): Flow<List<FilePlace>> = flow {
         while (true) {
             emit(readPlaces())
-            delay(placesRefreshMs)
+            delay(placesRefreshMs.milliseconds)
         }
     }.flowOn(Dispatchers.IO)
 
@@ -41,8 +53,12 @@ class MtpFileSystemProvider(
         var previous: List<FileEntry>? = null
         while (true) {
             // 首次加载由 ViewModel 的 load() 完成，watcher 从下一轮开始。
-            delay(changesRefreshMs)
-            val current = runCatching { list(location) }.getOrNull()
+            delay(changesRefreshMs.milliseconds)
+            val current = runCatching { list(location) }.onFailure {
+                if (it is CancellationException) {
+                    currentCoroutineContext().ensureActive()
+                }
+            }.getOrNull()
             if (current != null) {
                 if (previous != null && current != previous) {
                     emit(Unit)
@@ -54,13 +70,32 @@ class MtpFileSystemProvider(
 
     override suspend fun list(location: FileLocation): List<FileEntry> = withContext(Dispatchers.IO) {
         val target = targetOf(location.source)
-        when (val result = invokeList(target.deviceKey, target.storageId, location.path)) {
-            is BridgeResult.Failure -> throw FileBrowserException("MTP 读取失败：${result.message}")
-            is BridgeResult.Success -> result.value
-                .asSequence()
-                .filter { it.name.isNotEmpty() }
-                .map { entry -> entry.toFileEntry(location.source, location.path) }
-                .toList()
+        val requestId = requestIds.incrementAndGet()
+
+        // 原生 list 是阻塞调用，不能依赖 Job.invokeOnCompletion：
+        // 那要等阻塞返回后才触发。invokeOnCancellation 在取消时立即触发，
+        // 可以把 requestId 传给 Rust，让 list 在下一个 USB roundtrip 退出。
+        suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation {
+                runCatching { MtpNativeBridge.cancelList(requestId) }
+            }
+
+            val result = runCatching {
+                when (val bridge = invokeList(requestId, target.deviceKey, target.storageId, location.path)) {
+                    is BridgeResult.Failure -> throw FileBrowserException("MTP 读取失败：${bridge.message}")
+                    is BridgeResult.Success -> bridge.value
+                        .asSequence()
+                        .filter { it.name.isNotEmpty() }
+                        .map { entry -> entry.toFileEntry(location.source, location.path) }
+                        .toList()
+                }
+            }
+
+            if (continuation.isActive) {
+                result
+                    .onSuccess { continuation.resume(it) }
+                    .onFailure { continuation.resumeWithException(it) }
+            }
         }
     }
 
@@ -126,6 +161,8 @@ class MtpFileSystemProvider(
                         location = FileLocation(source, "/"),
                         kind = FilePlaceKind.MtpStorage,
                         group = FilePlaceGroup.Mtp,
+                        totalBytes = storage.totalCapacity.takeIf { it > 0 },
+                        freeBytes = storage.freeSpace.takeIf { it >= 0 },
                     )
                 }
             }
@@ -139,11 +176,12 @@ class MtpFileSystemProvider(
     }
 
     private fun invokeList(
+        requestId: Long,
         deviceKey: Long,
         storageId: Long,
         path: String,
     ): BridgeResult<List<NativeMtpEntry>> = try {
-        MtpNativeBridge.list(deviceKey, storageId, path)
+        MtpNativeBridge.list(requestId, deviceKey, storageId, path)
     } catch (error: Throwable) {
         BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
     }
@@ -182,10 +220,24 @@ class MtpFileSystemProvider(
             location = FileLocation(source, entryPath),
             isDirectory = isDirectory,
             size = if (isDirectory) null else size,
-            modifiedAt = modifiedAt,
+            modifiedAt = parseModifiedLocal(modifiedLocal),
             extension = extension,
             isHidden = false,
         )
+    }
+
+    /**
+     * MTP 的 DateModified 通常不带时区，是设备本地墙钟时间；
+     * 按本机时区解释，避免直接当 UTC 后显示偏移。
+     */
+    private fun parseModifiedLocal(value: String?): Long? {
+        if (value.isNullOrBlank()) return null
+        return runCatching {
+            LocalDateTime.parse(value)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        }.getOrNull()
     }
 
     private fun appendPath(parentPath: String, name: String): String {

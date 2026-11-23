@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FilePlaceGroup
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.io.IOException
@@ -18,6 +19,9 @@ internal object SettingsKeys {
 
     fun drawerPlaceOrder(group: FilePlaceGroup): Preferences.Key<String> =
         stringPreferencesKey("drawer_place_order_${group.name.lowercase()}")
+
+    val MtpExpandedSources = stringPreferencesKey("mtp_expanded_sources")
+    val MtpShortcutOrder = stringPreferencesKey("mtp_shortcut_order")
 }
 
 class SettingsRepository(
@@ -52,6 +56,41 @@ class SettingsRepository(
     suspend fun setDrawerPlaceOrder(group: FilePlaceGroup, placeIds: List<String>) {
         dataStore.edit { prefs ->
             prefs[SettingsKeys.drawerPlaceOrder(group)] = placeIds.joinToString(PLACE_ORDER_SEPARATOR)
+        }
+    }
+
+    /** 已展开的 MTP 存储 source id 集合；默认全部折叠。 */
+    val mtpExpandedSources: Flow<Set<String>> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            prefs[SettingsKeys.MtpExpandedSources]
+                ?.split(PLACE_ORDER_SEPARATOR)
+                ?.filter { it.isNotEmpty() }
+                ?.toSet()
+                .orEmpty()
+        }
+
+    suspend fun setMtpExpandedSources(sources: Set<String>) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.MtpExpandedSources] = sources.joinToString(PLACE_ORDER_SEPARATOR)
+        }
+    }
+
+    /** MTP 快捷入口的全局顺序；新增入口自动补在末尾。 */
+    val mtpShortcutOrder: Flow<List<String>> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            val saved = prefs[SettingsKeys.MtpShortcutOrder]
+                ?.split(PLACE_ORDER_SEPARATOR)
+                ?.filter { it.isNotEmpty() }
+                .orEmpty()
+                .distinct()
+            saved + DEFAULT_MTP_SHORTCUT_ORDER.filterNot { it in saved }
+        }
+
+    suspend fun setMtpShortcutOrder(order: List<String>) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.MtpShortcutOrder] = order.joinToString(PLACE_ORDER_SEPARATOR)
         }
     }
 

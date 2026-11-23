@@ -6,7 +6,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,11 +27,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import dockhand.shared.generated.resources.Res
+import dockhand.shared.generated.resources.ic_camara
+import dockhand.shared.generated.resources.ic_mtp
 import dockhand.shared.generated.resources.ic_storage
 import dockhand.shared.generated.resources.ic_user
+import dockhand.shared.generated.resources.text_camera
+import dockhand.shared.generated.resources.text_capacity_unknown
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
@@ -42,7 +50,9 @@ import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_no_mounted_disks
 import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
+import dockhand.shared.generated.resources.text_storage_usage
 import io.github.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
+import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
@@ -51,10 +61,14 @@ import io.github.dockhand.domain.model.orderedByIds
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.ExpandLess
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
@@ -66,7 +80,6 @@ import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -81,10 +94,15 @@ fun HomeDrawerContent(
     places: List<FilePlace>,
     activeLocation: FileLocation?,
     placeOrder: Map<FilePlaceGroup, List<String>>,
-    onPlaceMove: (FilePlace, Int) -> Unit,
+    mtpExpandedSources: Set<String>,
+    mtpShortcutOrder: List<String>,
+    onPlaceMove: (FilePlace, Int) -> Boolean,
+    onMtpStorageClick: (FilePlace, Boolean) -> Unit,
+    onMtpShortcutMove: (String, Int) -> Boolean,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var draggingPlaceId by remember { mutableStateOf<String?>(null) }
     val placesByGroup = remember(places, placeOrder) {
         DEFAULT_FILE_PLACE_GROUP_ORDER.associateWith { group ->
             places.filter { it.group == group }
@@ -100,6 +118,7 @@ fun HomeDrawerContent(
                 ?.id
         }
     }
+    val shortcuts = remember(mtpShortcutOrder) { orderedMtpShortcuts(mtpShortcutOrder) }
 
     LazyColumn(modifier = modifier) {
         DEFAULT_FILE_PLACE_GROUP_ORDER.forEach { group ->
@@ -124,18 +143,120 @@ fun HomeDrawerContent(
                         }
                     )
                 }
+            } else if (group == FilePlaceGroup.Mtp) {
+                groupPlaces.forEach { storage ->
+                    val expanded = storage.id in mtpExpandedSources
+                    val activeShortcut = activeLocation?.let { location ->
+                        MTP_SHORTCUT_SPECS.any { shortcutMatches(location, storage, it) }
+                    } == true
+                    val storageDragging = draggingPlaceId == storage.id
+                    val storageSelected = storage.id == activePlaceId && !activeShortcut
+
+                    item(key = "place:${storage.id}") {
+                        PlaceRow(
+                            place = storage,
+                            selected = storageSelected,
+                            expanded = expanded,
+                            modifier = if (storageDragging) Modifier else Modifier.animateItem(),
+                            onClick = { onMtpStorageClick(storage, storageSelected) },
+                            onMove = onPlaceMove,
+                            onDragStateChange = { dragging ->
+                                draggingPlaceId = if (dragging) storage.id else null
+                            },
+                        )
+                    }
+
+                    if (expanded) {
+                        shortcuts.forEach { spec ->
+                            val shortcut = spec.toPlace(storage)
+                            val selected = activeLocation?.let {
+                                shortcutMatches(it, storage, spec)
+                            } == true
+                            val shortcutDragging = draggingPlaceId == shortcut.id
+
+                            item(key = "shortcut:${shortcut.id}") {
+                                PlaceRow(
+                                    place = shortcut,
+                                    selected = selected,
+                                    modifier = if (shortcutDragging) Modifier else Modifier.animateItem(),
+                                    indent = true,
+                                    onClick = { onPlaceClick(shortcut) },
+                                    onMove = { _, direction ->
+                                        onMtpShortcutMove(spec.id, direction)
+                                    },
+                                    onDragStateChange = { dragging ->
+                                        draggingPlaceId = if (dragging) shortcut.id else null
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
             } else {
                 items(groupPlaces, key = { it.id }) { place ->
+                    val isDragging = draggingPlaceId == place.id
                     PlaceRow(
                         place = place,
                         selected = place.id == activePlaceId,
+                        modifier = if (isDragging) Modifier else Modifier.animateItem(),
                         onClick = { onPlaceClick(place) },
                         onMove = onPlaceMove,
+                        onDragStateChange = { dragging ->
+                            draggingPlaceId = if (dragging) place.id else null
+                        },
                     )
                 }
             }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
+}
+
+private data class MtpShortcutSpec(
+    val id: String,
+    val kind: FilePlaceKind,
+    val path: String,
+)
+
+private val MTP_SHORTCUT_SPECS = listOf(
+    MtpShortcutSpec("camera", FilePlaceKind.MtpCamera, "/DCIM/Camera"),
+    MtpShortcutSpec("downloads", FilePlaceKind.MtpDownloads, "/Download"),
+    MtpShortcutSpec("movies", FilePlaceKind.MtpMovies, "/Movies"),
+    MtpShortcutSpec("music", FilePlaceKind.MtpMusic, "/Music"),
+    MtpShortcutSpec("pictures", FilePlaceKind.MtpPictures, "/Pictures"),
+)
+
+private fun orderedMtpShortcuts(order: List<String>): List<MtpShortcutSpec> {
+    val rank = order.withIndex().associate { (index, id) -> id to index }
+    return MTP_SHORTCUT_SPECS.withIndex()
+        .sortedWith(
+            compareBy(
+                { rank[it.value.id] ?: Int.MAX_VALUE },
+                { it.index },
+            )
+        )
+        .map { it.value }
+}
+
+private fun MtpShortcutSpec.toPlace(storage: FilePlace): FilePlace = FilePlace(
+    id = "${storage.id}:shortcut:${id}",
+    label = "",
+    location = FileLocation(storage.location.source, path),
+    kind = kind,
+    group = FilePlaceGroup.Mtp,
+)
+
+private fun shortcutMatches(
+    active: FileLocation,
+    storage: FilePlace,
+    shortcut: MtpShortcutSpec,
+): Boolean {
+    if (active.source.id != storage.location.source.id) return false
+    val root = shortcut.path.trimEnd('/')
+    return active.path == root || active.path.startsWith("$root/")
 }
 
 @Composable
@@ -157,11 +278,16 @@ private fun PlaceGroupHint(text: String) {
 private fun PlaceRow(
     place: FilePlace,
     selected: Boolean,
+    modifier: Modifier,
+    expanded: Boolean? = null,
+    indent: Boolean = false,
     onClick: () -> Unit,
-    onMove: (FilePlace, Int) -> Unit,
+    onMove: (FilePlace, Int) -> Boolean,
+    onDragStateChange: (Boolean) -> Unit,
 ) {
     val threshold = with(LocalDensity.current) { 28.dp.toPx() }
     var dragOffset by remember(place.id) { mutableFloatStateOf(0f) }
+    var rowHeight by remember(place.id) { mutableFloatStateOf(0f) }
     var dragging by remember(place.id) { mutableStateOf(false) }
     val currentOnMove by rememberUpdatedState(onMove)
 
@@ -177,13 +303,50 @@ private fun PlaceRow(
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .onSizeChanged { rowHeight = it.height.toFloat() }
             .graphicsLayer {
                 translationY = dragOffset
                 alpha = if (dragging) 0.72f else 1f
             }
-            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .pointerInput(place.id, threshold) {
+                detectDragGestures(
+                    onDragStart = {
+                        dragging = true
+                        onDragStateChange(true)
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragOffset += amount.y
+                        val direction = when {
+                            dragOffset > threshold -> 1
+                            dragOffset < -threshold -> -1
+                            else -> 0
+                        }
+                        if (direction != 0) {
+                            if (currentOnMove(place, direction)) {
+                                // 列表重排会把这一行搬到相邻槽位；反向补偿，
+                                // 让被拖动的行继续停在鼠标下，只让其他行动画避让。
+                                dragOffset += if (direction > 0) -rowHeight else rowHeight
+                            } else {
+                                dragOffset = dragOffset.coerceIn(-threshold, threshold)
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        dragOffset = 0f
+                        dragging = false
+                        onDragStateChange(false)
+                    },
+                    onDragCancel = {
+                        dragOffset = 0f
+                        dragging = false
+                        onDragStateChange(false)
+                    },
+                )
+            }
+            .padding(start = if (indent) 28.dp else 8.dp, end = 8.dp, top = 1.dp, bottom = 1.dp)
             .squircleClip(12.dp)
             .background(background)
             .combinedClickable(onClick = onClick)
@@ -212,43 +375,75 @@ private fun PlaceRow(
             }
         }
 
-        Text(
-            text = place.displayLabel(),
+        Column(
             modifier = Modifier.weight(1f),
-            style = MiuixTheme.textStyles.footnote1,
-            color = contentColor,
-        )
+        ) {
+            Text(
+                text = place.displayLabel(),
+                style = MiuixTheme.textStyles.body2,
+                color = contentColor,
+            )
 
-        Icon(
-            imageVector = MiuixIcons.Sort,
-            contentDescription = null,
-            modifier = Modifier
-                .size(16.dp)
-                .pointerInput(place.id, threshold) {
-                    detectDragGestures(
-                        onDragStart = { dragging = true },
-                        onDrag = { change, amount ->
-                            change.consume()
-                            dragOffset += amount.y
-                        },
-                        onDragEnd = {
-                            val direction = when {
-                                dragOffset > threshold -> 1
-                                dragOffset < -threshold -> -1
-                                else -> 0
-                            }
-                            if (direction != 0) currentOnMove(place, direction)
-                            dragOffset = 0f
-                            dragging = false
-                        },
-                        onDragCancel = {
-                            dragOffset = 0f
-                            dragging = false
-                        },
+            if (place.kind in setOf(FilePlaceKind.Volume, FilePlaceKind.MtpStorage)) {
+                val totalBytes = place.totalBytes
+                val freeBytes = place.freeBytes
+
+                if (totalBytes != null && freeBytes != null && totalBytes > 0) {
+                    val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0)
+                    val progress = (usedBytes.toDouble() / totalBytes).toFloat().coerceIn(0f, 1f)
+                    val percent = (progress * 100).roundToInt()
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    LinearProgressIndicator(
+                        progress = progress,
+                        modifier = Modifier.fillMaxWidth()
+                            .height(4.dp)
                     )
-                },
-            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = stringResource(
+                            Res.string.text_storage_usage,
+                            percent,
+                            formatFileSize(usedBytes),
+                            formatFileSize(freeBytes),
+                        ),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = contentColor.copy(.31f),
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        InfiniteProgressIndicator(
+                            color = contentColor,
+                            size = 14.dp,
+                        )
+                        Text(
+                            text = stringResource(Res.string.text_capacity_unknown),
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = contentColor,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
+            }
+        }
+
+        if (expanded != null) {
+            Icon(
+                imageVector = if (expanded) MiuixIcons.ExpandLess else MiuixIcons.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = contentColor,
+            )
+        }
     }
 }
 
@@ -275,6 +470,11 @@ private fun FilePlace.displayLabel(): String = when (kind) {
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,
     FilePlaceKind.MtpStorage -> label
+    FilePlaceKind.MtpCamera -> stringResource(Res.string.text_camera)
+    FilePlaceKind.MtpDownloads -> stringResource(Res.string.text_downloads)
+    FilePlaceKind.MtpMovies -> stringResource(Res.string.text_movies)
+    FilePlaceKind.MtpMusic -> stringResource(Res.string.text_music)
+    FilePlaceKind.MtpPictures -> stringResource(Res.string.text_pictures)
 }
 
 @Composable
@@ -288,5 +488,10 @@ private fun FilePlace.icon(): Any = when (kind) {
     FilePlaceKind.Movies -> MiuixIcons.Play
     FilePlaceKind.Volume -> painterResource(Res.drawable.ic_storage)
     FilePlaceKind.MtpDevice,
-    FilePlaceKind.MtpStorage -> MiuixIcons.Phone
+    FilePlaceKind.MtpStorage -> painterResource(Res.drawable.ic_mtp)
+    FilePlaceKind.MtpCamera -> painterResource(Res.drawable.ic_camara)
+    FilePlaceKind.MtpDownloads -> MiuixIcons.Download
+    FilePlaceKind.MtpMovies -> MiuixIcons.Play
+    FilePlaceKind.MtpMusic -> MiuixIcons.Music
+    FilePlaceKind.MtpPictures -> MiuixIcons.Image
 }

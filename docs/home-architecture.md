@@ -196,6 +196,9 @@ focusedPaneState.location → breadcrumbs() → BreadcrumbBar
 MTP provider 会把每台设备的每个存储挂到侧边栏，标签为
 `设备型号 · 存储名`；没有设备时 MTP 分组为空。
 
+MTP 存储行可以点击展开，展开后显示“相片（/DCIM/Camera）/ 下载 / 电影 / 音乐 /
+图片”快捷入口；展开状态和快捷入口顺序写入设置，重启应用后保留。
+
 每个分组内的条目右侧有拖拽手柄，按住上下拖动可调整该分组内部的顺序；
 分组本身保持“本地 / 挂载磁盘 / MTP设备”的固定顺序。每个分组的顺序写入
 `SettingsRepository` 的 `drawer_place_order_<group>`，重启应用后保留；

@@ -39,8 +39,8 @@ import io.github.dockhand.ui.screen.home.FilePaneState
 import io.github.dockhand.ui.screen.home.FileRowUi
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -95,7 +95,7 @@ fun FileBrowserPane(
                 when {
                     pane.isLoading && pane.entries.isEmpty() -> {
                         PaneStateBox {
-                            CircularProgressIndicator()
+                            InfiniteProgressIndicator()
                         }
                     }
 

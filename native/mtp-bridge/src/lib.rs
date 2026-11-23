@@ -1,5 +1,6 @@
 use mtp_rs::mtp::{ByteRange, MtpDevice, NewObjectInfo, ObjectHandle, Storage, StorageId};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -9,6 +10,16 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
 static OP_LOCK: Mutex<()> = Mutex::new(());
+
+fn active_lists() -> &'static Mutex<HashMap<u64, mtp_rs::CancelToken>> {
+    static ACTIVE: OnceLock<Mutex<HashMap<u64, mtp_rs::CancelToken>>> = OnceLock::new();
+    ACTIVE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cancelled_list_requests() -> &'static Mutex<HashSet<u64>> {
+    static CANCELLED: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+    CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
 
 fn runtime() -> &'static tokio::runtime::Runtime {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
@@ -65,8 +76,16 @@ fn read_c_string(pointer: *const c_char) -> Result<String, String> {
         .map_err(|error| format!("invalid UTF-8: {error}"))
 }
 
-async fn open_storage(device_key: u64, storage_id: u64) -> Result<(MtpDevice, Storage), String> {
-    let device = MtpDevice::open_by_location(device_key)
+async fn open_storage(
+    device_key: u64,
+    storage_id: u64,
+    include_metadata: bool,
+) -> Result<(MtpDevice, Storage), String> {
+    // GetObjectPropList 很快，但 Android 往往不返回 DateModified。
+    // 列表需要时间信息时走逐对象 GetObjectInfo；其他操作用快速路径。
+    let device = MtpDevice::builder()
+        .use_object_prop_list(!include_metadata)
+        .open_by_location(device_key)
         .await
         .map_err(|error| error_message(&error))?;
     let storage = device
@@ -110,8 +129,13 @@ fn split_parent(path: &str) -> Result<(String, String), String> {
     Ok((parent, name.to_string()))
 }
 
-fn modified_seconds(info: &mtp_rs::mtp::ObjectInfo) -> Option<i64> {
-    info.modified.and_then(|date| date.to_unix_seconds())
+fn modified_local(info: &mtp_rs::mtp::ObjectInfo) -> Option<String> {
+    info.modified.map(|date| {
+        format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            date.year, date.month, date.day, date.hour, date.minute, date.second
+        )
+    })
 }
 
 async fn device_and_storages() -> Result<Value, String> {
@@ -177,13 +201,46 @@ async fn device_and_storages() -> Result<Value, String> {
     Ok(json!({ "devices": device_values }))
 }
 
-async fn list_entries(device_key: u64, storage_id: u64, path: String) -> Result<Value, String> {
-    let (_device, storage) = open_storage(device_key, storage_id).await?;
+async fn list_entries(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    path: String,
+) -> Result<Value, String> {
+    let (_device, storage) = open_storage(device_key, storage_id, true).await?;
     let parent = resolve_folder(&storage, &path).await?;
-    let objects = storage
-        .list_objects(parent)
-        .await
-        .map_err(|error| error_message(&error))?;
+
+    let token = mtp_rs::CancelToken::new();
+    active_lists()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(request_id, token.clone());
+    if cancelled_list_requests()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id)
+    {
+        token.cancel();
+    }
+
+    let result = storage.list_objects_with_cancel(parent, Some(&token)).await;
+
+    active_lists()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
+    cancelled_list_requests()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
+
+    let objects = result.map_err(|error| {
+        if matches!(error, mtp_rs::Error::Cancelled) {
+            "MTP 列表已取消".to_string()
+        } else {
+            error_message(&error)
+        }
+    })?;
     let entries = objects
         .into_iter()
         .filter(|object| !object.filename.starts_with('.'))
@@ -194,7 +251,7 @@ async fn list_entries(device_key: u64, storage_id: u64, path: String) -> Result<
                 "name": object.filename,
                 "isDirectory": object.is_folder(),
                 "size": object.size,
-                "modifiedAt": modified_seconds(&object),
+                "modifiedLocal": modified_local(&object),
             })
         })
         .collect::<Vec<_>>();
@@ -202,7 +259,7 @@ async fn list_entries(device_key: u64, storage_id: u64, path: String) -> Result<
 }
 
 async fn create_folder(device_key: u64, storage_id: u64, path: String) -> Result<Value, String> {
-    let (_device, storage) = open_storage(device_key, storage_id).await?;
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
     let (parent_path, name) = split_parent(&path)?;
     let parent = resolve_folder(&storage, &parent_path).await?;
     let handle = storage
@@ -223,7 +280,7 @@ async fn upload_file(device_key: u64, storage_id: u64, local_path: String, remot
         .map_err(|error| format!("无法打开本地文件：{error}"))?;
     let stream = ReaderStream::new(file);
 
-    let (_device, storage) = open_storage(device_key, storage_id).await?;
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
     let (parent_path, name) = split_parent(&remote_path)?;
     let parent = resolve_folder(&storage, &parent_path).await?;
     let handle = storage
@@ -239,7 +296,7 @@ async fn download_file(
     remote_path: String,
     local_path: String,
 ) -> Result<Value, String> {
-    let (_device, storage) = open_storage(device_key, storage_id).await?;
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
     let (parent_path, name) = split_parent(&remote_path)?;
     let parent = resolve_folder(&storage, &parent_path).await?;
     let objects = storage
@@ -277,6 +334,7 @@ pub extern "C" fn dockhand_mtp_storages() -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn dockhand_mtp_list(
+    request_id: u64,
     device_key: u64,
     storage_id: u64,
     path: *const c_char,
@@ -284,8 +342,25 @@ pub extern "C" fn dockhand_mtp_list(
     let path = read_c_string(path);
     run_operation(async move {
         let path = path?;
-        list_entries(device_key, storage_id, path).await
+        list_entries(request_id, device_key, storage_id, path).await
     })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_cancel_list(request_id: u64) {
+    let token = active_lists()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&request_id)
+        .cloned();
+    if let Some(token) = token {
+        token.cancel();
+    } else {
+        cancelled_list_requests()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(request_id);
+    }
 }
 
 #[no_mangle]

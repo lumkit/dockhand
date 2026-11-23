@@ -12,6 +12,11 @@ enum class FilePlaceKind {
     Volume,
     MtpDevice,
     MtpStorage,
+    MtpCamera,
+    MtpDownloads,
+    MtpMovies,
+    MtpMusic,
+    MtpPictures,
 }
 
 enum class FilePlaceGroup {
@@ -24,6 +29,14 @@ val DEFAULT_FILE_PLACE_GROUP_ORDER = listOf(
     FilePlaceGroup.Local,
     FilePlaceGroup.Mounted,
     FilePlaceGroup.Mtp,
+)
+
+val DEFAULT_MTP_SHORTCUT_ORDER = listOf(
+    "camera",
+    "downloads",
+    "movies",
+    "music",
+    "pictures",
 )
 
 /**
@@ -52,4 +65,8 @@ data class FilePlace(
     val location: FileLocation,
     val kind: FilePlaceKind,
     val group: FilePlaceGroup,
+    /** 挂载磁盘/MTP 存储的总容量；未知为 null。 */
+    val totalBytes: Long? = null,
+    /** 挂载磁盘/MTP 存储的可用容量；未知为 null。 */
+    val freeBytes: Long? = null,
 )

@@ -158,6 +158,77 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun mtpStorageClickSelectsRootThenTogglesWhenSelected() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val source = FileSource("mtp:1:65537", "MTP 存储", FileSourceKind.Mtp)
+        val storage = FilePlace(
+            id = source.id,
+            label = source.name,
+            location = FileLocation(source, "/"),
+            kind = FilePlaceKind.MtpStorage,
+            group = FilePlaceGroup.Mtp,
+        )
+
+        // 未选中：只跳转根目录，不展开。
+        viewModel.onMtpStorageClick(storage, selected = false)
+
+        assertEquals(source.id, viewModel.state.value.leftPane.location?.source?.id)
+        assertEquals("/", viewModel.state.value.leftPane.location?.path)
+        assertEquals(emptySet<String>(), viewModel.state.value.mtpExpandedSources)
+
+        // 已选中：只切换展开状态。
+        viewModel.onMtpStorageClick(storage, selected = true)
+
+        assertTrue(source.id in viewModel.state.value.mtpExpandedSources)
+        assertEquals(source.id, viewModel.state.value.leftPane.location?.source?.id)
+        assertEquals("/", viewModel.state.value.leftPane.location?.path)
+    }
+
+    @Test
+    fun mtpStorageExpansionCanBeToggled() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val sourceId = "mtp:1:65537"
+
+        viewModel.onToggleMtpExpanded(sourceId)
+        assertEquals(setOf(sourceId), viewModel.state.value.mtpExpandedSources)
+
+        viewModel.onToggleMtpExpanded(sourceId)
+        assertEquals(emptySet<String>(), viewModel.state.value.mtpExpandedSources)
+    }
+
+    @Test
+    fun mtpShortcutsCanBeReordered() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        assertEquals(
+            listOf("camera", "downloads", "movies", "music", "pictures"),
+            viewModel.state.value.mtpShortcutOrder,
+        )
+
+        viewModel.onMoveMtpShortcut("pictures", -1)
+
+        assertEquals(
+            listOf("camera", "downloads", "movies", "pictures", "music"),
+            viewModel.state.value.mtpShortcutOrder,
+        )
+    }
+
+    @Test
     fun sidebarAndBreadcrumbNavigateTheFocusedPane() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(

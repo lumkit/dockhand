@@ -1,6 +1,7 @@
 package io.github.dockhand.ui.screen.home
 
 import androidx.compose.runtime.Immutable
+import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
@@ -56,6 +57,10 @@ data class HomeUiState(
     val placesError: String? = null,
     /** 每个侧边栏分组内部的 place id 顺序；由设置持久化。 */
     val drawerPlaceOrder: Map<FilePlaceGroup, List<String>> = emptyMap(),
+    /** 已展开的 MTP 存储 source id；默认折叠。 */
+    val mtpExpandedSources: Set<String> = emptySet(),
+    /** MTP 快捷入口顺序；由设置持久化。 */
+    val mtpShortcutOrder: List<String> = DEFAULT_MTP_SHORTCUT_ORDER,
     /** 新建/传输等一次性操作的错误，由顶部工具栏展示。 */
     val operationError: String? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
