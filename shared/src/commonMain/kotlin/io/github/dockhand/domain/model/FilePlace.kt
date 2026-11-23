@@ -27,6 +27,22 @@ val DEFAULT_FILE_PLACE_GROUP_ORDER = listOf(
 )
 
 /**
+ * 按保存的 place id 顺序排列；未出现在 ids 里的新地点保持原顺序并追加在末尾。
+ */
+fun List<FilePlace>.orderedByIds(ids: List<String>): List<FilePlace> {
+    if (ids.isEmpty()) return this
+    val rank = ids.withIndex().associate { (index, id) -> id to index }
+    return withIndex()
+        .sortedWith(
+            compareBy(
+                { rank[it.value.id] ?: Int.MAX_VALUE },
+                { it.index },
+            )
+        )
+        .map { it.value }
+}
+
+/**
  * 侧边栏中的一个“位置”，是导航目的地，不一定是文件系统根。
  */
 data class FilePlace(

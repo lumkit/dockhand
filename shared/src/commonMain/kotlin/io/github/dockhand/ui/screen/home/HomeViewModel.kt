@@ -8,9 +8,9 @@ import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
-import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.FileSourceKind
+import io.github.dockhand.domain.model.orderedByIds
 import io.github.dockhand.domain.model.parentBreadcrumb
 import io.github.dockhand.domain.repository.FileBrowserRepository
 import kotlinx.coroutines.CancellationException
@@ -56,12 +56,12 @@ class HomeViewModel(
     private val loadJobs = mutableMapOf<PaneId, Job>()
     private val watchJobs = mutableMapOf<PaneId, Job>()
     private val placesJob: Job
-    private val drawerOrderJob: Job? = settings?.let { repository ->
+    private val drawerPlaceOrderJob: Job? = settings?.let { repository ->
         scope.launch {
-            repository.drawerSectionOrder
+            repository.drawerPlaceOrder
                 .catch { }
                 .collect { order ->
-                    _state.update { it.copy(drawerSectionOrder = order) }
+                    _state.update { it.copy(drawerPlaceOrder = order) }
                 }
         }
     }
@@ -149,17 +149,23 @@ class HomeViewModel(
         navigate(paneId, place.location)
     }
 
-    /** 侧边栏分组拖拽：只调整分组顺序，并异步持久化。 */
-    fun onMoveDrawerSection(group: FilePlaceGroup, direction: Int) {
-        val current = _state.value.drawerSectionOrder.toMutableList()
-        val from = current.indexOf(group)
+    /** 拖动侧边栏条目：只调整同一分组内部的顺序，并异步持久化。 */
+    fun onMovePlace(place: FilePlace, direction: Int) {
+        val state = _state.value
+        val groupPlaces = state.places
+            .filter { it.group == place.group }
+            .orderedByIds(state.drawerPlaceOrder[place.group].orEmpty())
+        val from = groupPlaces.indexOfFirst { it.id == place.id }
         val to = from + direction
-        if (from < 0 || to !in current.indices) return
-        current.removeAt(from)
-        current.add(to, group)
-        _state.update { it.copy(drawerSectionOrder = current) }
+        if (from < 0 || to !in groupPlaces.indices) return
+
+        val orderedIds = groupPlaces.map { it.id }.toMutableList()
+        orderedIds.removeAt(from)
+        orderedIds.add(to, place.id)
+        val updated = state.drawerPlaceOrder + (place.group to orderedIds)
+        _state.update { it.copy(drawerPlaceOrder = updated) }
         scope.launch {
-            settings?.setDrawerSectionOrder(current)
+            settings?.setDrawerPlaceOrder(place.group, orderedIds)
         }
     }
 
@@ -393,7 +399,7 @@ class HomeViewModel(
 
     override fun onCleared() {
         placesJob.cancel()
-        drawerOrderJob?.cancel()
+        drawerPlaceOrderJob?.cancel()
         loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
         watchJobs.values.forEach { it.cancel() }

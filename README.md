@@ -15,7 +15,7 @@ macOS 没有系统级 MTP 挂载 API。项目内嵌了 MIT/Apache-2.0 的
 - JVM 侧通过 JDK 25 的 FFM 加载，不依赖 OpenMTP、JNA、JNI、libmtp 或 libusb
 - 同时连接多台 MTP 设备时，会按 USB location 分别枚举，侧边栏显示为
   `设备型号 · 存储名`
-- 侧边栏分组支持拖拽排序，顺序会持久化到本地设置
+- 侧边栏分组内的条目支持拖拽排序，顺序会持久化到本地设置
 - 构建源码需要 Rust 1.90+；最终 App 不需要用户安装 Rust
 
 * [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.

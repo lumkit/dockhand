@@ -132,43 +132,28 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun drawerSectionsCanBeReordered() = runBlocking {
+    fun drawerPlacesCanBeReorderedWithinCategory() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(
             files = fixture.repository,
             computeDispatcher = Dispatchers.Unconfined,
             externalScope = scope,
         )
+        val documents = fixture.places.first { it.kind == FilePlaceKind.Documents }
+        val home = fixture.places.first { it.kind == FilePlaceKind.Home }
+
+        viewModel.onMovePlace(documents, -1)
 
         assertEquals(
-            listOf(
-                FilePlaceGroup.Local,
-                FilePlaceGroup.Mounted,
-                FilePlaceGroup.Mtp,
-            ),
-            viewModel.state.value.drawerSectionOrder,
-        )
-
-        viewModel.onMoveDrawerSection(FilePlaceGroup.Mounted, -1)
-
-        assertEquals(
-            listOf(
-                FilePlaceGroup.Mounted,
-                FilePlaceGroup.Local,
-                FilePlaceGroup.Mtp,
-            ),
-            viewModel.state.value.drawerSectionOrder,
+            listOf(documents.id, home.id),
+            viewModel.state.value.drawerPlaceOrder[FilePlaceGroup.Local],
         )
 
         // 已经在顶部，继续上移不应改变顺序。
-        viewModel.onMoveDrawerSection(FilePlaceGroup.Mounted, -1)
+        viewModel.onMovePlace(documents, -1)
         assertEquals(
-            listOf(
-                FilePlaceGroup.Mounted,
-                FilePlaceGroup.Local,
-                FilePlaceGroup.Mtp,
-            ),
-            viewModel.state.value.drawerSectionOrder,
+            listOf(documents.id, home.id),
+            viewModel.state.value.drawerPlaceOrder[FilePlaceGroup.Local],
         )
     }
 

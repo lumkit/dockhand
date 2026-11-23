@@ -15,7 +15,9 @@ import java.io.IOException
 /** DataStore 的 key 集中在这里，避免散落在各处。 */
 internal object SettingsKeys {
     val ColorSchemeMode = stringPreferencesKey("color_scheme_mode")
-    val DrawerSectionOrder = stringPreferencesKey("drawer_section_order")
+
+    fun drawerPlaceOrder(group: FilePlaceGroup): Preferences.Key<String> =
+        stringPreferencesKey("drawer_place_order_${group.name.lowercase()}")
 }
 
 class SettingsRepository(
@@ -34,22 +36,26 @@ class SettingsRepository(
     }
 
     /**
-     * 侧边栏分组顺序；缺失的分组会补在末尾，避免新增分组时被旧设置吞掉。
+     * 每个侧边栏分组内部的地点顺序，值为保存的 place id 列表。
      */
-    val drawerSectionOrder: Flow<List<FilePlaceGroup>> = dataStore.data
+    val drawerPlaceOrder: Flow<Map<FilePlaceGroup, List<String>>> = dataStore.data
         .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
         .map { prefs ->
-            val saved = prefs[SettingsKeys.DrawerSectionOrder]
-                ?.split(',')
-                ?.mapNotNull { name -> FilePlaceGroup.entries.firstOrNull { it.name == name } }
-                .orEmpty()
-                .distinct()
-            saved + FilePlaceGroup.entries.filterNot { it in saved }
+            FilePlaceGroup.entries.associateWith { group ->
+                prefs[SettingsKeys.drawerPlaceOrder(group)]
+                    ?.split(PLACE_ORDER_SEPARATOR)
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty()
+            }
         }
 
-    suspend fun setDrawerSectionOrder(order: List<FilePlaceGroup>) {
+    suspend fun setDrawerPlaceOrder(group: FilePlaceGroup, placeIds: List<String>) {
         dataStore.edit { prefs ->
-            prefs[SettingsKeys.DrawerSectionOrder] = order.joinToString(",") { it.name }
+            prefs[SettingsKeys.drawerPlaceOrder(group)] = placeIds.joinToString(PLACE_ORDER_SEPARATOR)
         }
+    }
+
+    private companion object {
+        const val PLACE_ORDER_SEPARATOR = "\u001F"
     }
 }

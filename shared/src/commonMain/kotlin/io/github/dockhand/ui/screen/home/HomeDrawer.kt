@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,10 +42,12 @@ import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_no_mounted_disks
 import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
+import io.github.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
+import io.github.dockhand.domain.model.orderedByIds
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Icon
@@ -79,13 +80,16 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun HomeDrawerContent(
     places: List<FilePlace>,
     activeLocation: FileLocation?,
-    sectionOrder: List<FilePlaceGroup>,
-    onSectionMove: (FilePlaceGroup, Int) -> Unit,
+    placeOrder: Map<FilePlaceGroup, List<String>>,
+    onPlaceMove: (FilePlace, Int) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val placesByGroup = remember(places) {
-        FilePlaceGroup.entries.associateWith { group -> places.filter { it.group == group } }
+    val placesByGroup = remember(places, placeOrder) {
+        DEFAULT_FILE_PLACE_GROUP_ORDER.associateWith { group ->
+            places.filter { it.group == group }
+                .orderedByIds(placeOrder[group].orEmpty())
+        }
     }
     val activePlaceId = remember(places, activeLocation) {
         if (activeLocation == null) {
@@ -98,16 +102,14 @@ fun HomeDrawerContent(
     }
 
     LazyColumn(modifier = modifier) {
-        sectionOrder.forEach { group ->
+        DEFAULT_FILE_PLACE_GROUP_ORDER.forEach { group ->
             item(key = "header:${group.name}") {
-                DrawerSectionHeader(
-                    title = when (group) {
+                SmallTitle(
+                    text = when (group) {
                         FilePlaceGroup.Local -> stringResource(Res.string.text_local)
                         FilePlaceGroup.Mounted -> stringResource(Res.string.text_mounted_disks)
                         FilePlaceGroup.Mtp -> stringResource(Res.string.text_mtp_devices)
                     },
-                    group = group,
-                    onMove = onSectionMove,
                 )
             }
 
@@ -128,68 +130,11 @@ fun HomeDrawerContent(
                         place = place,
                         selected = place.id == activePlaceId,
                         onClick = { onPlaceClick(place) },
+                        onMove = onPlaceMove,
                     )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DrawerSectionHeader(
-    title: String,
-    group: FilePlaceGroup,
-    onMove: (FilePlaceGroup, Int) -> Unit,
-) {
-    val threshold = with(LocalDensity.current) { 40.dp.toPx() }
-    var dragOffset by remember(group) { mutableFloatStateOf(0f) }
-    var dragging by remember(group) { mutableStateOf(false) }
-    val currentOnMove by rememberUpdatedState(onMove)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                translationY = dragOffset
-                alpha = if (dragging) 0.72f else 1f
-            }
-            .pointerInput(group, threshold) {
-                detectDragGestures(
-                    onDragStart = { dragging = true },
-                    onDrag = { change, amount ->
-                        change.consume()
-                        dragOffset += amount.y
-                    },
-                    onDragEnd = {
-                        val direction = when {
-                            dragOffset > threshold -> 1
-                            dragOffset < -threshold -> -1
-                            else -> 0
-                        }
-                        if (direction != 0) currentOnMove(group, direction)
-                        dragOffset = 0f
-                        dragging = false
-                    },
-                    onDragCancel = {
-                        dragOffset = 0f
-                        dragging = false
-                    },
-                )
-            }
-    ) {
-        SmallTitle(
-            text = title,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Icon(
-            imageVector = MiuixIcons.Sort,
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp)
-                .size(16.dp),
-            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
     }
 }
 
@@ -213,7 +158,13 @@ private fun PlaceRow(
     place: FilePlace,
     selected: Boolean,
     onClick: () -> Unit,
+    onMove: (FilePlace, Int) -> Unit,
 ) {
+    val threshold = with(LocalDensity.current) { 28.dp.toPx() }
+    var dragOffset by remember(place.id) { mutableFloatStateOf(0f) }
+    var dragging by remember(place.id) { mutableStateOf(false) }
+    val currentOnMove by rememberUpdatedState(onMove)
+
     val background = if (selected) {
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     } else {
@@ -228,6 +179,10 @@ private fun PlaceRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                translationY = dragOffset
+                alpha = if (dragging) 0.72f else 1f
+            }
             .padding(horizontal = 8.dp, vertical = 1.dp)
             .squircleClip(12.dp)
             .background(background)
@@ -259,8 +214,40 @@ private fun PlaceRow(
 
         Text(
             text = place.displayLabel(),
+            modifier = Modifier.weight(1f),
             style = MiuixTheme.textStyles.footnote1,
             color = contentColor,
+        )
+
+        Icon(
+            imageVector = MiuixIcons.Sort,
+            contentDescription = null,
+            modifier = Modifier
+                .size(16.dp)
+                .pointerInput(place.id, threshold) {
+                    detectDragGestures(
+                        onDragStart = { dragging = true },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            dragOffset += amount.y
+                        },
+                        onDragEnd = {
+                            val direction = when {
+                                dragOffset > threshold -> 1
+                                dragOffset < -threshold -> -1
+                                else -> 0
+                            }
+                            if (direction != 0) currentOnMove(place, direction)
+                            dragOffset = 0f
+                            dragging = false
+                        },
+                        onDragCancel = {
+                            dragOffset = 0f
+                            dragging = false
+                        },
+                    )
+                },
+            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }
