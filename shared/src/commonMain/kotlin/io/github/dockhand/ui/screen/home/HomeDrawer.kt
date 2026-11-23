@@ -25,10 +25,12 @@ import dockhand.shared.generated.resources.ic_user
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
+import dockhand.shared.generated.resources.text_external_storage
 import dockhand.shared.generated.resources.text_local
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_mtp_devices
 import dockhand.shared.generated.resources.text_music
+import dockhand.shared.generated.resources.text_no_external_storage
 import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
 import dockhand.shared.generated.resources.text_root
@@ -60,8 +62,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /**
  * 侧边导航面板。
  *
- * 数据完全来自 [FilePlace]：本地入口由 LocalFileSystemProvider 扫描产生，
- * MTP 入口由未来的 MTP provider 产生。这里没有写死的路径。
+ * 数据完全来自 [FilePlace]：本地/外接磁盘入口由 LocalFileSystemProvider 扫描产生，
+ * MTP 入口由 MtpFileSystemProvider 产生。这里没有写死的路径。
  */
 @Composable
 fun HomeDrawerContent(
@@ -71,6 +73,7 @@ fun HomeDrawerContent(
     modifier: Modifier = Modifier,
 ) {
     val localPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Local } }
+    val externalPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.External } }
     val mtpPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Mtp } }
     val activePlaceId = remember(places, activeLocation) {
         if (activeLocation == null) {
@@ -95,22 +98,28 @@ fun HomeDrawerContent(
         }
 
         item {
+            SmallTitle(text = stringResource(Res.string.text_external_storage))
+        }
+        if (externalPlaces.isEmpty()) {
+            item {
+                PlaceGroupHint(stringResource(Res.string.text_no_external_storage))
+            }
+        } else {
+            items(externalPlaces, key = { it.id }) { place ->
+                PlaceRow(
+                    place = place,
+                    selected = place.id == activePlaceId,
+                    onClick = { onPlaceClick(place) },
+                )
+            }
+        }
+
+        item {
             SmallTitle(text = stringResource(Res.string.text_mtp_devices))
         }
         if (mtpPlaces.isEmpty()) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.text_no_mtp_devices),
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                }
+                PlaceGroupHint(stringResource(Res.string.text_no_mtp_devices))
             }
         } else {
             items(mtpPlaces, key = { it.id }) { place ->
@@ -121,6 +130,21 @@ fun HomeDrawerContent(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PlaceGroupHint(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = text,
+            style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
     }
 }
 

@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Dockhand</string>
     <string name="text_local">本地</string>
+    <string name="text_external_storage">外部存储</string>
+    <string name="text_no_external_storage">未连接外部存储</string>
     <string name="text_mtp_devices">MTP设备</string>
 
     <!-- 侧边栏固定入口 -->

@@ -39,7 +39,7 @@ UI 不直接接触 `java.nio.file`，也不判断“这是不是 MTP”；平台
   - 本地 provider 使用 POSIX 绝对路径；
   - MTP provider 可以使用以 `/` 分段的逻辑路径。
 - **FileEntry**：列表行，带自身的 `FileLocation`，所以“进入目录”不需要拼路径。
-- **FilePlace**：侧边栏入口（根目录、个人目录、常用目录、外置磁盘、MTP 设备）。
+- **FilePlace**：侧边栏入口（根目录、个人目录、常用目录、外部存储、MTP 设备）。
 - **FileBreadcrumb**：顶栏的一段，带点击后应导航到的 `path`。
 
 ## 3. 数据流
@@ -180,8 +180,9 @@ focusedPaneState.location → breadcrumbs() → BreadcrumbBar
 
 侧边栏完全由 `places` 驱动：
 
-- 本地入口来自 `LocalFileSystemProvider.scanPlaces()`；
-- MTP 入口来自 `MtpFileSystemProvider`；
+- 本地入口来自 `LocalFileSystemProvider.scanPlaces()`，分组为 `FilePlaceGroup.Local`；
+- `/Volumes` 下的外接磁盘单独归入 `FilePlaceGroup.External`，侧边栏显示为“外部存储”；
+- MTP 入口来自 `MtpFileSystemProvider`，分组为 `FilePlaceGroup.Mtp`；
 - 固定入口的名称由 UI 按 `FilePlaceKind` 本地化（桌面、文稿、下载……）；
 - 动态名称（用户名、磁盘名、设备名）来自 provider 的 `label`。
 

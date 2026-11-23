@@ -324,7 +324,7 @@ class LocalFileSystemProvider(
                     label = name,
                     location = FileLocation(source, path.toAbsolutePath().normalize().toString()),
                     kind = FilePlaceKind.Volume,
-                    group = FilePlaceGroup.Local,
+                    group = FilePlaceGroup.External,
                 )
             }.sortedBy { it.label.lowercase() }
         }

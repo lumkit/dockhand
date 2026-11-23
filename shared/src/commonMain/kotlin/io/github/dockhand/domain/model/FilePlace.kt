@@ -17,6 +17,7 @@ enum class FilePlaceKind {
 
 enum class FilePlaceGroup {
     Local,
+    External,
     Mtp,
 }
 
