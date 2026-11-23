@@ -20,6 +20,12 @@ enum class FilePlaceGroup {
     Mtp,
 }
 
+val DEFAULT_FILE_PLACE_GROUP_ORDER = listOf(
+    FilePlaceGroup.Local,
+    FilePlaceGroup.Mounted,
+    FilePlaceGroup.Mtp,
+)
+
 /**
  * 侧边栏中的一个“位置”，是导航目的地，不一定是文件系统根。
  */

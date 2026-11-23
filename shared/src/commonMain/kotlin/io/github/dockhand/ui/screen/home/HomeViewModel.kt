@@ -2,11 +2,13 @@ package io.github.dockhand.ui.screen.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.dockhand.data.datastore.SettingsRepository
 import io.github.dockhand.domain.model.FileBreadcrumb
 import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
+import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.model.parentBreadcrumb
@@ -39,6 +41,8 @@ import kotlinx.datetime.TimeZone
  */
 class HomeViewModel(
     private val files: FileBrowserRepository,
+    /** 侧边栏顺序等 UI 设置；测试可省略。 */
+    private val settings: SettingsRepository? = null,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** 测试用；默认绑定 [viewModelScope]。 */
@@ -52,6 +56,15 @@ class HomeViewModel(
     private val loadJobs = mutableMapOf<PaneId, Job>()
     private val watchJobs = mutableMapOf<PaneId, Job>()
     private val placesJob: Job
+    private val drawerOrderJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.drawerSectionOrder
+                .catch { }
+                .collect { order ->
+                    _state.update { it.copy(drawerSectionOrder = order) }
+                }
+        }
+    }
     private var bootstrapped = false
 
     init {
@@ -134,6 +147,20 @@ class HomeViewModel(
     fun onPlaceClick(place: FilePlace) {
         val paneId = _state.value.focusedPane
         navigate(paneId, place.location)
+    }
+
+    /** 侧边栏分组拖拽：只调整分组顺序，并异步持久化。 */
+    fun onMoveDrawerSection(group: FilePlaceGroup, direction: Int) {
+        val current = _state.value.drawerSectionOrder.toMutableList()
+        val from = current.indexOf(group)
+        val to = from + direction
+        if (from < 0 || to !in current.indices) return
+        current.removeAt(from)
+        current.add(to, group)
+        _state.update { it.copy(drawerSectionOrder = current) }
+        scope.launch {
+            settings?.setDrawerSectionOrder(current)
+        }
     }
 
     fun onBreadcrumbClick(breadcrumb: FileBreadcrumb) {
@@ -366,6 +393,7 @@ class HomeViewModel(
 
     override fun onCleared() {
         placesJob.cancel()
+        drawerOrderJob?.cancel()
         loadJobs.values.forEach { it.cancel() }
         loadJobs.clear()
         watchJobs.values.forEach { it.cancel() }

@@ -2,7 +2,9 @@ package io.github.dockhand.ui.screen.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,12 +13,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.ic_storage
@@ -26,6 +36,7 @@ import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
 import dockhand.shared.generated.resources.text_local
 import dockhand.shared.generated.resources.text_mounted_disks
+import dockhand.shared.generated.resources.text_no_local_places
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_mtp_devices
 import dockhand.shared.generated.resources.text_music
@@ -54,6 +65,7 @@ import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -67,12 +79,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun HomeDrawerContent(
     places: List<FilePlace>,
     activeLocation: FileLocation?,
+    sectionOrder: List<FilePlaceGroup>,
+    onSectionMove: (FilePlaceGroup, Int) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val localPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Local } }
-    val mountedPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Mounted } }
-    val mtpPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Mtp } }
+    val placesByGroup = remember(places) {
+        FilePlaceGroup.entries.associateWith { group -> places.filter { it.group == group } }
+    }
     val activePlaceId = remember(places, activeLocation) {
         if (activeLocation == null) {
             null
@@ -84,50 +98,98 @@ fun HomeDrawerContent(
     }
 
     LazyColumn(modifier = modifier) {
-        item {
-            SmallTitle(text = stringResource(Res.string.text_local))
-        }
-        items(localPlaces, key = { it.id }) { place ->
-            PlaceRow(
-                place = place,
-                selected = place.id == activePlaceId,
-                onClick = { onPlaceClick(place) },
-            )
-        }
-
-        item {
-            SmallTitle(text = stringResource(Res.string.text_mounted_disks))
-        }
-        if (mountedPlaces.isEmpty()) {
-            item {
-                PlaceGroupHint(stringResource(Res.string.text_no_mounted_disks))
-            }
-        } else {
-            items(mountedPlaces, key = { it.id }) { place ->
-                PlaceRow(
-                    place = place,
-                    selected = place.id == activePlaceId,
-                    onClick = { onPlaceClick(place) },
+        sectionOrder.forEach { group ->
+            item(key = "header:${group.name}") {
+                DrawerSectionHeader(
+                    title = when (group) {
+                        FilePlaceGroup.Local -> stringResource(Res.string.text_local)
+                        FilePlaceGroup.Mounted -> stringResource(Res.string.text_mounted_disks)
+                        FilePlaceGroup.Mtp -> stringResource(Res.string.text_mtp_devices)
+                    },
+                    group = group,
+                    onMove = onSectionMove,
                 )
             }
-        }
 
-        item {
-            SmallTitle(text = stringResource(Res.string.text_mtp_devices))
-        }
-        if (mtpPlaces.isEmpty()) {
-            item {
-                PlaceGroupHint(stringResource(Res.string.text_no_mtp_devices))
+            val groupPlaces = placesByGroup[group].orEmpty()
+            if (groupPlaces.isEmpty()) {
+                item(key = "empty:${group.name}") {
+                    PlaceGroupHint(
+                        when (group) {
+                            FilePlaceGroup.Local -> stringResource(Res.string.text_no_local_places)
+                            FilePlaceGroup.Mounted -> stringResource(Res.string.text_no_mounted_disks)
+                            FilePlaceGroup.Mtp -> stringResource(Res.string.text_no_mtp_devices)
+                        }
+                    )
+                }
+            } else {
+                items(groupPlaces, key = { it.id }) { place ->
+                    PlaceRow(
+                        place = place,
+                        selected = place.id == activePlaceId,
+                        onClick = { onPlaceClick(place) },
+                    )
+                }
             }
-        } else {
-            items(mtpPlaces, key = { it.id }) { place ->
-                PlaceRow(
-                    place = place,
-                    selected = place.id == activePlaceId,
-                    onClick = { onPlaceClick(place) },
+        }
+    }
+}
+
+@Composable
+private fun DrawerSectionHeader(
+    title: String,
+    group: FilePlaceGroup,
+    onMove: (FilePlaceGroup, Int) -> Unit,
+) {
+    val threshold = with(LocalDensity.current) { 40.dp.toPx() }
+    var dragOffset by remember(group) { mutableFloatStateOf(0f) }
+    var dragging by remember(group) { mutableStateOf(false) }
+    val currentOnMove by rememberUpdatedState(onMove)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                translationY = dragOffset
+                alpha = if (dragging) 0.72f else 1f
+            }
+            .pointerInput(group, threshold) {
+                detectDragGestures(
+                    onDragStart = { dragging = true },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragOffset += amount.y
+                    },
+                    onDragEnd = {
+                        val direction = when {
+                            dragOffset > threshold -> 1
+                            dragOffset < -threshold -> -1
+                            else -> 0
+                        }
+                        if (direction != 0) currentOnMove(group, direction)
+                        dragOffset = 0f
+                        dragging = false
+                    },
+                    onDragCancel = {
+                        dragOffset = 0f
+                        dragging = false
+                    },
                 )
             }
-        }
+    ) {
+        SmallTitle(
+            text = title,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Icon(
+            imageVector = MiuixIcons.Sort,
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp)
+                .size(16.dp),
+            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
     }
 }
 

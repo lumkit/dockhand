@@ -1,9 +1,11 @@
 package io.github.dockhand.ui.screen.home
 
 import androidx.compose.runtime.Immutable
+import io.github.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
+import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.breadcrumbs
 
 enum class PaneId {
@@ -53,6 +55,8 @@ data class FilePaneState(
 data class HomeUiState(
     val places: List<FilePlace> = emptyList(),
     val placesError: String? = null,
+    /** 侧边栏分组顺序；由设置持久化。 */
+    val drawerSectionOrder: List<FilePlaceGroup> = DEFAULT_FILE_PLACE_GROUP_ORDER,
     /** 新建/传输等一次性操作的错误，由顶部工具栏展示。 */
     val operationError: String? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),

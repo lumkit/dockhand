@@ -196,6 +196,9 @@ focusedPaneState.location → breadcrumbs() → BreadcrumbBar
 MTP provider 会把每台设备的每个存储挂到侧边栏，标签为
 `设备型号 · 存储名`；没有设备时 MTP 分组为空。
 
+分组标题右侧有拖拽手柄，按住标题上下拖动可调整“本地 / 挂载磁盘 / MTP设备”的
+顺序。顺序写入 `SettingsRepository` 的 `drawer_section_order`，重启应用后保留。
+
 ## 8. MTP 后端
 
 `MtpFileSystemProvider` 使用内嵌的 **mtp-rs**（MIT OR Apache-2.0）作为 MTP/PTP 实现：

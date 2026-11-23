@@ -26,6 +26,7 @@ import io.github.dockhand.LocalAppContainer
 import io.github.dockhand.domain.model.FileBreadcrumb
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FilePlace
+import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.ui.component.DualPaneBrowser
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
@@ -44,7 +45,7 @@ import top.yukonga.miuix.kmp.window.MiuixCaptionBar
 fun HomeScreen() {
     val container = LocalAppContainer.current
     val homeViewModel: HomeViewModel = viewModel {
-        HomeViewModel(files = container.files)
+        HomeViewModel(files = container.files, settings = container.settings)
     }
     val uiState by homeViewModel.state.collectAsState()
 
@@ -55,6 +56,7 @@ fun HomeScreen() {
         onEntryClick = homeViewModel::onEntryClick,
         onEntryDoubleClick = homeViewModel::onEntryDoubleClick,
         onEntrySecondaryClick = homeViewModel::onEntrySecondaryClick,
+        onSectionMove = homeViewModel::onMoveDrawerSection,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
         onBack = homeViewModel::onBack,
@@ -74,6 +76,7 @@ private fun HomeScreenContent(
     onEntryClick: (PaneId, FileEntry) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
+    onSectionMove: (FilePlaceGroup, Int) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onRetry: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
@@ -123,6 +126,8 @@ private fun HomeScreenContent(
                 HomeDrawerContent(
                     places = uiState.places,
                     activeLocation = uiState.focusedLocation,
+                    sectionOrder = uiState.drawerSectionOrder,
+                    onSectionMove = onSectionMove,
                     onPlaceClick = onPlaceClick,
                     modifier = Modifier.padding(drawerPaddingValues),
                 )

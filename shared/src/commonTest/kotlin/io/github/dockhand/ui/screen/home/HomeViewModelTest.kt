@@ -132,6 +132,47 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun drawerSectionsCanBeReordered() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        assertEquals(
+            listOf(
+                FilePlaceGroup.Local,
+                FilePlaceGroup.Mounted,
+                FilePlaceGroup.Mtp,
+            ),
+            viewModel.state.value.drawerSectionOrder,
+        )
+
+        viewModel.onMoveDrawerSection(FilePlaceGroup.Mounted, -1)
+
+        assertEquals(
+            listOf(
+                FilePlaceGroup.Mounted,
+                FilePlaceGroup.Local,
+                FilePlaceGroup.Mtp,
+            ),
+            viewModel.state.value.drawerSectionOrder,
+        )
+
+        // 已经在顶部，继续上移不应改变顺序。
+        viewModel.onMoveDrawerSection(FilePlaceGroup.Mounted, -1)
+        assertEquals(
+            listOf(
+                FilePlaceGroup.Mounted,
+                FilePlaceGroup.Local,
+                FilePlaceGroup.Mtp,
+            ),
+            viewModel.state.value.drawerSectionOrder,
+        )
+    }
+
+    @Test
     fun sidebarAndBreadcrumbNavigateTheFocusedPane() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(
