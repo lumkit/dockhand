@@ -2,7 +2,6 @@ package io.github.dockhand.domain.model
 
 /** 侧边栏入口的语义类型，UI 据此选择图标并本地化名称。 */
 enum class FilePlaceKind {
-    Root,
     Home,
     Desktop,
     Documents,
@@ -17,7 +16,7 @@ enum class FilePlaceKind {
 
 enum class FilePlaceGroup {
     Local,
-    External,
+    Mounted,
     Mtp,
 }
 

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
  * macOS 本地文件系统。
  *
  * 负责三件事：
- *  1. 生成侧边栏入口（根目录、个人目录、常用目录、外置磁盘）；
+ *  1. 生成侧边栏入口（个人目录、常用目录、挂载磁盘）；
  *  2. 列出目录内容（默认隐藏 dotfile，和 Finder 的默认行为一致）；
  *  3. 提供同设备内的文件/目录复制，供后续双栏互传使用。
  *
@@ -257,12 +257,6 @@ class LocalFileSystemProvider(
 
         addPlace(
             places = places,
-            kind = FilePlaceKind.Root,
-            path = Path.of("/"),
-            label = "/",
-        )
-        addPlace(
-            places = places,
             kind = FilePlaceKind.Home,
             path = homeDirectory,
             label = homeDirectory.fileName?.toString()?.takeIf { it.isNotBlank() } ?: "Home",
@@ -308,23 +302,30 @@ class LocalFileSystemProvider(
 
         return stream.use { entries ->
             entries.mapNotNull { path ->
-                if (Files.isSymbolicLink(path)) return@mapNotNull null
                 if (!Files.isDirectory(path)) return@mapNotNull null
 
                 val name = path.fileName?.toString() ?: return@mapNotNull null
                 if (name in IGNORED_VOLUME_NAMES) return@mapNotNull null
 
+                // Macintosh HD 是指向 / 的符号链接，但它本身就是启动盘，
+                // 在“挂载磁盘”分组里必须保留。其他符号链接仍然跳过。
+                val isStartupVolume = name == "Macintosh HD"
+                if (!isStartupVolume && Files.isSymbolicLink(path)) return@mapNotNull null
+
                 // /Volumes 下也可能只是普通文件夹（例如残留的 dmg 目录）。
-                // 只有挂载点拥有不同的 FileStore 时才算独立磁盘。
-                val storeName = runCatching { Files.getFileStore(path).name() }.getOrNull()
-                if (storeName != null && storeName == rootStoreName) return@mapNotNull null
+                // 只有挂载点拥有不同的 FileStore 时才算独立磁盘；
+                // 启动盘与 / 共用同一个 FileStore，单独放行。
+                if (!isStartupVolume) {
+                    val storeName = runCatching { Files.getFileStore(path).name() }.getOrNull()
+                    if (storeName != null && storeName == rootStoreName) return@mapNotNull null
+                }
 
                 FilePlace(
                     id = "local:volume:$name",
                     label = name,
                     location = FileLocation(source, path.toAbsolutePath().normalize().toString()),
                     kind = FilePlaceKind.Volume,
-                    group = FilePlaceGroup.External,
+                    group = FilePlaceGroup.Mounted,
                 )
             }.sortedBy { it.label.lowercase() }
         }
@@ -409,7 +410,7 @@ class LocalFileSystemProvider(
         const val REFRESH_INTERVAL_MS = 3_000L
         const val WATCH_POLL_MS = 250L
         const val WATCH_COALESCE_MS = 150L
-        val IGNORED_VOLUME_NAMES = setOf("Macintosh HD", "Recovery")
+        val IGNORED_VOLUME_NAMES = setOf("Recovery")
         val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }
             .thenBy { it.name.lowercase() }
     }

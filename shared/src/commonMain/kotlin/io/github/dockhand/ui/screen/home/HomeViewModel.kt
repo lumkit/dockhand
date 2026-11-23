@@ -8,6 +8,7 @@ import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceKind
+import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.model.parentBreadcrumb
 import io.github.dockhand.domain.repository.FileBrowserRepository
 import kotlinx.coroutines.CancellationException
@@ -73,10 +74,14 @@ class HomeViewModel(
 
     private fun bootstrap(places: List<FilePlace>) {
         val home = places.firstOrNull { it.kind == FilePlaceKind.Home }?.location
-            ?: places.firstOrNull { it.kind == FilePlaceKind.Root }?.location
+            ?: places.firstOrNull { it.location.source.kind == FileSourceKind.Local }?.location
             ?: places.first().location
-        val root = places.firstOrNull { it.kind == FilePlaceKind.Root }?.location
-            ?: home
+        // 侧边栏不再暴露“根目录”，但右面板仍从本机根目录开始。
+        val root = if (home.source.kind == FileSourceKind.Local) {
+            home.copy(path = "/")
+        } else {
+            home
+        }
 
         navigate(PaneId.Left, home, recordHistory = false)
         navigate(PaneId.Right, root, recordHistory = false)

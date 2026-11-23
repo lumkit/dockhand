@@ -39,7 +39,6 @@ class LocalFileSystemProviderTest {
             )
 
             val places = provider.observePlaces().first()
-            assertTrue(places.any { it.kind == FilePlaceKind.Root })
             val homePlace = places.first { it.kind == FilePlaceKind.Home }
             assertEquals(home.toAbsolutePath().normalize().toString(), homePlace.location.path)
             assertTrue(places.any { it.kind == FilePlaceKind.Documents })

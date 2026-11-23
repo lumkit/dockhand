@@ -19,21 +19,19 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
-import dockhand.shared.generated.resources.ic_home
 import dockhand.shared.generated.resources.ic_storage
 import dockhand.shared.generated.resources.ic_user
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
-import dockhand.shared.generated.resources.text_external_storage
 import dockhand.shared.generated.resources.text_local
+import dockhand.shared.generated.resources.text_mounted_disks
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_mtp_devices
 import dockhand.shared.generated.resources.text_music
-import dockhand.shared.generated.resources.text_no_external_storage
+import dockhand.shared.generated.resources.text_no_mounted_disks
 import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
-import dockhand.shared.generated.resources.text_root
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
@@ -73,7 +71,7 @@ fun HomeDrawerContent(
     modifier: Modifier = Modifier,
 ) {
     val localPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Local } }
-    val externalPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.External } }
+    val mountedPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Mounted } }
     val mtpPlaces = remember(places) { places.filter { it.group == FilePlaceGroup.Mtp } }
     val activePlaceId = remember(places, activeLocation) {
         if (activeLocation == null) {
@@ -98,14 +96,14 @@ fun HomeDrawerContent(
         }
 
         item {
-            SmallTitle(text = stringResource(Res.string.text_external_storage))
+            SmallTitle(text = stringResource(Res.string.text_mounted_disks))
         }
-        if (externalPlaces.isEmpty()) {
+        if (mountedPlaces.isEmpty()) {
             item {
-                PlaceGroupHint(stringResource(Res.string.text_no_external_storage))
+                PlaceGroupHint(stringResource(Res.string.text_no_mounted_disks))
             }
         } else {
-            items(externalPlaces, key = { it.id }) { place ->
+            items(mountedPlaces, key = { it.id }) { place ->
                 PlaceRow(
                     place = place,
                     selected = place.id == activePlaceId,
@@ -208,19 +206,16 @@ private fun PlaceRow(
 /**
  * 当前路径是否属于这个地点。
  *
- * 根目录只在精确命中时高亮，否则任何本地路径都会把“根目录”点亮；
- * 其他地点允许前缀命中，并配合最长路径优先，选中更具体的入口。
+ * 地点允许前缀命中，并配合最长路径优先，选中更具体的入口。
  */
 private fun FilePlace.matches(active: FileLocation): Boolean {
     if (active.source.id != location.source.id) return false
     if (active.path == location.path) return true
-    if (kind == FilePlaceKind.Root) return false
     return active.path.startsWith(location.path.trimEnd('/') + "/")
 }
 
 @Composable
 private fun FilePlace.displayLabel(): String = when (kind) {
-    FilePlaceKind.Root -> stringResource(Res.string.text_root)
     FilePlaceKind.Desktop -> stringResource(Res.string.text_desktop)
     FilePlaceKind.Documents -> stringResource(Res.string.text_documents)
     FilePlaceKind.Downloads -> stringResource(Res.string.text_downloads)
@@ -235,7 +230,6 @@ private fun FilePlace.displayLabel(): String = when (kind) {
 
 @Composable
 private fun FilePlace.icon(): Any = when (kind) {
-    FilePlaceKind.Root -> painterResource(Res.drawable.ic_home)
     FilePlaceKind.Home -> painterResource(Res.drawable.ic_user)
     FilePlaceKind.Desktop -> MiuixIcons.GridView
     FilePlaceKind.Documents -> MiuixIcons.Notes

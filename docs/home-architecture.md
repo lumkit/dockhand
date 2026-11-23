@@ -39,7 +39,7 @@ UI 不直接接触 `java.nio.file`，也不判断“这是不是 MTP”；平台
   - 本地 provider 使用 POSIX 绝对路径；
   - MTP provider 可以使用以 `/` 分段的逻辑路径。
 - **FileEntry**：列表行，带自身的 `FileLocation`，所以“进入目录”不需要拼路径。
-- **FilePlace**：侧边栏入口（根目录、个人目录、常用目录、外部存储、MTP 设备）。
+- **FilePlace**：侧边栏入口（个人目录、常用目录、挂载磁盘、MTP 设备）。
 - **FileBreadcrumb**：顶栏的一段，带点击后应导航到的 `path`。
 
 ## 3. 数据流
@@ -89,8 +89,8 @@ backStack / forwardStack
 
 初始状态：
 
-- 左面板：`FilePlaceKind.Home`（没有则根目录）；
-- 右面板：根目录；
+- 左面板：`FilePlaceKind.Home`（没有则本机第一个入口）；
+- 右面板：本机 `/`（根目录不再出现在侧边栏）；
 - 焦点默认在左面板。
 
 交互规则：
@@ -181,15 +181,15 @@ focusedPaneState.location → breadcrumbs() → BreadcrumbBar
 侧边栏完全由 `places` 驱动：
 
 - 本地入口来自 `LocalFileSystemProvider.scanPlaces()`，分组为 `FilePlaceGroup.Local`；
-- `/Volumes` 下的外接磁盘单独归入 `FilePlaceGroup.External`，侧边栏显示为“外部存储”；
+- `/Volumes` 下的挂载磁盘（包括 `Macintosh HD`）单独归入
+  `FilePlaceGroup.Mounted`，侧边栏显示为“挂载磁盘”；
 - MTP 入口来自 `MtpFileSystemProvider`，分组为 `FilePlaceGroup.Mtp`；
 - 固定入口的名称由 UI 按 `FilePlaceKind` 本地化（桌面、文稿、下载……）；
 - 动态名称（用户名、磁盘名、设备名）来自 provider 的 `label`。
 
 高亮规则：
 
-- 根目录只在精确命中时高亮，否则任何本地路径都会把“根目录”点亮；
-- 其他地点允许前缀命中，并选择路径最长的命中项。例如
+- 地点允许前缀命中，并选择路径最长的命中项。例如
   `~/Documents/sub` 会高亮“文稿”，而不是“个人目录”。
 
 MTP provider 会把每台设备的每个存储挂到侧边栏，标签为

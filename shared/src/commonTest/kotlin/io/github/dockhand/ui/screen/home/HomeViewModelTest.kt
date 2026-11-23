@@ -237,7 +237,6 @@ class HomeViewModelTest {
         val usersEntry = dir("Users", users)
 
         val places = listOf(
-            FilePlace("local:root", "/", root, FilePlaceKind.Root, FilePlaceGroup.Local),
             FilePlace("local:home", "lumkit", home, FilePlaceKind.Home, FilePlaceGroup.Local),
             FilePlace("local:documents", "Documents", documents, FilePlaceKind.Documents, FilePlaceGroup.Local),
         )

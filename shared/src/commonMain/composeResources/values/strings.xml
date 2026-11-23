@@ -1,12 +1,11 @@
 <resources>
     <string name="app_name">Dockhand</string>
     <string name="text_local">本地</string>
-    <string name="text_external_storage">外部存储</string>
-    <string name="text_no_external_storage">未连接外部存储</string>
+    <string name="text_mounted_disks">挂载磁盘</string>
+    <string name="text_no_mounted_disks">未连接挂载磁盘</string>
     <string name="text_mtp_devices">MTP设备</string>
 
     <!-- 侧边栏固定入口 -->
-    <string name="text_root">根目录</string>
     <string name="text_desktop">桌面</string>
     <string name="text_documents">文稿</string>
     <string name="text_downloads">下载</string>
