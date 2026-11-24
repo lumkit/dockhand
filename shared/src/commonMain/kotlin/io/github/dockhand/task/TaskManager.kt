@@ -16,6 +16,7 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 enum class TaskState {
+    Waiting,
     Running,
     Completed,
     Failed,
@@ -48,6 +49,7 @@ data class AppTask(
     val error: String? = null,
     val speedBytesPerSecond: Double? = null,
     val etaSeconds: Long? = null,
+    val waitingMessage: String? = null,
 )
 
 /** 系统通知；返回 false 时由 UI 用 snackbar 兜底。 */
@@ -61,6 +63,7 @@ object NoopTaskNotifier : TaskNotifier {
 
 class TaskContext internal constructor(
     private val onProgress: (progress: TaskProgress, speed: Double?, etaSeconds: Long?) -> Unit,
+    private val onWaiting: (message: String?) -> Unit,
     private val rollbacks: MutableList<suspend () -> Unit>,
     private val job: Job,
 ) {
@@ -109,6 +112,14 @@ class TaskContext internal constructor(
         onProgress(progress, speed, eta)
     }
 
+    fun waiting(message: String) {
+        onWaiting(message)
+    }
+
+    fun running() {
+        onWaiting(null)
+    }
+
     fun addRollback(block: suspend () -> Unit) {
         rollbacks += block
     }
@@ -147,6 +158,16 @@ class TaskManager(
                             progress = progress,
                             speedBytesPerSecond = speed,
                             etaSeconds = eta,
+                        )
+                    }
+                },
+                onWaiting = { message ->
+                    updateTask(id) {
+                        it.copy(
+                            state = if (message == null) TaskState.Running else TaskState.Waiting,
+                            waitingMessage = message,
+                            speedBytesPerSecond = null,
+                            etaSeconds = null,
                         )
                     }
                 },
@@ -211,6 +232,7 @@ class TaskManager(
             TaskState.Completed -> "任务完成"
             TaskState.Failed -> "任务失败"
             TaskState.Cancelled -> "任务已取消"
+            TaskState.Waiting -> "等待设备空闲"
             TaskState.Running -> "任务运行中"
         }
         val message = buildString {

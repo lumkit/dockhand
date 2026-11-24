@@ -10,7 +10,19 @@ use std::sync::{Mutex, OnceLock};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
-static OP_LOCK: Mutex<()> = Mutex::new(());
+fn device_locks() -> &'static Mutex<HashMap<u64, std::sync::Arc<Mutex<()>>>> {
+    static LOCKS: OnceLock<Mutex<HashMap<u64, std::sync::Arc<Mutex<()>>>>> = OnceLock::new();
+    LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn device_lock(device_key: u64) -> std::sync::Arc<Mutex<()>> {
+    device_locks()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .entry(device_key)
+        .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
+        .clone()
+}
 
 fn active_lists() -> &'static Mutex<HashMap<u64, mtp_rs::CancelToken>> {
     static ACTIVE: OnceLock<Mutex<HashMap<u64, mtp_rs::CancelToken>>> = OnceLock::new();
@@ -36,6 +48,36 @@ fn set_transfer_progress(request_id: u64, completed: u64, total: u64) {
 
 fn clear_transfer_progress(request_id: u64) {
     transfer_progress()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
+}
+
+fn waiting_transfers() -> &'static Mutex<HashSet<u64>> {
+    static WAITING: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+    WAITING.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn set_transfer_waiting(request_id: u64, waiting: bool) {
+    let mut waiting_set = waiting_transfers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if waiting {
+        waiting_set.insert(request_id);
+    } else {
+        waiting_set.remove(&request_id);
+    }
+}
+
+fn is_transfer_waiting(request_id: u64) -> bool {
+    waiting_transfers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains(&request_id)
+}
+
+fn clear_transfer_waiting(request_id: u64) {
+    waiting_transfers()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .remove(&request_id);
@@ -90,11 +132,10 @@ fn error_message(error: &mtp_rs::Error) -> String {
     }
 }
 
-fn run_operation<F>(future: F) -> *mut c_char
+fn run_operation_unlocked<F>(future: F) -> *mut c_char
 where
     F: std::future::Future<Output = Result<Value, String>>,
 {
-    let _guard = OP_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let result = catch_unwind(AssertUnwindSafe(|| runtime().block_on(future)));
     let value = match result {
         Ok(Ok(data)) => json!({ "ok": true, "data": data }),
@@ -102,6 +143,64 @@ where
         Err(_) => json!({ "ok": false, "error": "MTP native bridge panicked" }),
     };
     to_c_string(value.to_string())
+}
+
+fn run_operation_for_device<F>(device_key: u64, future: F) -> *mut c_char
+where
+    F: std::future::Future<Output = Result<Value, String>>,
+{
+    let lock = device_lock(device_key);
+    let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    run_operation_unlocked(future)
+}
+
+fn run_operation_cancellable<F>(
+    request_id: u64,
+    device_key: u64,
+    future: F,
+) -> *mut c_char
+where
+    F: std::future::Future<Output = Result<Value, String>>,
+{
+    let lock = device_lock(device_key);
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        runtime().block_on(async move {
+            loop {
+                if is_transfer_cancelled(request_id) {
+                    clear_transfer_cancelled(request_id);
+                    clear_transfer_waiting(request_id);
+                    return json!({ "ok": false, "error": "MTP 传输已取消" });
+                }
+                match lock.try_lock() {
+                    Ok(_guard) => {
+                        set_transfer_waiting(request_id, false);
+                        let result = future.await;
+                        clear_transfer_waiting(request_id);
+                        return match result {
+                            Ok(data) => json!({ "ok": true, "data": data }),
+                            Err(error) => json!({ "ok": false, "error": error }),
+                        };
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        set_transfer_waiting(request_id, true);
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+                    Err(std::sync::TryLockError::Poisoned(_)) => {
+                        return json!({
+                            "ok": false,
+                            "error": "MTP bridge mutex poisoned",
+                        });
+                    }
+                }
+            }
+        })
+    }));
+    match result {
+        Ok(value) => to_c_string(value.to_string()),
+        Err(_) => to_c_string(
+            json!({ "ok": false, "error": "MTP native bridge panicked" }).to_string(),
+        ),
+    }
 }
 
 fn read_c_string(pointer: *const c_char) -> Result<String, String> {
@@ -183,6 +282,8 @@ async fn device_and_storages() -> Result<Value, String> {
 
     for device in devices {
         let device_key = device.location_id;
+        let lock = device_lock(device_key);
+        let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let opened = match MtpDevice::open_by_location(device_key).await {
             Ok(opened) => opened,
             Err(error) => {
@@ -466,7 +567,7 @@ async fn download_file(
 
 #[no_mangle]
 pub extern "C" fn dockhand_mtp_storages() -> *mut c_char {
-    run_operation(device_and_storages())
+    run_operation_unlocked(device_and_storages())
 }
 
 #[no_mangle]
@@ -477,7 +578,7 @@ pub extern "C" fn dockhand_mtp_list(
     path: *const c_char,
 ) -> *mut c_char {
     let path = read_c_string(path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         let path = path?;
         list_entries(request_id, device_key, storage_id, path, true).await
     })
@@ -491,7 +592,7 @@ pub extern "C" fn dockhand_mtp_list_fast(
     path: *const c_char,
 ) -> *mut c_char {
     let path = read_c_string(path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         let path = path?;
         list_entries(request_id, device_key, storage_id, path, false).await
     })
@@ -521,7 +622,7 @@ pub extern "C" fn dockhand_mtp_mkdir(
     path: *const c_char,
 ) -> *mut c_char {
     let path = read_c_string(path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         let path = path?;
         create_folder(device_key, storage_id, path).await
     })
@@ -559,7 +660,7 @@ pub extern "C" fn dockhand_mtp_upload(
 ) -> *mut c_char {
     let local_path = read_c_string(local_path);
     let remote_path = read_c_string(remote_path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         upload_file(device_key, storage_id, local_path?, remote_path?).await
     })
 }
@@ -623,7 +724,7 @@ pub extern "C" fn dockhand_mtp_copy_object(
 ) -> *mut c_char {
     let source_path = read_c_string(source_path);
     let destination_path = read_c_string(destination_path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         copy_object_entry(
             device_key,
             source_storage_id,
@@ -645,7 +746,7 @@ pub extern "C" fn dockhand_mtp_upload_progress(
 ) -> *mut c_char {
     let local_path = read_c_string(local_path);
     let remote_path = read_c_string(remote_path);
-    run_operation(async move {
+    run_operation_cancellable(request_id, device_key, async move {
         upload_file_progress(
             request_id,
             device_key,
@@ -667,7 +768,7 @@ pub extern "C" fn dockhand_mtp_download_progress(
 ) -> *mut c_char {
     let remote_path = read_c_string(remote_path);
     let local_path = read_c_string(local_path);
-    run_operation(async move {
+    run_operation_cancellable(request_id, device_key, async move {
         download_file_progress(
             request_id,
             device_key,
@@ -699,6 +800,17 @@ pub extern "C" fn dockhand_mtp_transfer_progress(request_id: u64) -> *mut c_char
 }
 
 #[no_mangle]
+pub extern "C" fn dockhand_mtp_transfer_waiting(request_id: u64) -> *mut c_char {
+    to_c_string(
+        json!({
+            "ok": true,
+            "data": { "waiting": is_transfer_waiting(request_id) },
+        })
+        .to_string(),
+    )
+}
+
+#[no_mangle]
 pub extern "C" fn dockhand_mtp_cancel_transfer(request_id: u64) {
     cancelled_transfers()
         .lock()
@@ -720,7 +832,7 @@ pub extern "C" fn dockhand_mtp_download(
 ) -> *mut c_char {
     let remote_path = read_c_string(remote_path);
     let local_path = read_c_string(local_path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         download_file(device_key, storage_id, remote_path?, local_path?).await
     })
 }
@@ -732,7 +844,7 @@ pub extern "C" fn dockhand_mtp_delete(
     path: *const c_char,
 ) -> *mut c_char {
     let path = read_c_string(path);
-    run_operation(async move {
+    run_operation_for_device(device_key, async move {
         let path = path?;
         delete_entry(device_key, storage_id, path).await
     })

@@ -64,6 +64,7 @@ interface FileSystemProvider {
         source: FileLocation,
         localPath: String,
         onProgress: (completed: Long, total: Long) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
     ): Unit = throw FileBrowserException("该文件系统不支持导出：${source.source.name}")
 
     /** 把本机文件导入到目标路径；跨 provider 复制时使用。 */
@@ -72,6 +73,7 @@ interface FileSystemProvider {
         destination: FileLocation,
         overwrite: Boolean,
         onProgress: (completed: Long, total: Long) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
     ): Unit = throw FileBrowserException("该文件系统不支持导入：${destination.source.name}")
 
     /** 本地 provider 可提供实际路径，供跨 provider 直接传输。 */

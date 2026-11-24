@@ -17,14 +17,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
@@ -48,6 +47,8 @@ class MtpFileSystemProvider(
 
     private val requestIds = AtomicLong()
     private val transferIds = AtomicLong()
+    private val deviceTransferLocks = mutableMapOf<Long, Mutex>()
+    private val deviceCooldowns = mutableMapOf<Long, Long>()
     private val indexMutex = Mutex()
     private val indexedDirectories = object : LinkedHashMap<FileLocation, List<FileEntry>>(4, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<FileLocation, List<FileEntry>>): Boolean =
@@ -143,11 +144,15 @@ class MtpFileSystemProvider(
             }
         }
 
-        val page = all.drop(offset).take(limit)
-        FileListPage(
+        all.toPage(offset, limit)
+    }
+
+    private fun List<FileEntry>.toPage(offset: Int, limit: Int): FileListPage {
+        val page = drop(offset).take(limit)
+        return FileListPage(
             entries = page,
-            hasMore = offset + page.size < all.size,
-            total = all.size,
+            hasMore = offset + page.size < size,
+            total = size,
         )
     }
 
@@ -193,7 +198,10 @@ class MtpFileSystemProvider(
     override suspend fun exists(location: FileLocation): Boolean = withContext(Dispatchers.IO) {
         val parentPath = location.path.substringBeforeLast('/', missingDelimiterValue = "").ifBlank { "/" }
         val name = location.path.substringAfterLast('/')
-        list(FileLocation(location.source, parentPath)).any { it.name == name }
+        val parent = FileLocation(location.source, parentPath)
+        val cached = indexMutex.withLock { indexedDirectories[parent] }
+        val entries = cached ?: list(parent)
+        entries.any { it.name == name }
     }
 
     override suspend fun copyNative(
@@ -223,10 +231,17 @@ class MtpFileSystemProvider(
         source: FileLocation,
         localPath: String,
         onProgress: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         val target = targetOf(source.source)
         val requestId = transferIds.incrementAndGet()
-        val result = runTransferWithProgress(requestId, onProgress) {
+        val result = runTransferWithProgress(
+            requestId = requestId,
+            deviceKey = target.deviceKey,
+            deviceName = source.source.name,
+            onProgress = onProgress,
+            onWaiting = onWaiting,
+        ) {
             MtpNativeBridge.downloadWithProgress(
                 requestId = requestId,
                 deviceKey = target.deviceKey,
@@ -246,13 +261,20 @@ class MtpFileSystemProvider(
         destination: FileLocation,
         overwrite: Boolean,
         onProgress: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         val target = targetOf(destination.source)
         if (overwrite) {
             delete(destination, recursive = true)
         }
         val requestId = transferIds.incrementAndGet()
-        val result = runTransferWithProgress(requestId, onProgress) {
+        val result = runTransferWithProgress(
+            requestId = requestId,
+            deviceKey = target.deviceKey,
+            deviceName = destination.source.name,
+            onProgress = onProgress,
+            onWaiting = onWaiting,
+        ) {
             MtpNativeBridge.uploadWithProgress(
                 requestId = requestId,
                 deviceKey = target.deviceKey,
@@ -270,28 +292,71 @@ class MtpFileSystemProvider(
     @OptIn(InternalCoroutinesApi::class)
     private suspend fun <T> runTransferWithProgress(
         requestId: Long,
+        deviceKey: Long,
+        deviceName: String,
         onProgress: (Long, Long) -> Unit,
+        onWaiting: (String?) -> Unit,
         transfer: suspend () -> BridgeResult<T>,
     ): BridgeResult<T> = coroutineScope {
-        val deferred = async(Dispatchers.IO) { transfer() }
-        val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion(
-            onCancelling = true,
-        ) { cause ->
-            if (cause != null) {
-                MtpNativeBridge.cancelTransfer(requestId)
-            }
+        val deviceLock = synchronized(deviceTransferLocks) {
+            deviceTransferLocks.getOrPut(deviceKey) { Mutex() }
+        }
+        var locked = deviceLock.tryLock()
+        if (!locked) {
+            // 在 JVM 侧排队，取消等待中的任务时不需要进入阻塞的原生调用。
+            onWaiting(deviceName)
+            deviceLock.lock()
+            locked = true
+        }
+        val cooldownUntil = synchronized(deviceCooldowns) {
+            deviceCooldowns[deviceKey] ?: 0L
+        }
+        val cooldownRemaining = cooldownUntil - System.currentTimeMillis()
+        if (cooldownRemaining > 0) {
+            delay(cooldownRemaining)
         }
         try {
-            while (!deferred.isCompleted) {
-                MtpNativeBridge.transferProgress(requestId)?.let { (completed, total) ->
-                    if (total > 0) onProgress(completed, total)
+            onWaiting(null)
+            coroutineScope {
+                var cancelled = false
+                val deferred = async(Dispatchers.IO) { transfer() }
+                val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion(
+                    onCancelling = true,
+                ) { cause ->
+                    if (cause != null) {
+                        cancelled = true
+                        MtpNativeBridge.cancelTransfer(requestId)
+                    }
                 }
-                delay(100)
+                var lastWaiting = false
+                try {
+                    while (!deferred.isCompleted) {
+                        val waiting = MtpNativeBridge.transferWaiting(requestId)
+                        if (waiting != lastWaiting) {
+                            lastWaiting = waiting
+                            onWaiting(if (waiting) deviceName else null)
+                        }
+                        MtpNativeBridge.transferProgress(requestId)?.let { (completed, total) ->
+                            if (total > 0) onProgress(completed, total)
+                        }
+                        delay(100)
+                    }
+                    deferred.await()
+                } finally {
+                    cancellation?.dispose()
+                    MtpNativeBridge.clearTransferProgress(requestId)
+                    if (cancelled) {
+                        synchronized(deviceCooldowns) {
+                            // 取消上传后设备需要一点时间结束会话，避免下一个任务立刻收到 GeneralError。
+                            deviceCooldowns[deviceKey] =
+                                System.currentTimeMillis() + MTP_CANCEL_COOLDOWN_MS
+                        }
+                    }
+                }
             }
-            deferred.await()
         } finally {
-            cancellation?.dispose()
-            MtpNativeBridge.clearTransferProgress(requestId)
+            if (locked) deviceLock.unlock()
+            onWaiting(null)
         }
     }
 
@@ -514,6 +579,7 @@ class MtpFileSystemProvider(
     private companion object {
         const val SOURCE_PREFIX = "mtp:"
         const val DETAILED_METADATA_LIMIT = 1_000
+        const val MTP_CANCEL_COOLDOWN_MS = 2_000L
         val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }
             .thenBy { it.name.lowercase() }
     }

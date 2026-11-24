@@ -182,6 +182,10 @@ internal object MtpNativeBridge {
         "dockhand_mtp_cancel_transfer",
         FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG),
     )
+    private val transferWaitingHandle: MethodHandle = downcall(
+        "dockhand_mtp_transfer_waiting",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+    )
     private val freeHandle: MethodHandle = downcall(
         "dockhand_mtp_free",
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS),
@@ -458,6 +462,16 @@ internal object MtpNativeBridge {
 
     fun cancelTransfer(requestId: Long) {
         runCatching { cancelTransferHandle.invokeWithArguments(requestId) }
+    }
+
+    fun transferWaiting(requestId: Long): Boolean {
+        val data = callJson(transferWaitingHandle, requestId)
+        val value = when (val result = parse(data)) {
+            is BridgeResult.Failure -> return false
+            is BridgeResult.Success -> result.value
+        }
+        if (value is JsonNull) return false
+        return value.jsonObject["waiting"]?.jsonPrimitive?.booleanOrNull ?: false
     }
 
     fun delete(deviceKey: Long, storageId: Long, remotePath: String): BridgeResult<Unit> {

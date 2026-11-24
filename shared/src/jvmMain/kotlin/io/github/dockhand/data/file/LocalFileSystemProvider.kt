@@ -146,6 +146,7 @@ class LocalFileSystemProvider(
         source: FileLocation,
         localPath: String,
         onProgress: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         ensureLocal(source)
         val total = runCatching { Files.size(source.toLocalPath()) }.getOrDefault(0L)
@@ -162,6 +163,7 @@ class LocalFileSystemProvider(
         destination: FileLocation,
         overwrite: Boolean,
         onProgress: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         ensureLocal(destination)
         val target = destination.toLocalPath()

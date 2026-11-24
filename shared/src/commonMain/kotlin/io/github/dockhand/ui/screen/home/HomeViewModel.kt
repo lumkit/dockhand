@@ -23,6 +23,7 @@ import dockhand.shared.generated.resources.error_name_empty
 import dockhand.shared.generated.resources.error_name_invalid
 import dockhand.shared.generated.resources.task_copy_destination
 import dockhand.shared.generated.resources.task_copy_title
+import dockhand.shared.generated.resources.task_waiting_message
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
 import kotlinx.coroutines.CancellationException
@@ -234,6 +235,7 @@ class HomeViewModel(
             val title = getString(Res.string.task_copy_title, request.entry.name)
             val destinationLabel = request.destination.displayPath()
             val detail = getString(Res.string.task_copy_destination, destinationLabel)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             taskManager.start(
                 title = title,
                 detail = detail,
@@ -246,6 +248,13 @@ class HomeViewModel(
                     overwrite = false,
                     onProgress = { completed, total -> report(completed, total) },
                     onBytes = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
                     isCancelled = { isCancelled },
                 )
             }

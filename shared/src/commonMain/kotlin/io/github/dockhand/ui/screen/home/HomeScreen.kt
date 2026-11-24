@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import dockhand.shared.generated.resources.task_completed
 import dockhand.shared.generated.resources.task_failed
 import dockhand.shared.generated.resources.task_progress_unknown
 import dockhand.shared.generated.resources.task_running
+import dockhand.shared.generated.resources.task_waiting
 import dockhand.shared.generated.resources.task_eta_days_hours
 import dockhand.shared.generated.resources.task_eta_hours_minutes
 import dockhand.shared.generated.resources.task_eta_less_than_second
@@ -83,6 +85,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.RichTooltip
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Surface
@@ -345,7 +348,7 @@ private fun TopBarActions(
     var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
     var popupShow by remember { mutableStateOf(false) }
     val runningBackgroundTasks = tasks.count {
-        it.isBackground && it.state == TaskState.Running
+        it.isBackground && (it.state == TaskState.Running || it.state == TaskState.Waiting)
     }
 
     Box {
@@ -402,16 +405,19 @@ private fun TopBarActions(
                         )
                     }
                 } else {
+                    val listState = rememberLazyListState()
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .width(300.dp)
-                            .heightIn(max = 320.dp),
+                            .heightIn(max = 320.dp)
+                            .verticalScrollBar(listState),
                     ) {
                         items(tasks, key = { it.id }) { task ->
                             TaskRow(
                                 task = task,
                                 onClose = {
-                                    if (task.state == TaskState.Running) {
+                                    if (task.state == TaskState.Running || task.state == TaskState.Waiting) {
                                         pendingCancel = task
                                     } else {
                                         onDismissTask(task.id)
@@ -425,19 +431,17 @@ private fun TopBarActions(
             }
         }
     }
-
-
-
-    IconButton(
-        onClick = { },
-        modifier = Modifier.size(32.dp),
-    ) {
-        Icon(
-            imageVector = MiuixIcons.More,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-        )
-    }
+    
+//    IconButton(
+//        onClick = { },
+//        modifier = Modifier.size(32.dp),
+//    ) {
+//        Icon(
+//            imageVector = MiuixIcons.More,
+//            contentDescription = null,
+//            modifier = Modifier.size(20.dp),
+//        )
+//    }
 
     val taskToCancel = pendingCancel
     OverlayDialog(
@@ -500,6 +504,7 @@ private fun TaskRow(
     onClose: () -> Unit,
 ) {
     val status = when (task.state) {
+        TaskState.Waiting -> stringResource(Res.string.task_waiting)
         TaskState.Running -> stringResource(Res.string.task_running)
         TaskState.Completed -> stringResource(Res.string.task_completed)
         TaskState.Failed -> stringResource(Res.string.task_failed)
@@ -547,6 +552,14 @@ private fun TaskRow(
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
+            } else if (task.state == TaskState.Waiting) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+
+                Text(
+                    text = task.waitingMessage ?: stringResource(Res.string.task_waiting),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
             }
         }
         IconButton(

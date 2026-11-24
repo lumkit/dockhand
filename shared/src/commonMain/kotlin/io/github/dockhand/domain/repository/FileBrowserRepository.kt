@@ -70,6 +70,7 @@ interface FileBrowserRepository {
         overwrite: Boolean = false,
         onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
         onBytes: (completed: Long, total: Long) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
         isCancelled: () -> Boolean = { false },
     ) {
         copy(entries, destinationDirectory, overwrite)
@@ -141,6 +142,7 @@ class DefaultFileBrowserRepository(
         overwrite: Boolean,
         onProgress: (completed: Long?, total: Long?) -> Unit,
         onBytes: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
         isCancelled: () -> Boolean,
     ) {
         if (entries.isEmpty()) return
@@ -173,6 +175,7 @@ class DefaultFileBrowserRepository(
                         tempDirectory = tempDirectory,
                         tempCounter = tempCounter,
                         onBytes = onBytes,
+                        onWaiting = onWaiting,
                         isCancelled = isCancelled,
                     )
                     copiedRoot?.let(createdRoots::add)
@@ -205,6 +208,7 @@ class DefaultFileBrowserRepository(
         tempDirectory: String,
         tempCounter: IntArray,
         onBytes: (Long, Long) -> Unit,
+        onWaiting: (String?) -> Unit,
         isCancelled: () -> Boolean,
     ): FileLocation? {
         if (isCancelled()) throw CancellationException("复制已取消")
@@ -232,6 +236,7 @@ class DefaultFileBrowserRepository(
                     tempDirectory = tempDirectory,
                     tempCounter = tempCounter,
                     onBytes = onBytes,
+                    onWaiting = onWaiting,
                     isCancelled = isCancelled,
                 )
             }
@@ -246,6 +251,7 @@ class DefaultFileBrowserRepository(
                 destination = target,
                 overwrite = overwrite,
                 onProgress = onBytes,
+                onWaiting = onWaiting,
             )
             return target
         }
@@ -254,6 +260,7 @@ class DefaultFileBrowserRepository(
                 source = entry.location,
                 localPath = destinationLocalPath,
                 onProgress = onBytes,
+                onWaiting = onWaiting,
             )
             return target
         }
@@ -263,9 +270,9 @@ class DefaultFileBrowserRepository(
             "${tempCounter[0]++}-${entry.name.replace('/', '_')}",
         )
         try {
-            sourceProvider.exportToLocal(entry.location, tempPath, onBytes)
+            sourceProvider.exportToLocal(entry.location, tempPath, onBytes, onWaiting)
             if (isCancelled()) throw CancellationException("复制已取消")
-            destinationProvider.importFromLocal(tempPath, target, overwrite, onBytes)
+            destinationProvider.importFromLocal(tempPath, target, overwrite, onBytes, onWaiting)
         } finally {
             deleteTaskTempPath(tempPath)
         }

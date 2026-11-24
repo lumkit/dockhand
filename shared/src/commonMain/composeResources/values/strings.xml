@@ -37,6 +37,8 @@
     <string name="task_failed">失败</string>
     <string name="task_cancelled">已取消</string>
     <string name="task_progress_unknown">无法估算进度</string>
+    <string name="task_waiting">等待中</string>
+    <string name="task_waiting_message">等待%1$s上一个任务</string>
     <string name="task_speed_eta">%1$s/s，预计%2$s</string>
     <string name="task_eta_less_than_second">&lt;1秒</string>
     <string name="task_eta_seconds">%1$d秒</string>
