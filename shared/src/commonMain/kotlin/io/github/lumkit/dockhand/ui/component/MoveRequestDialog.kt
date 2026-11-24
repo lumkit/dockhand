@@ -15,6 +15,7 @@ import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.copy_dialog_background
 import dockhand.shared.generated.resources.move_dialog_summary
+import dockhand.shared.generated.resources.move_dialog_summary_multiple
 import dockhand.shared.generated.resources.move_dialog_title
 import io.github.lumkit.dockhand.domain.model.displayPath
 import io.github.lumkit.dockhand.ui.screen.home.MoveRequestState
@@ -37,11 +38,19 @@ fun MoveRequestDialog(
     OverlayDialog(
         show = true,
         title = stringResource(Res.string.move_dialog_title),
-        summary = stringResource(
-            Res.string.move_dialog_summary,
-            request.entry.name,
-            request.destination.displayPath(),
-        ),
+        summary = if (request.entries.size > 1) {
+            stringResource(
+                Res.string.move_dialog_summary_multiple,
+                request.entries.size,
+                request.destination.displayPath(),
+            )
+        } else {
+            stringResource(
+                Res.string.move_dialog_summary,
+                request.entry.name,
+                request.destination.displayPath(),
+            )
+        },
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

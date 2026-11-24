@@ -48,6 +48,37 @@ class LocalCopyEngineTest {
     }
 
     @Test
+    fun batchRenameUsesParenthesizedPositions() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-batch-rename")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            Files.writeString(home.resolve("a.txt"), "a")
+            Files.writeString(home.resolve("b.txt"), "b")
+            Files.writeString(home.resolve("c.txt"), "c")
+            val location = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.toString(),
+            )
+            val entries = provider.list(location)
+            val repository = DefaultFileBrowserRepository(listOf(provider))
+
+            repository.renameBatchWithProgress(entries, "new")
+
+            assertEquals("a", Files.readString(home.resolve("new.txt")))
+            assertEquals("b", Files.readString(home.resolve("new(1).txt")))
+            assertEquals("c", Files.readString(home.resolve("new(2).txt")))
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Test
     fun renamesFile() = runBlocking {
         val root = Files.createTempDirectory("dockhand-rename")
         try {

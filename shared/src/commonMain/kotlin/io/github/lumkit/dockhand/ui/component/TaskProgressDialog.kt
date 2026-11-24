@@ -10,8 +10,10 @@ import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.task_cancelled
 import dockhand.shared.generated.resources.task_completed
+import dockhand.shared.generated.resources.task_current_progress
 import dockhand.shared.generated.resources.task_dialog_background
 import dockhand.shared.generated.resources.task_dialog_cancel
+import dockhand.shared.generated.resources.task_overall_progress
 import dockhand.shared.generated.resources.task_eta_days_hours
 import dockhand.shared.generated.resources.task_eta_hours_minutes
 import dockhand.shared.generated.resources.task_eta_less_than_second
@@ -69,10 +71,36 @@ fun TaskProgressDialog(
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
             if (task.state == TaskState.Running) {
-                LinearProgressIndicator(
-                    progress = task.progress.fraction,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (task.isBatch) {
+                    val index = (task.overallProgress.completed ?: 0L)
+                        .toInt()
+                        .coerceIn(0, task.itemNames.lastIndex.coerceAtLeast(0))
+                    val currentItem = task.itemNames.getOrNull(index)
+                    Text(
+                        text = currentItem?.let { "$operation $it" }
+                            ?: stringResource(Res.string.task_current_progress),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    LinearProgressIndicator(
+                        progress = task.currentProgress.fraction,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = stringResource(Res.string.task_overall_progress),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    LinearProgressIndicator(
+                        progress = task.overallProgress.fraction,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = task.currentProgress.fraction ?: task.progress.fraction,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 val speed = task.speedBytesPerSecond
                 if (speed != null) {
                     val speedText = formatFileSize(speed.toLong())

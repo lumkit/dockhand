@@ -20,6 +20,8 @@ import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.copy_dialog_background
 import dockhand.shared.generated.resources.rename_dialog_summary
+import dockhand.shared.generated.resources.rename_dialog_summary_multiple
+import dockhand.shared.generated.resources.rename_dialog_title_multiple
 import dockhand.shared.generated.resources.rename_dialog_title
 import io.github.lumkit.dockhand.ui.screen.home.RenameRequestState
 import org.jetbrains.compose.resources.stringResource
@@ -49,8 +51,18 @@ fun RenameRequestDialog(
     }
     OverlayDialog(
         show = true,
-        title = stringResource(Res.string.rename_dialog_title),
-        summary = stringResource(Res.string.rename_dialog_summary, request.entry.name),
+        title = stringResource(
+            if (request.entries.size > 1) {
+                Res.string.rename_dialog_title_multiple
+            } else {
+                Res.string.rename_dialog_title
+            }
+        ),
+        summary = if (request.entries.size > 1) {
+            stringResource(Res.string.rename_dialog_summary_multiple, request.entries.size)
+        } else {
+            stringResource(Res.string.rename_dialog_summary, request.entry.name)
+        },
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

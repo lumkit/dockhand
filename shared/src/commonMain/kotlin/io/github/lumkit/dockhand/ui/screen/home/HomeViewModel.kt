@@ -28,17 +28,23 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import dockhand.shared.generated.resources.error_name_invalid
 import dockhand.shared.generated.resources.task_copy_destination
 import dockhand.shared.generated.resources.task_copy_title
+import dockhand.shared.generated.resources.task_copy_title_multiple
 import dockhand.shared.generated.resources.task_delete_detail
 import dockhand.shared.generated.resources.task_delete_title
+import dockhand.shared.generated.resources.task_delete_title_multiple
 import dockhand.shared.generated.resources.task_empty_trash_detail
 import dockhand.shared.generated.resources.task_empty_trash_title
 import dockhand.shared.generated.resources.task_move_title
+import dockhand.shared.generated.resources.task_move_title_multiple
 import dockhand.shared.generated.resources.task_rename_detail
+import dockhand.shared.generated.resources.task_rename_detail_multiple
 import dockhand.shared.generated.resources.task_rename_title
+import dockhand.shared.generated.resources.task_rename_title_multiple
 import dockhand.shared.generated.resources.task_restore_detail
 import dockhand.shared.generated.resources.task_restore_title
 import dockhand.shared.generated.resources.task_trash_detail
 import dockhand.shared.generated.resources.task_trash_title
+import dockhand.shared.generated.resources.task_trash_title_multiple
 import dockhand.shared.generated.resources.task_waiting_message
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
@@ -135,6 +141,9 @@ class HomeViewModel(
         title: String,
         detail: String?,
         showDialog: Boolean = true,
+        isBatch: Boolean = false,
+        itemNames: List<String> = emptyList(),
+        itemSizes: List<Long?> = emptyList(),
         operation: suspend TaskContext.() -> Unit,
     ) {
         var taskId = 0L
@@ -142,6 +151,9 @@ class HomeViewModel(
             title = title,
             detail = detail,
             background = false,
+            isBatch = isBatch,
+            itemNames = itemNames,
+            itemSizes = itemSizes,
             onFinished = {
                 if (activeTaskId == taskId) {
                     activeTaskId = null
@@ -447,6 +459,29 @@ class HomeViewModel(
         selectEntry(paneId, entry)
     }
 
+    /** 框选产生的多选集合；不改变焦点面板。 */
+    fun onSelectionChange(paneId: PaneId, ids: Set<String>) {
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            if (pane.selectedIds == ids) {
+                state
+            } else {
+                state.updatePane(paneId) { it.copy(selectedIds = ids) }
+            }
+        }
+    }
+
+    fun onSelectionClear(paneId: PaneId) {
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            if (pane.selectedIds.isEmpty()) {
+                state
+            } else {
+                state.updatePane(paneId) { it.copy(selectedIds = emptySet()) }
+            }
+        }
+    }
+
     /**
      * 列表项双击：目录进入，文件预留给后续的打开动作。
      */
@@ -464,7 +499,14 @@ class HomeViewModel(
      */
     fun onEntrySecondaryClick(paneId: PaneId, entry: FileEntry) {
         onPaneFocus(paneId)
-        selectEntry(paneId, entry)
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            if (entry.id in pane.selectedIds) {
+                state
+            } else {
+                state.updatePane(paneId) { it.copy(selectedIds = setOf(entry.id)) }
+            }
+        }
     }
 
     /**
@@ -476,9 +518,15 @@ class HomeViewModel(
         action: FileContextAction,
     ) {
         onPaneFocus(paneId)
-        selectEntry(paneId, entry)
+        val pane = _state.value.pane(paneId)
+        val targets = if (entry.id in pane.selectedIds && pane.selectedIds.isNotEmpty()) {
+            pane.selectedEntries
+        } else {
+            selectEntry(paneId, entry)
+            listOf(entry)
+        }
         when (action) {
-            FileContextAction.ViewInfo -> openFileInfo(entry)
+            FileContextAction.ViewInfo -> openFileInfo(targets)
             FileContextAction.Copy -> {
                 val destination = _state.value.pane(paneId.other).location
                 if (destination == null) {
@@ -489,6 +537,7 @@ class HomeViewModel(
                             copyRequest = CopyRequestState(
                                 entry = entry,
                                 destination = destination,
+                                entries = targets,
                             )
                         )
                     }
@@ -504,6 +553,7 @@ class HomeViewModel(
                             moveRequest = MoveRequestState(
                                 entry = entry,
                                 destination = destination,
+                                entries = targets,
                             )
                         )
                     }
@@ -511,7 +561,7 @@ class HomeViewModel(
             }
             FileContextAction.Delete -> {
                 _state.update {
-                    it.copy(deleteRequest = DeleteRequestState(entry = entry))
+                    it.copy(deleteRequest = DeleteRequestState(entry = entry, entries = targets))
                 }
             }
             FileContextAction.Rename -> {
@@ -519,14 +569,19 @@ class HomeViewModel(
                     it.copy(
                         renameRequest = RenameRequestState(
                             entry = entry,
-                            newName = entry.name,
+                            newName = if (targets.size > 1) {
+                                entry.name.substringBeforeLast('.', entry.name)
+                            } else {
+                                entry.name
+                            },
+                            entries = targets,
                         )
                     )
                 }
             }
             FileContextAction.Trash -> {
                 _state.update {
-                    it.copy(trashRequest = TrashRequestState(entry = entry))
+                    it.copy(trashRequest = TrashRequestState(entry = entry, entries = targets))
                 }
             }
             FileContextAction.Restore -> {
@@ -658,16 +713,22 @@ class HomeViewModel(
         val request = _state.value.trashRequest ?: return
         _state.update { it.copy(trashRequest = null) }
         scope.launch {
-            val title = getString(Res.string.task_trash_title, request.entry.name)
+            val title = if (request.entries.size > 1) {
+                getString(Res.string.task_trash_title_multiple, request.entries.size)
+            } else {
+                getString(Res.string.task_trash_title, request.entry.name)
+            }
             val detail = getString(Res.string.task_trash_detail)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             startForegroundTask(
                 title = title,
                 detail = detail,
+                isBatch = request.entries.size > 1,
+                itemNames = request.entries.map { it.name },
             ) {
                 files.trashWithProgress(
-                    entries = listOf(request.entry),
-                    onProgress = { completed, total -> report(completed, total) },
+                    entries = request.entries,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
                     onWaiting = { deviceName ->
                         if (deviceName == null) {
                             running()
@@ -701,12 +762,45 @@ class HomeViewModel(
         val request = _state.value.renameRequest ?: return
         val newName = request.newName.trim()
         if (newName.isEmpty()) return
+        if (request.entries.size > 1) {
+            _state.update { it.copy(renameRequest = null) }
+            startBatchRenameTask(request.entries, newName)
+            return
+        }
         if (newName == request.entry.name) {
             _state.update { it.copy(renameRequest = null) }
             return
         }
         _state.update { it.copy(renameRequest = null) }
         startRenameTask(request.entry, newName, showDialog = true)
+    }
+
+    private fun startBatchRenameTask(entries: List<FileEntry>, baseName: String) {
+        scope.launch {
+            val title = getString(Res.string.task_rename_title_multiple, entries.size)
+            val detail = getString(Res.string.task_rename_detail_multiple)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            startForegroundTask(
+                title = title,
+                detail = detail,
+                isBatch = true,
+                itemNames = entries.map { it.name },
+            ) {
+                files.renameBatchWithProgress(
+                    entries = entries,
+                    baseName = baseName,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
     }
 
     fun onInlineRename(entry: FileEntry, newName: String) {
@@ -780,16 +874,22 @@ class HomeViewModel(
         val request = _state.value.deleteRequest ?: return
         _state.update { it.copy(deleteRequest = null) }
         scope.launch {
-            val title = getString(Res.string.task_delete_title, request.entry.name)
+            val title = if (request.entries.size > 1) {
+                getString(Res.string.task_delete_title_multiple, request.entries.size)
+            } else {
+                getString(Res.string.task_delete_title, request.entry.name)
+            }
             val detail = getString(Res.string.task_delete_detail)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             startForegroundTask(
                 title = title,
                 detail = detail,
+                isBatch = request.entries.size > 1,
+                itemNames = request.entries.map { it.name },
             ) {
                 files.deleteWithProgress(
-                    entries = listOf(request.entry),
-                    onProgress = { completed, total -> report(completed, total) },
+                    entries = request.entries,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
                     onWaiting = { deviceName ->
                         if (deviceName == null) {
                             running()
@@ -817,20 +917,27 @@ class HomeViewModel(
         val request = _state.value.moveRequest ?: return
         _state.update { it.copy(moveRequest = null) }
         scope.launch {
-            val title = getString(Res.string.task_move_title, request.entry.name)
+            val title = if (request.entries.size > 1) {
+                getString(Res.string.task_move_title_multiple, request.entries.size)
+            } else {
+                getString(Res.string.task_move_title, request.entry.name)
+            }
             val destinationLabel = request.destination.displayPath()
             val detail = getString(Res.string.task_copy_destination, destinationLabel)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             startForegroundTask(
                 title = title,
                 detail = detail,
+                isBatch = request.entries.size > 1,
+                itemNames = request.entries.map { it.name },
+                itemSizes = request.entries.map { it.size },
             ) {
                 files.moveWithProgress(
-                    entries = listOf(request.entry),
+                    entries = request.entries,
                     destinationDirectory = request.destination,
                     overwrite = false,
-                    onProgress = { completed, total -> report(completed, total) },
-                    onBytes = { completed, total -> report(completed, total) },
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onBytes = { completed, total -> reportCurrent(completed, total) },
                     onWaiting = { deviceName ->
                         if (deviceName == null) {
                             running()
@@ -858,20 +965,27 @@ class HomeViewModel(
         val request = _state.value.copyRequest ?: return
         _state.update { it.copy(copyRequest = null) }
         scope.launch {
-            val title = getString(Res.string.task_copy_title, request.entry.name)
+            val title = if (request.entries.size > 1) {
+                getString(Res.string.task_copy_title_multiple, request.entries.size)
+            } else {
+                getString(Res.string.task_copy_title, request.entry.name)
+            }
             val destinationLabel = request.destination.displayPath()
             val detail = getString(Res.string.task_copy_destination, destinationLabel)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             startForegroundTask(
                 title = title,
                 detail = detail,
+                isBatch = request.entries.size > 1,
+                itemNames = request.entries.map { it.name },
+                itemSizes = request.entries.map { it.size },
             ) {
                 files.copyWithProgress(
-                    entries = listOf(request.entry),
+                    entries = request.entries,
                     destinationDirectory = request.destination,
                     overwrite = false,
-                    onProgress = { completed, total -> report(completed, total) },
-                    onBytes = { completed, total -> report(completed, total) },
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onBytes = { completed, total -> reportCurrent(completed, total) },
                     onWaiting = { deviceName ->
                         if (deviceName == null) {
                             running()
@@ -901,20 +1015,44 @@ class HomeViewModel(
         }
     }
 
-    private fun openFileInfo(entry: FileEntry) {
+    private fun openFileInfo(entries: List<FileEntry>) {
+        if (entries.isEmpty()) return
+        val first = entries.first()
         val id = nextFileInfoId++
         _state.update { state ->
             state.copy(
                 fileInfoDialogs = state.fileInfoDialogs + FileInfoDialogState(
                     id = id,
-                    entry = entry,
+                    entry = first,
+                    entries = entries,
                     isLoading = true,
                 )
             )
         }
         fileInfoJobs[id] = scope.launch {
             try {
-                val info = files.info(entry)
+                if (entries.size > 1) {
+                    val infos = entries.map { files.info(it) }
+                    _state.update { state ->
+                        state.copy(
+                            fileInfoDialogs = state.fileInfoDialogs.map { dialog ->
+                                if (dialog.id == id) {
+                                    dialog.copy(
+                                        infos = infos,
+                                        isLoading = false,
+                                        sizeLoading = false,
+                                        error = null,
+                                    )
+                                } else {
+                                    dialog
+                                }
+                            }
+                        )
+                    }
+                    return@launch
+                }
+
+                val info = files.info(first)
                 _state.update { state ->
                     state.copy(
                         fileInfoDialogs = state.fileInfoDialogs.map { dialog ->
@@ -934,7 +1072,7 @@ class HomeViewModel(
 
                 if (info.isDirectory) {
                     val usage = try {
-                        files.usage(entry)
+                        files.usage(first)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

@@ -45,6 +45,11 @@ data class AppTask(
     val detail: String? = null,
     val state: TaskState = TaskState.Running,
     val progress: TaskProgress = TaskProgress(),
+    val currentProgress: TaskProgress = TaskProgress(),
+    val overallProgress: TaskProgress = TaskProgress(),
+    val itemNames: List<String> = emptyList(),
+    val itemSizes: List<Long?> = emptyList(),
+    val isBatch: Boolean = false,
     val isBackground: Boolean = false,
     val error: String? = null,
     val speedBytesPerSecond: Double? = null,
@@ -62,12 +67,16 @@ object NoopTaskNotifier : TaskNotifier {
 }
 
 class TaskContext internal constructor(
-    private val onProgress: (progress: TaskProgress, speed: Double?, etaSeconds: Long?) -> Unit,
+    private val onCurrentProgress: (progress: TaskProgress, speed: Double?, etaSeconds: Long?) -> Unit,
+    private val onOverallProgress: (progress: TaskProgress) -> Unit,
     private val onWaiting: (message: String?) -> Unit,
     private val rollbacks: MutableList<suspend () -> Unit>,
+    private val itemSizes: List<Long?>,
     private val job: Job,
 ) {
     private var sample: ProgressSample? = null
+    private var overallCompleted = 0L
+    private val totalBatchBytes = itemSizes.sumOf { it ?: 0L }
 
     private data class ProgressSample(
         val at: TimeMark,
@@ -79,6 +88,11 @@ class TaskContext internal constructor(
         get() = !job.isActive
 
     fun report(completed: Long?, total: Long?) {
+        reportCurrent(completed, total)
+        reportOverall(completed, total)
+    }
+
+    fun reportCurrent(completed: Long?, total: Long?) {
         val progress = TaskProgress(completed, total)
         var speed: Double? = null
         var eta: Long? = null
@@ -103,13 +117,26 @@ class TaskContext internal constructor(
                 }
             }
             if (speed != null) {
-                eta = ((total - completed) / speed).toLong().coerceAtLeast(0)
+                val completedItemsBytes = itemSizes
+                    .take(overallCompleted.toInt())
+                    .sumOf { it ?: 0L }
+                val remainingBytes = if (totalBatchBytes > 0) {
+                    (totalBatchBytes - completedItemsBytes - completed).coerceAtLeast(0)
+                } else {
+                    (total - completed).coerceAtLeast(0)
+                }
+                eta = (remainingBytes / speed).toLong().coerceAtLeast(0)
             }
             sample = ProgressSample(now, completed, speed)
         } else {
             sample = null
         }
-        onProgress(progress, speed, eta)
+        onCurrentProgress(progress, speed, eta)
+    }
+
+    fun reportOverall(completed: Long?, total: Long?) {
+        if (completed != null) overallCompleted = completed
+        onOverallProgress(TaskProgress(completed, total))
     }
 
     fun waiting(message: String) {
@@ -144,20 +171,46 @@ class TaskManager(
         title: String,
         detail: String? = null,
         background: Boolean,
+        isBatch: Boolean = false,
+        itemNames: List<String> = emptyList(),
+        itemSizes: List<Long?> = emptyList(),
         onFinished: (() -> Unit)? = null,
         operation: suspend TaskContext.() -> Unit,
     ): Long {
         val id = nextId++
         val rollbacks = mutableListOf<suspend () -> Unit>()
-        _tasks.update { it + AppTask(id, title, detail, isBackground = background) }
+        _tasks.update {
+            it + AppTask(
+                id = id,
+                title = title,
+                detail = detail,
+                isBackground = background,
+                isBatch = isBatch,
+                itemNames = itemNames,
+                itemSizes = itemSizes,
+            )
+        }
         jobs[id] = scope.launch {
             val context = TaskContext(
-                onProgress = { progress, speed, eta ->
-                    updateTask(id) {
-                        it.copy(
-                            progress = progress,
+                onCurrentProgress = { progress, speed, eta ->
+                    updateTask(id) { task ->
+                        task.copy(
+                            currentProgress = progress,
+                            progress = if (task.overallProgress.total?.let { it > 1 } == true) {
+                                task.progress
+                            } else {
+                                progress
+                            },
                             speedBytesPerSecond = speed,
                             etaSeconds = eta,
+                        )
+                    }
+                },
+                onOverallProgress = { progress ->
+                    updateTask(id) {
+                        it.copy(
+                            overallProgress = progress,
+                            progress = progress,
                         )
                     }
                 },
@@ -172,6 +225,7 @@ class TaskManager(
                     }
                 },
                 rollbacks = rollbacks,
+                itemSizes = itemSizes,
                 job = currentCoroutineContext()[Job] ?: error("task job missing"),
             )
             try {

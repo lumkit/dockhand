@@ -15,6 +15,7 @@ import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.copy_dialog_background
 import dockhand.shared.generated.resources.delete_dialog_summary
+import dockhand.shared.generated.resources.delete_dialog_summary_multiple
 import dockhand.shared.generated.resources.delete_dialog_title
 import io.github.lumkit.dockhand.ui.screen.home.DeleteRequestState
 import org.jetbrains.compose.resources.stringResource
@@ -36,7 +37,11 @@ fun DeleteRequestDialog(
     OverlayDialog(
         show = true,
         title = stringResource(Res.string.delete_dialog_title),
-        summary = stringResource(Res.string.delete_dialog_summary, request.entry.name),
+        summary = if (request.entries.size > 1) {
+            stringResource(Res.string.delete_dialog_summary_multiple, request.entries.size)
+        } else {
+            stringResource(Res.string.delete_dialog_summary, request.entry.name)
+        },
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

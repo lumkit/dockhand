@@ -22,11 +22,15 @@ import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_close
 import dockhand.shared.generated.resources.file_info_basic
 import dockhand.shared.generated.resources.file_info_created
+import dockhand.shared.generated.resources.file_info_item_count
+import dockhand.shared.generated.resources.file_info_selected_items
+import dockhand.shared.generated.resources.file_info_total_size
 import dockhand.shared.generated.resources.file_info_file
 import dockhand.shared.generated.resources.file_info_folder
 import dockhand.shared.generated.resources.file_info_group
 import dockhand.shared.generated.resources.file_info_loading
 import dockhand.shared.generated.resources.file_info_modified
+import dockhand.shared.generated.resources.file_info_multiple_title
 import dockhand.shared.generated.resources.file_info_name
 import dockhand.shared.generated.resources.file_info_owner
 import dockhand.shared.generated.resources.file_info_parent
@@ -73,7 +77,13 @@ fun FileInfoDialogContent(
         topBar = {
             MiuixCaptionBar {
                 SmallTitle(
-                    text = stringResource(Res.string.file_info_title),
+                    text = stringResource(
+                        if (state.entries.size > 1) {
+                            Res.string.file_info_multiple_title
+                        } else {
+                            Res.string.file_info_title
+                        }
+                    ),
                     insideMargin = PaddingValues(),
                     modifier = Modifier.align(Alignment.CenterStart),
                 )
@@ -109,6 +119,13 @@ fun FileInfoDialogContent(
                         }
                     }
 
+                    state.entries.size > 1 && state.infos.isNotEmpty() -> {
+                        MultiFileInfoSections(
+                            infos = state.infos,
+                            unknown = unknown,
+                        )
+                    }
+
                     state.error != null -> {
                         Text(
                             text = state.error,
@@ -140,6 +157,38 @@ fun FileInfoDialogContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MultiFileInfoSections(
+    infos: List<FileInfo>,
+    unknown: String,
+) {
+    SmallTitle(text = stringResource(Res.string.file_info_selected_items))
+    Card(modifier = Modifier.fillMaxWidth()) {
+        infos.forEach { info ->
+            val type = stringResource(
+                if (info.isDirectory) Res.string.file_info_folder else Res.string.file_info_file
+            )
+            val size = info.sizeBytes?.let(::formatFileSize) ?: unknown
+            InfoRow(
+                label = info.name,
+                value = "$type · $size",
+            )
+        }
+    }
+
+    SmallTitle(text = stringResource(Res.string.file_info_basic))
+    Card(modifier = Modifier.fillMaxWidth()) {
+        InfoRow(
+            label = stringResource(Res.string.file_info_item_count),
+            value = infos.size.toString(),
+        )
+        InfoRow(
+            label = stringResource(Res.string.file_info_total_size),
+            value = formatFileSize(infos.mapNotNull { it.sizeBytes }.sum()),
+        )
     }
 }
 

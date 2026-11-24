@@ -1,6 +1,7 @@
 package io.github.lumkit.dockhand.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -42,6 +44,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -50,6 +58,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -108,6 +117,8 @@ import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.window.MiuixDialogWindow
+import kotlin.math.max
+import kotlin.math.min
 
 private const val INACTIVE_PANE_ALPHA = 0.55f
 
@@ -130,6 +141,8 @@ fun FileBrowserPane(
     onEntryClick: (FileEntry) -> Unit,
     onEntryDoubleClick: (FileEntry) -> Unit,
     onEntrySecondaryClick: (FileEntry) -> Unit,
+    onSelectionChange: (Set<String>) -> Unit = {},
+    onSelectionClear: () -> Unit = {},
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     canTransferToOtherPane: Boolean = false,
@@ -144,6 +157,11 @@ fun FileBrowserPane(
     val currentOnFocus by rememberUpdatedState(onFocus)
     val focusManager = LocalFocusManager.current
     var contextMenuEntryId by remember { mutableStateOf<String?>(null) }
+    val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+    val rowBounds = remember { mutableStateMapOf<String, Rect>() }
+    var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var dragStart by remember { mutableStateOf<Offset?>(null) }
+    var dragEnd by remember { mutableStateOf<Offset?>(null) }
 
     LaunchedEffect(pane.location) {
         contextMenuEntryId = null
@@ -167,6 +185,7 @@ fun FileBrowserPane(
                     onTap = {
                         focusManager.clearFocus()
                         currentOnFocus()
+                        onSelectionClear()
                     }
                 )
             }
@@ -180,7 +199,57 @@ fun FileBrowserPane(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .onGloballyPositioned { listCoordinates = it }
+                    .pointerInput(pane.id) {
+                        val touchSlop = viewConfiguration.touchSlop
+                        awaitPointerEventScope {
+                            while (true) {
+                                val downEvent = awaitPointerEvent(PointerEventPass.Initial)
+                                if (
+                                    downEvent.type != PointerEventType.Press ||
+                                    !downEvent.buttons.isPrimaryPressed
+                                ) {
+                                    continue
+                                }
+                                val down = downEvent.changes.firstOrNull() ?: continue
+                                val coordinates = listCoordinates
+                                val start = coordinates?.localToRoot(down.position) ?: down.position
+                                var dragging = false
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull() ?: break
+                                    val point = coordinates?.localToRoot(change.position) ?: change.position
+                                    if (!dragging && (point - start).getDistance() > touchSlop) {
+                                        dragging = true
+                                        dragStart = start
+                                    }
+                                    if (dragging) {
+                                        dragEnd = point
+                                        val selection = Rect(
+                                            left = min(start.x, point.x),
+                                            top = min(start.y, point.y),
+                                            right = max(start.x, point.x),
+                                            bottom = max(start.y, point.y),
+                                        )
+                                        currentOnSelectionChange(
+                                            rowBounds
+                                                .filterValues { it.overlaps(selection) }
+                                                .keys
+                                                .toSet()
+                                        )
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                    if (!change.pressed) break
+                                }
+                                dragStart = null
+                                dragEnd = null
+                            }
+                        }
+                    }
+            ) {
                 when {
                     pane.isLoading && pane.entries.isEmpty() -> {
                         PaneStateBox {
@@ -248,6 +317,10 @@ fun FileBrowserPane(
                                     row = row,
                                     paneId = pane.id,
                                     selected = row.id in pane.selectedIds,
+                                    onBoundsChanged = { rect ->
+                                        if (rect == null) rowBounds.remove(row.id)
+                                        else rowBounds[row.id] = rect
+                                    },
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
                                     canTrash = canTrash,
@@ -287,6 +360,30 @@ fun FileBrowserPane(
                                 }
                             }
                         }
+
+                        val start = dragStart
+                        val end = dragEnd
+                        if (start != null && end != null) {
+                            val origin = listCoordinates?.boundsInRoot()?.topLeft ?: Offset.Zero
+                            val left = min(start.x, end.x) - origin.x
+                            val top = min(start.y, end.y) - origin.y
+                            val width = max(start.x, end.x) - min(start.x, end.x)
+                            val height = max(start.y, end.y) - min(start.y, end.y)
+                            val selectionColor = MiuixTheme.colorScheme.primary
+                            Canvas(modifier = Modifier.matchParentSize()) {
+                                drawRect(
+                                    color = selectionColor.copy(alpha = 0.12f),
+                                    topLeft = Offset(left, top),
+                                    size = Size(width, height),
+                                )
+                                drawRect(
+                                    color = selectionColor,
+                                    topLeft = Offset(left, top),
+                                    size = Size(width, height),
+                                    style = Stroke(width = 1.dp.toPx()),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -313,6 +410,7 @@ private fun FileEntryRow(
     row: FileRowUi,
     paneId: PaneId,
     selected: Boolean,
+    onBoundsChanged: (Rect?) -> Unit,
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
     canTrash: Boolean,
@@ -329,6 +427,10 @@ private fun FileEntryRow(
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     } else {
         Color.Transparent
+    }
+
+    DisposableEffect(row.id) {
+        onDispose { onBoundsChanged(null) }
     }
 
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
@@ -499,6 +601,7 @@ private fun FileEntryRow(
                 .squircleClip(10.dp)
                 .background(rowColor)
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
+                .onGloballyPositioned { onBoundsChanged(it.boundsInRoot()) }
                 .combinedClickable(
                     onClick = {
                         if (editing) {

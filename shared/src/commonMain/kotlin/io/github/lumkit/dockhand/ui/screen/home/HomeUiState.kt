@@ -63,6 +63,8 @@ data class FileInfoDialogState(
     val id: Long,
     val entry: FileEntry,
     val info: FileInfo? = null,
+    val entries: List<FileEntry> = listOf(entry),
+    val infos: List<FileInfo> = emptyList(),
     val isLoading: Boolean = true,
     /** 目录大小/项目数仍在后台统计。 */
     val sizeLoading: Boolean = false,
@@ -74,6 +76,7 @@ data class CopyRequestState(
     val entry: FileEntry,
     val destination: FileLocation,
     val background: Boolean = false,
+    val entries: List<FileEntry> = listOf(entry),
 )
 
 @Immutable
@@ -81,12 +84,14 @@ data class MoveRequestState(
     val entry: FileEntry,
     val destination: FileLocation,
     val background: Boolean = false,
+    val entries: List<FileEntry> = listOf(entry),
 )
 
 @Immutable
 data class DeleteRequestState(
     val entry: FileEntry,
     val background: Boolean = false,
+    val entries: List<FileEntry> = listOf(entry),
 )
 
 @Immutable
@@ -94,12 +99,14 @@ data class RenameRequestState(
     val entry: FileEntry,
     val newName: String,
     val background: Boolean = false,
+    val entries: List<FileEntry> = listOf(entry),
 )
 
 @Immutable
 data class TrashRequestState(
     val entry: FileEntry,
     val background: Boolean = false,
+    val entries: List<FileEntry> = listOf(entry),
 )
 
 @Immutable

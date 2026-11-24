@@ -97,6 +97,17 @@ interface FileBrowserRepository {
         throw FileBrowserException("当前文件系统不支持移动")
     }
 
+    /** 批量重命名：第一项使用输入名称，后续项依次追加 (1)、(2)…，并保留原扩展名。 */
+    suspend fun renameBatchWithProgress(
+        entries: List<FileEntry>,
+        baseName: String,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持批量重命名")
+    }
+
     /** 重命名文件/目录的耗时任务入口。 */
     suspend fun renameWithProgress(
         entry: FileEntry,
@@ -357,6 +368,37 @@ class DefaultFileBrowserRepository(
             )
             trashHistory.remove(entry.location.path)
             onProgress(1, 1)
+        } finally {
+            onWaiting(null)
+        }
+    }
+
+    override suspend fun renameBatchWithProgress(
+        entries: List<FileEntry>,
+        baseName: String,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        try {
+            entries.forEachIndexed { index, entry ->
+                if (isCancelled()) throw CancellationException("批量重命名已取消")
+                onProgress(index.toLong(), entries.size.toLong())
+                val suffix = if (index == 0) "" else "($index)"
+                val originalExtension = entry.extension?.let { ".$it" }.orEmpty()
+                val enteredBase = if (originalExtension.isNotEmpty()) {
+                    baseName.substringBeforeLast('.', baseName)
+                } else {
+                    baseName
+                }
+                providerFor(entry.location.source).rename(
+                    location = entry.location,
+                    newName = enteredBase + suffix + originalExtension,
+                    isCancelled = isCancelled,
+                    onWaiting = onWaiting,
+                )
+                onProgress((index + 1).toLong(), entries.size.toLong())
+            }
         } finally {
             onWaiting(null)
         }

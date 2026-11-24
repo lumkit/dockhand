@@ -29,6 +29,8 @@ fun DualPaneBrowser(
     onEntryClick: (PaneId, FileEntry) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
+    onSelectionChange: (PaneId, Set<String>) -> Unit,
+    onSelectionClear: (PaneId) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onInlineRename: (PaneId, FileEntry, String) -> Unit,
     onRetry: (PaneId) -> Unit,
@@ -93,6 +95,8 @@ fun DualPaneBrowser(
                 onEntryClick = { onEntryClick(PaneId.Left, it) },
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Left, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Left, it) },
+                onSelectionChange = { ids -> onSelectionChange(PaneId.Left, ids) },
+                onSelectionClear = { onSelectionClear(PaneId.Left) },
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Left, entry, action)
                 },
@@ -118,6 +122,8 @@ fun DualPaneBrowser(
                 onEntryClick = { onEntryClick(PaneId.Right, it) },
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Right, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Right, it) },
+                onSelectionChange = { ids -> onSelectionChange(PaneId.Right, ids) },
+                onSelectionClear = { onSelectionClear(PaneId.Right) },
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Right, entry, action)
                 },
