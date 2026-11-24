@@ -173,6 +173,7 @@ fun FileBrowserPane(
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     val currentEntries by rememberUpdatedState(pane.entries)
     val listState = rememberLazyListState()
+    val scrollBarTouchWidth = with(LocalDensity.current) { 28.dp.toPx() }
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
@@ -269,6 +270,14 @@ fun FileBrowserPane(
                                 }
                                 val down = downEvent.changes.firstOrNull() ?: continue
                                 val coordinates = listCoordinates
+                                val width = coordinates?.size?.width
+                                if (
+                                    width != null &&
+                                    down.position.x >= width - scrollBarTouchWidth
+                                ) {
+                                    // 右侧拖动条自行处理拖动，框选不能抢事件。
+                                    continue
+                                }
                                 val start = coordinates?.localToRoot(down.position) ?: down.position
                                 var dragging = false
                                 while (true) {

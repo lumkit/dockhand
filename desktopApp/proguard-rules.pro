@@ -26,6 +26,15 @@
 -keep class androidx.datastore.preferences.core.** { *; }
 -keep class androidx.datastore.core.** { *; }
 
+# Coil uses ServiceLoader and reflective component registries for decoders/fetchers.
+# Shrinking or renaming these classes breaks image/SVG/video thumbnail loading in release.
+-keep class coil3.** { *; }
+-keep class okio.** { *; }
+-keep class io.github.lumkit.dockhand.core.thumbnail.** { *; }
+-keepclassmembers class * implements coil3.fetch.Fetcher$Factory { *; }
+-keepclassmembers class * implements coil3.decode.Decoder$Factory { *; }
+-keepclassmembers class * implements coil3.key.Keyer { *; }
+
 # JNA callback descriptors must keep their original class/type names.
 -keep class com.sun.jna.** { *; }
 
