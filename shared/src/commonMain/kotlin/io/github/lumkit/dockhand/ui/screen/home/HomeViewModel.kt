@@ -6,6 +6,8 @@ import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileLocation
@@ -13,6 +15,7 @@ import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.displayPath
+import io.github.lumkit.dockhand.domain.model.isTrashLocation
 import io.github.lumkit.dockhand.domain.model.orderedByIds
 import io.github.lumkit.dockhand.domain.model.parentBreadcrumb
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
@@ -21,6 +24,7 @@ import io.github.lumkit.dockhand.task.TaskContext
 import io.github.lumkit.dockhand.task.TaskManager
 import io.github.lumkit.dockhand.task.TaskNotifier
 import io.github.lumkit.dockhand.ui.component.FileContextAction
+import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.error_name_empty
@@ -137,6 +141,27 @@ class HomeViewModel(
         _state.update { it.copy(activeTaskId = null) }
     }
 
+    private fun startBackgroundTask(
+        title: String,
+        detail: String?,
+        isBatch: Boolean = false,
+        itemNames: List<String> = emptyList(),
+        itemSizes: List<Long?> = emptyList(),
+        operation: suspend TaskContext.() -> Unit,
+    ) {
+        taskManager.start(
+            title = title,
+            detail = detail,
+            background = true,
+            isBatch = isBatch,
+            itemNames = itemNames,
+            itemSizes = itemSizes,
+            onFinished = { refreshAllPanes() },
+        ) {
+            operation()
+        }
+    }
+
     private fun startForegroundTask(
         title: String,
         detail: String?,
@@ -224,6 +249,15 @@ class HomeViewModel(
                             restorableTrashPaths = records.map { it.trashedPath }.toSet()
                         )
                     }
+                }
+        }
+    }
+    private val shortcutsJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.shortcuts
+                .catch { }
+                .collect { shortcuts ->
+                    _state.update { it.copy(shortcuts = shortcuts) }
                 }
         }
     }
@@ -408,6 +442,40 @@ class HomeViewModel(
         }
     }
 
+    fun onShortcutAdd(action: ShortcutAction, key: ShortcutKey) {
+        val current = _state.value.shortcuts[action].orEmpty()
+        if (key in current) return
+        val updated = current + key
+        _state.update { state ->
+            state.copy(shortcuts = state.shortcuts + (action to updated))
+        }
+        settings?.let { repository ->
+            scope.launch { repository.setShortcuts(action, updated) }
+        }
+    }
+
+    fun onShortcutRemove(action: ShortcutAction, key: ShortcutKey) {
+        val updated = _state.value.shortcuts[action].orEmpty() - key
+        _state.update { state ->
+            state.copy(shortcuts = state.shortcuts + (action to updated))
+        }
+        settings?.let { repository ->
+            scope.launch { repository.setShortcuts(action, updated) }
+        }
+    }
+
+    fun onResetShortcuts() {
+        _state.update {
+            it.copy(
+                shortcuts = io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
+                    .mapValues { entry -> listOf(entry.value) }
+            )
+        }
+        settings?.let { repository ->
+            scope.launch { repository.resetShortcuts() }
+        }
+    }
+
     fun onShowHiddenItemsChange(enabled: Boolean) {
         _state.update { it.copy(showHiddenItems = enabled) }
         settings?.let { repository ->
@@ -454,19 +522,66 @@ class HomeViewModel(
     /**
      * 列表项单击：只把面板设为焦点并选中该条目，不执行打开/进入。
      */
-    fun onEntryClick(paneId: PaneId, entry: FileEntry) {
+    fun onEntryClick(
+        paneId: PaneId,
+        entry: FileEntry,
+        mode: SelectionMode = SelectionMode.Replace,
+    ) {
         onPaneFocus(paneId)
-        selectEntry(paneId, entry)
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            val entries = pane.entries
+            val selected = when (mode) {
+                SelectionMode.Replace -> setOf(entry.id)
+                SelectionMode.Toggle -> {
+                    if (entry.id in pane.selectedIds) {
+                        pane.selectedIds - entry.id
+                    } else {
+                        pane.selectedIds + entry.id
+                    }
+                }
+                SelectionMode.Range -> {
+                    val clicked = entries.indexOfFirst { it.id == entry.id }
+                    val anchor = entries.indexOfFirst { it.id == pane.selectionAnchorId }
+                    if (clicked < 0 || anchor < 0) {
+                        setOf(entry.id)
+                    } else {
+                        val from = minOf(anchor, clicked)
+                        val to = maxOf(anchor, clicked)
+                        entries.subList(from, to + 1).map { it.id }.toSet()
+                    }
+                }
+            }
+            state.updatePane(paneId) {
+                it.copy(
+                    selectedIds = selected,
+                    selectionAnchorId = if (mode == SelectionMode.Range) {
+                        it.selectionAnchorId ?: entry.id
+                    } else {
+                        entry.id
+                    },
+                )
+            }
+        }
     }
 
     /** 框选产生的多选集合；不改变焦点面板。 */
-    fun onSelectionChange(paneId: PaneId, ids: Set<String>) {
+    fun onSelectionChange(
+        paneId: PaneId,
+        ids: Set<String>,
+        anchorId: String? = null,
+    ) {
         _state.update { state ->
             val pane = state.pane(paneId)
-            if (pane.selectedIds == ids) {
+            if (pane.selectedIds == ids && (anchorId == null || pane.selectionAnchorId == anchorId)) {
                 state
             } else {
-                state.updatePane(paneId) { it.copy(selectedIds = ids) }
+                state.updatePane(paneId) {
+                    it.copy(
+                        selectedIds = ids,
+                        selectionAnchorId = anchorId ?: it.selectionAnchorId,
+                    )
+                }
             }
         }
     }
@@ -474,10 +589,263 @@ class HomeViewModel(
     fun onSelectionClear(paneId: PaneId) {
         _state.update { state ->
             val pane = state.pane(paneId)
-            if (pane.selectedIds.isEmpty()) {
+            if (pane.selectedIds.isEmpty() && pane.selectionAnchorId == null) {
                 state
             } else {
-                state.updatePane(paneId) { it.copy(selectedIds = emptySet()) }
+                state.updatePane(paneId) {
+                    it.copy(selectedIds = emptySet(), selectionAnchorId = null)
+                }
+            }
+        }
+    }
+
+    fun onClearSelectionShortcut() {
+        onSelectionClear(_state.value.focusedPane)
+    }
+
+    fun onContextMenuRequest(paneId: PaneId, entryId: String) {
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(contextMenuEntryId = entryId) }
+        }
+    }
+
+    fun onContextMenuDismiss(paneId: PaneId) {
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            if (pane.contextMenuEntryId == null) {
+                state
+            } else {
+                state.updatePane(paneId) { it.copy(contextMenuEntryId = null) }
+            }
+        }
+    }
+
+    /** 打开当前选择项目的右键菜单，用于快捷键。 */
+    fun onOpenContextMenu(): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.selectedIds.isEmpty()) return false
+        val target = pane.entries.firstOrNull { it.id in pane.selectedIds } ?: return false
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(contextMenuEntryId = target.id) }
+        }
+        return true
+    }
+
+    fun onShortcutTrash(): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        val location = pane.location ?: return false
+        if (location.source.kind != FileSourceKind.Local || location.isTrashLocation()) {
+            return false
+        }
+        val entries = pane.selectedEntries
+        if (entries.isEmpty()) return false
+        scope.launch {
+            val title = if (entries.size > 1) {
+                getString(Res.string.task_trash_title_multiple, entries.size)
+            } else {
+                getString(Res.string.task_trash_title, entries.first().name)
+            }
+            val detail = getString(Res.string.task_trash_detail)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            startBackgroundTask(
+                title = title,
+                detail = detail,
+                isBatch = entries.size > 1,
+                itemNames = entries.map { it.name },
+            ) {
+                files.trashWithProgress(
+                    entries = entries,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+        return true
+    }
+
+    fun onShortcutRename(): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        val entries = pane.selectedEntries
+        if (entries.isEmpty()) return false
+        if (entries.size == 1) {
+            _state.update { state ->
+                state.updatePane(paneId) {
+                    it.copy(inlineRenameEntryId = entries.first().id)
+                }
+            }
+        } else {
+            val baseName = entries.first().name.substringBeforeLast(
+                '.',
+                entries.first().name,
+            )
+            _state.update {
+                it.copy(
+                    renameRequest = RenameRequestState(
+                        entry = entries.first(),
+                        newName = baseName,
+                        entries = entries,
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    fun onInlineRenameStarted(paneId: PaneId) {
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(inlineRenameEntryId = null) }
+        }
+    }
+
+    fun onShortcutCopy(): Boolean = runShortcutTransfer(copy = true)
+
+    fun onShortcutMove(): Boolean = runShortcutTransfer(copy = false)
+
+    private fun runShortcutTransfer(copy: Boolean): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        val entries = pane.selectedEntries
+        if (entries.isEmpty()) return false
+        val destination = _state.value.pane(paneId.other).location
+        if (destination == null) {
+            setOperationError("另一侧没有打开目录")
+            return true
+        }
+        scope.launch {
+            val title = if (entries.size > 1) {
+                getString(
+                    if (copy) Res.string.task_copy_title_multiple
+                    else Res.string.task_move_title_multiple,
+                    entries.size,
+                )
+            } else {
+                getString(
+                    if (copy) Res.string.task_copy_title else Res.string.task_move_title,
+                    entries.first().name,
+                )
+            }
+            val detail = getString(
+                Res.string.task_copy_destination,
+                destination.displayPath(),
+            )
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            startBackgroundTask(
+                title = title,
+                detail = detail,
+                isBatch = entries.size > 1,
+                itemNames = entries.map { it.name },
+                itemSizes = entries.map { it.size },
+            ) {
+                val onWaiting: (String?) -> Unit = { deviceName ->
+                    if (deviceName == null) {
+                        running()
+                    } else {
+                        waiting(waitingTemplate.replace("%s", deviceName))
+                    }
+                }
+                if (copy) {
+                    files.copyWithProgress(
+                        entries = entries,
+                        destinationDirectory = destination,
+                        overwrite = false,
+                        onProgress = { completed, total -> reportOverall(completed, total) },
+                        onBytes = { completed, total -> reportCurrent(completed, total) },
+                        onWaiting = onWaiting,
+                        isCancelled = { isCancelled },
+                    )
+                } else {
+                    files.moveWithProgress(
+                        entries = entries,
+                        destinationDirectory = destination,
+                        overwrite = false,
+                        onProgress = { completed, total -> reportOverall(completed, total) },
+                        onBytes = { completed, total -> reportCurrent(completed, total) },
+                        onWaiting = onWaiting,
+                        isCancelled = { isCancelled },
+                    )
+                }
+            }
+        }
+        return true
+    }
+
+    fun onShortcutDelete(): Boolean {
+        val paneId = _state.value.focusedPane
+        val entries = _state.value.pane(paneId).selectedEntries
+        if (entries.isEmpty()) return false
+        scope.launch {
+            val title = if (entries.size > 1) {
+                getString(Res.string.task_delete_title_multiple, entries.size)
+            } else {
+                getString(Res.string.task_delete_title, entries.first().name)
+            }
+            val detail = getString(Res.string.task_delete_detail)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            startBackgroundTask(
+                title = title,
+                detail = detail,
+                isBatch = entries.size > 1,
+                itemNames = entries.map { it.name },
+            ) {
+                files.deleteWithProgress(
+                    entries = entries,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+        return true
+    }
+
+    fun onSelectPrevious(): Boolean = moveSingleSelection(-1)
+
+    fun onSelectNext(): Boolean = moveSingleSelection(1)
+
+    private fun moveSingleSelection(delta: Int): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.selectedIds.size != 1) return false
+        val current = pane.entries.indexOfFirst { it.id in pane.selectedIds }
+        val target = current + delta
+        if (current < 0 || target !in pane.entries.indices) return false
+        val entry = pane.entries[target]
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    selectedIds = setOf(entry.id),
+                    selectionAnchorId = entry.id,
+                )
+            }
+        }
+        return true
+    }
+
+    fun onSelectAll() {
+        val paneId = _state.value.focusedPane
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            state.updatePane(paneId) {
+                it.copy(
+                    selectedIds = pane.entries.map { row -> row.id }.toSet(),
+                    selectionAnchorId = pane.entries.firstOrNull()?.id,
+                )
             }
         }
     }
@@ -504,7 +872,9 @@ class HomeViewModel(
             if (entry.id in pane.selectedIds) {
                 state
             } else {
-                state.updatePane(paneId) { it.copy(selectedIds = setOf(entry.id)) }
+                state.updatePane(paneId) {
+                    it.copy(selectedIds = setOf(entry.id), selectionAnchorId = entry.id)
+                }
             }
         }
     }
@@ -1124,7 +1494,12 @@ class HomeViewModel(
 
     private fun selectEntry(paneId: PaneId, entry: FileEntry) {
         _state.update { state ->
-            state.updatePane(paneId) { it.copy(selectedIds = setOf(entry.id)) }
+            state.updatePane(paneId) {
+                it.copy(
+                    selectedIds = setOf(entry.id),
+                    selectionAnchorId = entry.id,
+                )
+            }
         }
     }
 

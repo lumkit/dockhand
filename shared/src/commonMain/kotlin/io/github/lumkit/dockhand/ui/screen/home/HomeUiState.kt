@@ -6,6 +6,9 @@ import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileInfo
 import io.github.lumkit.dockhand.domain.model.FileLocation
+import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
@@ -33,6 +36,12 @@ data class FilePaneState(
     /** 已预处理好 summary 的行数据；LazyColumn 只负责渲染。 */
     val entries: List<FileRowUi> = emptyList(),
     val selectedIds: Set<String> = emptySet(),
+    /** Shift 区间选择的锚点项目。 */
+    val selectionAnchorId: String? = null,
+    /** 当前打开的右键菜单项目。 */
+    val contextMenuEntryId: String? = null,
+    /** 快捷键请求进入行内重命名的项目。 */
+    val inlineRenameEntryId: String? = null,
     val isLoading: Boolean = false,
     /** 分页后端是否还有下一页。 */
     val hasMore: Boolean = false,
@@ -136,6 +145,8 @@ data class HomeUiState(
     /** 莫奈主题的手动主色调。 */
     val keyColor: Color = DEFAULT_KEY_COLOR,
     val showHiddenItems: Boolean = false,
+    val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
+        DefaultShortcutBindings.mapValues { listOf(it.value) },
     val restorableTrashPaths: Set<String> = emptySet(),
     /** 当前显示进度弹窗的前台任务。 */
     val activeTaskId: Long? = null,

@@ -49,6 +49,8 @@ import dockhand.shared.generated.resources.settings_restore_window_size_summary
 import dockhand.shared.generated.resources.settings_show_hidden_items
 import dockhand.shared.generated.resources.settings_show_hidden_items_summary
 import dockhand.shared.generated.resources.framework_section
+import dockhand.shared.generated.resources.shortcut_settings
+import dockhand.shared.generated.resources.shortcut_settings_summary
 import dockhand.shared.generated.resources.startup_section
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
@@ -61,6 +63,8 @@ import dockhand.shared.generated.resources.text_settings
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.ui.screen.home.STARTUP_PATH_LAST
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Button
@@ -70,6 +74,7 @@ import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Surface
@@ -110,6 +115,10 @@ fun SettingsBottomSheet(
     onInterfaceScaleChange: (Int) -> Unit,
     showHiddenItems: Boolean,
     onShowHiddenItemsChange: (Boolean) -> Unit,
+    shortcutBindings: Map<ShortcutAction, List<ShortcutKey>>,
+    onShortcutAdd: (ShortcutAction, ShortcutKey) -> Unit,
+    onShortcutRemove: (ShortcutAction, ShortcutKey) -> Unit,
+    onResetShortcuts: () -> Unit,
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,6 +131,7 @@ fun SettingsBottomSheet(
     var showScaleDialog by remember { mutableStateOf(false) }
     val scaleInput = rememberTextFieldState()
     var showColorDialog by remember { mutableStateOf(false) }
+    var showShortcutSheet by remember { mutableStateOf(false) }
     var dialogColor by remember { mutableStateOf(keyColor) }
     val themeModes = ColorSchemeMode.entries
     val scrollState = rememberScrollState()
@@ -208,6 +218,11 @@ fun SettingsBottomSheet(
                     title = stringResource(Res.string.settings_show_hidden_items),
                     summary = stringResource(Res.string.settings_show_hidden_items_summary),
                     modifier = Modifier.fillMaxWidth(),
+                )
+                ArrowPreference(
+                    title = stringResource(Res.string.shortcut_settings),
+                    summary = stringResource(Res.string.shortcut_settings_summary),
+                    onClick = { showShortcutSheet = true },
                 )
             }
 
@@ -296,6 +311,15 @@ fun SettingsBottomSheet(
             }
         }
     }
+
+    ShortcutSettingsBottomSheet(
+        show = showShortcutSheet,
+        bindings = shortcutBindings,
+        onDismissRequest = { showShortcutSheet = false },
+        onShortcutAdd = onShortcutAdd,
+        onShortcutRemove = onShortcutRemove,
+        onResetShortcuts = onResetShortcuts,
+    )
 
     if (showScaleDialog) {
         OverlayDialog(

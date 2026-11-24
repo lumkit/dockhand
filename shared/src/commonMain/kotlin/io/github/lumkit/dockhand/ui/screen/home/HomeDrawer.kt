@@ -62,6 +62,8 @@ import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.domain.model.orderedByIds
 import io.github.lumkit.dockhand.ui.component.SettingsBottomSheet
 import org.jetbrains.compose.resources.painterResource
@@ -121,6 +123,10 @@ fun HomeDrawerContent(
     keyColor: Color,
     interfaceScale: Int,
     showHiddenItems: Boolean,
+    shortcutBindings: Map<ShortcutAction, List<ShortcutKey>>,
+    onShortcutAdd: (ShortcutAction, ShortcutKey) -> Unit,
+    onShortcutRemove: (ShortcutAction, ShortcutKey) -> Unit,
+    onResetShortcuts: () -> Unit,
     onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
@@ -279,6 +285,10 @@ fun HomeDrawerContent(
         keyColor = keyColor,
         interfaceScale = interfaceScale,
         showHiddenItems = showHiddenItems,
+        shortcutBindings = shortcutBindings,
+        onShortcutAdd = onShortcutAdd,
+        onShortcutRemove = onShortcutRemove,
+        onResetShortcuts = onResetShortcuts,
         onColorSchemeModeChange = onColorSchemeModeChange,
         onKeyColorChange = onKeyColorChange,
         onInterfaceScaleChange = onInterfaceScaleChange,

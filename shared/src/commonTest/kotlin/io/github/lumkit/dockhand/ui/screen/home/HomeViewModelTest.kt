@@ -11,6 +11,7 @@ import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.ui.component.FileContextAction
+import io.github.lumkit.dockhand.ui.component.SelectionMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -96,6 +97,52 @@ class HomeViewModelTest {
 
         assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
         assertEquals(setOf(file.id), viewModel.state.value.leftPane.selectedIds)
+    }
+
+    @Test
+    fun previousAndNextMoveSingleSelection() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val entries = viewModel.state.value.leftPane.entries
+        viewModel.onEntryClick(PaneId.Left, entries[0].entry)
+
+        assertTrue(viewModel.onSelectNext())
+        assertEquals(setOf(entries[1].id), viewModel.state.value.leftPane.selectedIds)
+
+        assertTrue(viewModel.onSelectPrevious())
+        assertEquals(setOf(entries[0].id), viewModel.state.value.leftPane.selectedIds)
+        assertEquals(false, viewModel.onSelectPrevious())
+    }
+
+    @Test
+    fun modifierClicksToggleRangeAndSelectAll() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val entries = viewModel.state.value.leftPane.entries
+        val first = entries[0]
+        val second = entries[1]
+
+        viewModel.onEntryClick(PaneId.Left, first.entry, SelectionMode.Replace)
+        viewModel.onEntryClick(PaneId.Left, second.entry, SelectionMode.Toggle)
+        assertEquals(setOf(first.id, second.id), viewModel.state.value.leftPane.selectedIds)
+
+        viewModel.onEntryClick(PaneId.Left, second.entry, SelectionMode.Toggle)
+        assertEquals(setOf(first.id), viewModel.state.value.leftPane.selectedIds)
+
+        viewModel.onEntryClick(PaneId.Left, first.entry, SelectionMode.Replace)
+        viewModel.onEntryClick(PaneId.Left, entries.last().entry, SelectionMode.Range)
+        assertEquals(entries.map { it.id }.toSet(), viewModel.state.value.leftPane.selectedIds)
+
+        viewModel.onSelectAll()
+        assertEquals(entries.map { it.id }.toSet(), viewModel.state.value.leftPane.selectedIds)
     }
 
     @Test

@@ -15,6 +15,11 @@ import kotlinx.coroutines.flow.map
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.WindowSize
+import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
+import io.github.lumkit.dockhand.shortcut.decodeShortcuts
+import io.github.lumkit.dockhand.shortcut.encodeShortcuts
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.io.IOException
 
@@ -39,6 +44,9 @@ internal object SettingsKeys {
 
     fun lastLocation(pane: String): Preferences.Key<String> =
         stringPreferencesKey("last_location_${pane.lowercase()}")
+
+    fun shortcut(action: ShortcutAction): Preferences.Key<String> =
+        stringPreferencesKey("shortcut_${action.name.lowercase()}")
 }
 
 class SettingsRepository(
@@ -139,6 +147,31 @@ class SettingsRepository(
 
     suspend fun setShowHiddenItems(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[SettingsKeys.ShowHiddenItems] = enabled }
+    }
+
+    val shortcuts: Flow<Map<ShortcutAction, List<ShortcutKey>>> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            ShortcutAction.entries.associateWith { action ->
+                val raw = prefs[SettingsKeys.shortcut(action)]
+                if (raw == null) {
+                    listOf(DefaultShortcutBindings.getValue(action))
+                } else {
+                    decodeShortcuts(raw)
+                }
+            }
+        }
+
+    suspend fun setShortcuts(action: ShortcutAction, keys: List<ShortcutKey>) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.shortcut(action)] = encodeShortcuts(keys)
+        }
+    }
+
+    suspend fun resetShortcuts() {
+        dataStore.edit { prefs ->
+            ShortcutAction.entries.forEach { prefs.remove(SettingsKeys.shortcut(it)) }
+        }
     }
 
     val interfaceScale: Flow<Int> = dataStore.data

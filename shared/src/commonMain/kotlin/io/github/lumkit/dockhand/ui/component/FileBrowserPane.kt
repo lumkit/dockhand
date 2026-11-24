@@ -60,13 +60,17 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -141,11 +145,14 @@ fun FileBrowserPane(
     pane: FilePaneState,
     isFocused: Boolean,
     onFocus: () -> Unit,
-    onEntryClick: (FileEntry) -> Unit,
+    onEntryClick: (FileEntry, SelectionMode) -> Unit,
     onEntryDoubleClick: (FileEntry) -> Unit,
     onEntrySecondaryClick: (FileEntry) -> Unit,
-    onSelectionChange: (Set<String>) -> Unit = {},
+    onSelectionChange: (Set<String>, String?) -> Unit = { _, _ -> },
     onSelectionClear: () -> Unit = {},
+    onContextMenuRequest: (String) -> Unit = {},
+    onContextMenuDismiss: () -> Unit = {},
+    onInlineRenameStarted: () -> Unit = {},
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     canTransferToOtherPane: Boolean = false,
@@ -159,7 +166,7 @@ fun FileBrowserPane(
 ) {
     val currentOnFocus by rememberUpdatedState(onFocus)
     val focusManager = LocalFocusManager.current
-    var contextMenuEntryId by remember { mutableStateOf<String?>(null) }
+    val windowInfo = LocalWindowInfo.current
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     val rowBounds = remember { mutableStateMapOf<String, Rect>() }
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -196,7 +203,8 @@ fun FileBrowserPane(
         val from = min(anchor, current)
         val to = max(anchor, current)
         currentOnSelectionChange(
-            pane.entries.subList(from, to + 1).map { it.id }.toSet()
+            pane.entries.subList(from, to + 1).map { it.id }.toSet(),
+            pane.entries.getOrNull(anchor)?.id,
         )
     }
 
@@ -210,7 +218,7 @@ fun FileBrowserPane(
     }
 
     LaunchedEffect(pane.location) {
-        contextMenuEntryId = null
+        onContextMenuDismiss()
     }
 
     Box(
@@ -373,11 +381,21 @@ fun FileBrowserPane(
                             listState.scrollToItem(0)
                         }
 
+                        LaunchedEffect(pane.selectedIds) {
+                            if (pane.selectedIds.size != 1) return@LaunchedEffect
+                            val index = pane.entries.indexOfFirst { it.id in pane.selectedIds }
+                            if (index < 0) return@LaunchedEffect
+                            val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+                            if (!visible) {
+                                listState.animateScrollToItem(index)
+                            }
+                        }
+
                         LaunchedEffect(listState) {
                             snapshotFlow { listState.isScrollInProgress }
                                 .distinctUntilChanged()
                                 .collect { scrolling ->
-                                    if (scrolling) contextMenuEntryId = null
+                                    if (scrolling) onContextMenuDismiss()
                                 }
                         }
 
@@ -402,14 +420,25 @@ fun FileBrowserPane(
                                     canTrash = canTrash,
                                     canRestore = row.entry.location.path in restorableTrashPaths,
                                     onInlineRename = { name -> onInlineRename(row.entry, name) },
-                                    showContextMenu = contextMenuEntryId == row.id,
-                                    onClick = { onEntryClick(row.entry) },
+                                    startInlineRename = pane.inlineRenameEntryId == row.id,
+                                    onInlineRenameStarted = onInlineRenameStarted,
+                                    showContextMenu = pane.contextMenuEntryId == row.id,
+                                    onClick = {
+                                        val modifiers = windowInfo.keyboardModifiers
+                                        val mode = when {
+                                            modifiers.isShiftPressed -> SelectionMode.Range
+                                            modifiers.isAltPressed || modifiers.isMetaPressed ->
+                                                SelectionMode.Toggle
+                                            else -> SelectionMode.Replace
+                                        }
+                                        onEntryClick(row.entry, mode)
+                                    },
                                     onDoubleClick = { onEntryDoubleClick(row.entry) },
                                     onSecondaryClick = {
                                         onEntrySecondaryClick(row.entry)
-                                        contextMenuEntryId = row.id
+                                        onContextMenuRequest(row.id)
                                     },
-                                    onDismissContextMenu = { contextMenuEntryId = null },
+                                    onDismissContextMenu = onContextMenuDismiss,
                                     onContextAction = { action ->
                                         onContextAction(row.entry, action)
                                     },
@@ -492,6 +521,8 @@ private fun FileEntryRow(
     canTrash: Boolean,
     canRestore: Boolean,
     onInlineRename: (String) -> Unit,
+    startInlineRename: Boolean,
+    onInlineRenameStarted: () -> Unit,
     showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -552,6 +583,13 @@ private fun FileEntryRow(
     DisposableEffect(editing) {
         onDispose {
             if (editing) inlineBounds?.value = null
+        }
+    }
+
+    LaunchedEffect(startInlineRename) {
+        if (startInlineRename) {
+            editing = true
+            onInlineRenameStarted()
         }
     }
 

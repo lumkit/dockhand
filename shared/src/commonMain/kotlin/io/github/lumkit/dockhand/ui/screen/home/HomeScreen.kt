@@ -1,6 +1,7 @@
 package io.github.lumkit.dockhand.ui.screen.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -21,7 +22,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,14 +33,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -48,6 +55,12 @@ import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.ui.component.FileContextAction
 import io.github.lumkit.dockhand.domain.model.FilePlace
+import io.github.lumkit.dockhand.shortcut.DefaultShortcutRegistry
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutBinding
+import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
+import io.github.lumkit.dockhand.shortcut.ShortcutRegistry
 import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
 import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
@@ -55,6 +68,7 @@ import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
 import io.github.lumkit.dockhand.ui.component.EmptyTrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
+import io.github.lumkit.dockhand.ui.component.SelectionMode
 import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
 import io.github.lumkit.dockhand.ui.component.RestoreRequestDialog
 import io.github.lumkit.dockhand.ui.component.TaskProgressDialog
@@ -148,6 +162,22 @@ fun HomeScreen() {
         onActiveTaskBackground = homeViewModel::onActiveTaskBackground,
         onActiveTaskCancel = homeViewModel::onActiveTaskCancel,
         onTaskProgressOpen = homeViewModel::onTaskProgressOpen,
+        onSelectAll = homeViewModel::onSelectAll,
+        onClearSelection = homeViewModel::onClearSelectionShortcut,
+        onSelectPrevious = homeViewModel::onSelectPrevious,
+        onSelectNext = homeViewModel::onSelectNext,
+        onOpenContextMenu = homeViewModel::onOpenContextMenu,
+        onShortcutCopy = homeViewModel::onShortcutCopy,
+        onShortcutMove = homeViewModel::onShortcutMove,
+        onShortcutDelete = homeViewModel::onShortcutDelete,
+        onShortcutRename = homeViewModel::onShortcutRename,
+        onShortcutTrash = homeViewModel::onShortcutTrash,
+        onInlineRenameStarted = homeViewModel::onInlineRenameStarted,
+        onContextMenuRequest = homeViewModel::onContextMenuRequest,
+        onContextMenuDismiss = homeViewModel::onContextMenuDismiss,
+        onShortcutAdd = homeViewModel::onShortcutAdd,
+        onShortcutRemove = homeViewModel::onShortcutRemove,
+        onResetShortcuts = homeViewModel::onResetShortcuts,
         onSnackbarShown = homeViewModel::onSnackbarShown,
         onSnackbarRetry = homeViewModel::onSnackbarRetry,
         onPlaceClick = homeViewModel::onPlaceClick,
@@ -202,6 +232,13 @@ fun HomeScreen() {
         onCreate = homeViewModel::onCreate,
         onSync = homeViewModel::onSyncOtherPane,
         onDismissOperationError = homeViewModel::onDismissOperationError,
+        shortcuts = remember(uiState.shortcuts) {
+            ShortcutRegistry(
+                uiState.shortcuts.flatMap { (action, keys) ->
+                    keys.map { key -> ShortcutBinding(action, key) }
+                }
+            )
+        },
     )
 }
 
@@ -214,14 +251,30 @@ private fun HomeScreenContent(
     onActiveTaskBackground: () -> Unit,
     onActiveTaskCancel: () -> Unit,
     onTaskProgressOpen: (Long) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearSelection: () -> Unit,
+    onSelectPrevious: () -> Boolean,
+    onSelectNext: () -> Boolean,
+    onOpenContextMenu: () -> Boolean,
+    onShortcutCopy: () -> Boolean,
+    onShortcutMove: () -> Boolean,
+    onShortcutDelete: () -> Boolean,
+    onShortcutRename: () -> Boolean,
+    onShortcutTrash: () -> Boolean,
+    onInlineRenameStarted: (PaneId) -> Unit,
+    onContextMenuRequest: (PaneId, String) -> Unit,
+    onContextMenuDismiss: (PaneId) -> Unit,
+    onShortcutAdd: (ShortcutAction, ShortcutKey) -> Unit,
+    onShortcutRemove: (ShortcutAction, ShortcutKey) -> Unit,
+    onResetShortcuts: () -> Unit,
     onSnackbarShown: () -> Unit,
     onSnackbarRetry: () -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     onPaneFocus: (PaneId) -> Unit,
-    onEntryClick: (PaneId, FileEntry) -> Unit,
+    onEntryClick: (PaneId, FileEntry, SelectionMode) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
-    onSelectionChange: (PaneId, Set<String>) -> Unit,
+    onSelectionChange: (PaneId, Set<String>, String?) -> Unit,
     onSelectionClear: (PaneId) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onInlineRename: (PaneId, FileEntry, String) -> Unit,
@@ -269,6 +322,7 @@ private fun HomeScreenContent(
     onCreate: (PaneId, String, Boolean) -> Unit,
     onSync: (PaneId) -> Unit,
     onDismissOperationError: () -> Unit,
+    shortcuts: ShortcutRegistry = DefaultShortcutRegistry,
 ) {
     val windowState = LocalWindowState.current
     val windowPlacement = windowState.placement
@@ -278,6 +332,55 @@ private fun HomeScreenContent(
     val inlineRenameBounds = remember { mutableStateOf<Rect?>(null) }
     val focusManager = LocalFocusManager.current
     val retryLabel = stringResource(Res.string.action_retry)
+    val currentUiState by rememberUpdatedState(uiState)
+    val currentSelectAll by rememberUpdatedState(onSelectAll)
+    val currentClearSelection by rememberUpdatedState(onClearSelection)
+    val currentSelectPrevious by rememberUpdatedState(onSelectPrevious)
+    val currentSelectNext by rememberUpdatedState(onSelectNext)
+    val currentOpenContextMenu by rememberUpdatedState(onOpenContextMenu)
+    val currentShortcutCopy by rememberUpdatedState(onShortcutCopy)
+    val currentShortcutMove by rememberUpdatedState(onShortcutMove)
+    val currentShortcutDelete by rememberUpdatedState(onShortcutDelete)
+    val currentShortcutRename by rememberUpdatedState(onShortcutRename)
+    val currentShortcutTrash by rememberUpdatedState(onShortcutTrash)
+    val currentShortcuts by rememberUpdatedState(shortcuts)
+    DisposableEffect(Unit) {
+        ShortcutDispatcher.setHandler { event ->
+            val modalOpen = inlineRenameBounds.value != null ||
+                currentUiState.activeTaskId != null ||
+                currentUiState.copyRequest != null ||
+                currentUiState.moveRequest != null ||
+                currentUiState.deleteRequest != null ||
+                currentUiState.renameRequest != null ||
+                currentUiState.trashRequest != null ||
+                currentUiState.restoreRequest != null ||
+                currentUiState.emptyTrashRequest != null
+            if (modalOpen) {
+                false
+            } else {
+                when (currentShortcuts.resolve(event)) {
+                    ShortcutAction.SelectAll -> {
+                        currentSelectAll()
+                        true
+                    }
+                    ShortcutAction.ClearSelection -> {
+                        currentClearSelection()
+                        true
+                    }
+                    ShortcutAction.SelectPrevious -> currentSelectPrevious()
+                    ShortcutAction.SelectNext -> currentSelectNext()
+                    ShortcutAction.OpenContextMenu -> currentOpenContextMenu()
+                    ShortcutAction.Copy -> currentShortcutCopy()
+                    ShortcutAction.Move -> currentShortcutMove()
+                    ShortcutAction.Delete -> currentShortcutDelete()
+                    ShortcutAction.Rename -> currentShortcutRename()
+                    ShortcutAction.Trash -> currentShortcutTrash()
+                    null -> false
+                }
+            }
+        }
+        onDispose { ShortcutDispatcher.setHandler(null) }
+    }
 
     LaunchedEffect(uiState.snackbarMessage, uiState.snackbarCanRetry) {
         val message = uiState.snackbarMessage ?: return@LaunchedEffect
@@ -365,6 +468,10 @@ private fun HomeScreenContent(
                     keyColor = uiState.keyColor,
                     interfaceScale = uiState.interfaceScale,
                     showHiddenItems = uiState.showHiddenItems,
+                    shortcutBindings = uiState.shortcuts,
+                    onShortcutAdd = onShortcutAdd,
+                    onShortcutRemove = onShortcutRemove,
+                    onResetShortcuts = onResetShortcuts,
                     onColorSchemeModeChange = onColorSchemeModeChange,
                     onKeyColorChange = onKeyColorChange,
                     onInterfaceScaleChange = onInterfaceScaleChange,
@@ -437,6 +544,9 @@ private fun HomeScreenContent(
                             onEntrySecondaryClick = onEntrySecondaryClick,
                             onSelectionChange = onSelectionChange,
                             onSelectionClear = onSelectionClear,
+                            onContextMenuRequest = onContextMenuRequest,
+                            onContextMenuDismiss = onContextMenuDismiss,
+                            onInlineRenameStarted = onInlineRenameStarted,
                             onEntryContextAction = onEntryContextAction,
                             onInlineRename = onInlineRename,
                             onRetry = onRetry,

@@ -3,7 +3,11 @@ package io.github.lumkit.dockhand.data
 import io.github.lumkit.dockhand.data.database.createDatabase
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.datastore.createSettingsDataStore
+import androidx.compose.ui.input.key.Key
 import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
+import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
+import io.github.lumkit.dockhand.shortcut.ShortcutAction
+import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +47,40 @@ class PersistenceTest {
             assertTrue(history.observeAll().first().isEmpty())
         } finally {
             database.close()
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun shortcutPreferencesRoundTrip() = runBlocking {
+        val dir = Files.createTempDirectory("dockhand-shortcuts").toFile()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val settings = SettingsRepository(
+                createSettingsDataStore(File(dir, "settings.preferences_pb"), scope)
+            )
+            val custom = ShortcutKey(Key.B, meta = true, shift = true)
+
+            settings.setShortcuts(ShortcutAction.SelectAll, listOf(custom))
+
+            assertEquals(
+                listOf(custom),
+                settings.shortcuts.first()[ShortcutAction.SelectAll],
+            )
+
+            settings.setShortcuts(ShortcutAction.SelectAll, emptyList())
+            assertEquals(
+                emptyList(),
+                settings.shortcuts.first()[ShortcutAction.SelectAll],
+            )
+
+            settings.resetShortcuts()
+            assertEquals(
+                listOf(DefaultShortcutBindings.getValue(ShortcutAction.SelectAll)),
+                settings.shortcuts.first()[ShortcutAction.SelectAll],
+            )
+        } finally {
+            scope.cancel()
             dir.deleteRecursively()
         }
     }

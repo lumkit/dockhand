@@ -11,6 +11,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.github.lumkit.dockhand.data.createAppContainer
+import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
 import io.github.lumkit.dockhand.domain.model.WindowSize
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -65,6 +66,7 @@ fun main() = application {
         },
         title = "Dockhand",
         state = windowState,
+        onPreviewKeyEvent = { event -> ShortcutDispatcher.dispatch(event) },
         properties = MiuixWindowProperties.default(
             minSize = DpSize(1000.dp, 600.dp),
             backgroundType = MiuixWindowBackgroundType.Vibrancy,
