@@ -12,6 +12,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.github.lumkit.dockhand.data.createAppContainer
 import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
+import io.github.lumkit.dockhand.ui.appLogoPainter
 import io.github.lumkit.dockhand.domain.model.WindowSize
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -65,6 +66,7 @@ fun main() = application {
             exitApplication()
         },
         title = "Dockhand",
+        icon = appLogoPainter(),
         state = windowState,
         onPreviewKeyEvent = { event -> ShortcutDispatcher.dispatch(event) },
         properties = MiuixWindowProperties.default(

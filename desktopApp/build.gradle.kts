@@ -56,6 +56,7 @@ compose.desktop {
             macOS {
                 bundleID = "io.github.lumkit.dockhand"
                 packageName = "Dockhand"
+                iconFile.set(project.file("icons/Dockhand.icns"))
                 dockName = "Dockhand"
                 setDockNameSameAsPackageName = true
                 appCategory = "public.app-category.utilities"

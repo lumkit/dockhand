@@ -4,6 +4,9 @@
 .LSOverride
 Icon?
 ._*
+# Keep the packaged macOS icon even though the generic "Icon?" rule matches `icons`.
+!desktopApp/icons/
+!desktopApp/icons/**
 
 # IDE / editor
 .idea/
@@ -75,3 +78,4 @@ node_modules/
 
 # Generated native helpers
 native/video-thumbnailer/video-thumbnailer
+/tmp/

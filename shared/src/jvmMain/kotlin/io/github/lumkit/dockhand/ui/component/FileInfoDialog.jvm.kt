@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberWindowState
+import io.github.lumkit.dockhand.ui.appLogoPainter
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.MiuixDialogWindow
 import top.yukonga.miuix.kmp.window.MiuixWindow
@@ -44,6 +45,7 @@ actual fun FileInfoDialogWindow(
         onCloseRequest = onCloseRequest,
         title = title,
         state = windowState,
+        icon = appLogoPainter(),
         resizable = false,
     ) {
         val baseDensity = LocalDensity.current
