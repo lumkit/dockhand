@@ -39,6 +39,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -73,6 +74,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
@@ -100,6 +102,8 @@ import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
+import coil3.Uri
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -728,11 +732,24 @@ private fun FileEntryRow(
                     }
                 },
             startAction = {
-                Image(
-                    painter = painterResource(row.icon),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
+                if (row.thumbnailPath != null) {
+                    AsyncImage(
+                        model = Uri(scheme = "file", path = row.thumbnailPath),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .squircleClip(8.dp),
+                        placeholder = painterResource(row.icon),
+                        error = painterResource(row.icon),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(row.icon),
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
             },
             endActions = {
                 if (row.isDirectory) {

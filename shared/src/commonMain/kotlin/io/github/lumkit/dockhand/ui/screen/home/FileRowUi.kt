@@ -45,6 +45,7 @@ import dockhand.shared.generated.resources.ic_file_xml
 import dockhand.shared.generated.resources.ic_file_xsl
 import dockhand.shared.generated.resources.ic_file_zip
 import io.github.lumkit.dockhand.domain.model.FileEntry
+import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.DrawableResource
 
@@ -59,6 +60,7 @@ data class FileRowUi(
     val entry: FileEntry,
     val summary: String?,
     val icon: DrawableResource,
+    val thumbnailPath: String? = null,
 ) {
     val id: String get() = entry.id
     val name: String get() = entry.name
@@ -82,7 +84,23 @@ internal fun List<FileEntry>.toRowUi(
                 itemCountText = entry.childCount?.let(itemCountTexts::get),
             ),
             icon = entry.fileIcon(),
+            thumbnailPath = entry.thumbnailPath(),
         )
+    }
+
+private val THUMBNAIL_EXTENSIONS = setOf(
+    "jpg", "jpeg", "png", "webp", "gif", "bmp", "svg",
+)
+
+private fun FileEntry.thumbnailPath(): String? =
+    if (
+        !isDirectory &&
+        location.source.kind == FileSourceKind.Local &&
+        extension?.lowercase() in THUMBNAIL_EXTENSIONS
+    ) {
+        location.path
+    } else {
+        null
     }
 
 /** 图标在构建行数据时决定，LazyColumn 内不再做扩展名判断。 */
