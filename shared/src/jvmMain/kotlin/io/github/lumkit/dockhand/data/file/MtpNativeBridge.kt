@@ -137,6 +137,16 @@ internal object MtpNativeBridge {
             ValueLayout.ADDRESS,
         ),
     )
+    private val renameHandle: MethodHandle = downcall(
+        "dockhand_mtp_rename",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        ),
+    )
     private val copyObjectHandle: MethodHandle = downcall(
         "dockhand_mtp_copy_object",
         FunctionDescriptor.of(
@@ -472,6 +482,28 @@ internal object MtpNativeBridge {
         }
         if (value is JsonNull) return false
         return value.jsonObject["waiting"]?.jsonPrimitive?.booleanOrNull ?: false
+    }
+
+    fun rename(
+        deviceKey: Long,
+        storageId: Long,
+        remotePath: String,
+        newName: String,
+    ): BridgeResult<Unit> {
+        val arena = Arena.ofConfined()
+        return try {
+            val path = arena.allocateFrom(remotePath)
+            val name = arena.allocateFrom(newName)
+            val data = callJson(renameHandle, deviceKey, storageId, path, name)
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(Unit)
+            }
+        } catch (error: Throwable) {
+            BridgeResult.Failure("MTP 重命名失败：${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            arena.close()
+        }
     }
 
     fun delete(deviceKey: Long, storageId: Long, remotePath: String): BridgeResult<Unit> {

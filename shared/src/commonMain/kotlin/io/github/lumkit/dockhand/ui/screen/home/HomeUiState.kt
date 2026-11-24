@@ -89,6 +89,13 @@ data class DeleteRequestState(
     val background: Boolean = false,
 )
 
+@Immutable
+data class RenameRequestState(
+    val entry: FileEntry,
+    val newName: String,
+    val background: Boolean = false,
+)
+
 const val STARTUP_PATH_LAST = "__last__"
 const val STARTUP_PATH_DESKTOP = "local:desktop"
 val DEFAULT_KEY_COLOR = Color(0xFF6750A4)
@@ -122,6 +129,7 @@ data class HomeUiState(
     val copyRequest: CopyRequestState? = null,
     val moveRequest: MoveRequestState? = null,
     val deleteRequest: DeleteRequestState? = null,
+    val renameRequest: RenameRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,

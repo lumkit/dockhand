@@ -210,6 +210,29 @@ class LocalFileSystemProvider(
         }
     }
 
+    override suspend fun rename(
+        location: FileLocation,
+        newName: String,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
+    ): Unit = withContext(Dispatchers.IO) {
+        ensureLocal(location)
+        if (isCancelled()) throw kotlinx.coroutines.CancellationException("重命名已取消")
+        val name = newName.trim()
+        if (name.isEmpty() || '/' in name || name == "." || name == "..") {
+            throw FileBrowserException("名称无效：$newName")
+        }
+        if (name == location.path.substringAfterLast('/')) {
+            throw FileBrowserException("名称没有变化")
+        }
+        val source = location.toLocalPath()
+        val target = source.resolveSibling(name)
+        if (Files.exists(target)) {
+            throw FileBrowserException("同名项目已存在：$name")
+        }
+        Files.move(source, target)
+    }
+
     override suspend fun usage(entry: FileEntry): FileUsage? = withContext(Dispatchers.IO) {
         ensureLocal(entry.location)
         val path = entry.location.toLocalPath()

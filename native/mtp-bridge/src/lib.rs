@@ -837,6 +837,47 @@ pub extern "C" fn dockhand_mtp_download(
     })
 }
 
+async fn rename_entry(
+    device_key: u64,
+    storage_id: u64,
+    path: String,
+    new_name: String,
+) -> Result<Value, String> {
+    if new_name.is_empty() || new_name.contains('/') {
+        return Err("名称无效".to_string());
+    }
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
+    let (parent_path, old_name) = split_parent(&path)?;
+    let parent = resolve_folder(&storage, &parent_path).await?;
+    let objects = storage
+        .list_objects(parent)
+        .await
+        .map_err(|error| error_message(&error))?;
+    let object = objects
+        .into_iter()
+        .find(|item| item.filename == old_name)
+        .ok_or_else(|| format!("文件不存在：{path}"))?;
+    storage
+        .rename(object.handle, &new_name)
+        .await
+        .map_err(|error| error_message(&error))?;
+    Ok(json!({ "renamed": true }))
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_rename(
+    device_key: u64,
+    storage_id: u64,
+    path: *const c_char,
+    new_name: *const c_char,
+) -> *mut c_char {
+    let path = read_c_string(path);
+    let new_name = read_c_string(new_name);
+    run_operation_for_device(device_key, async move {
+        rename_entry(device_key, storage_id, path?, new_name?).await
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn dockhand_mtp_delete(
     device_key: u64,

@@ -360,6 +360,52 @@ class MtpFileSystemProvider(
         }
     }
 
+    override suspend fun rename(
+        location: FileLocation,
+        newName: String,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
+    ): Unit = withContext(Dispatchers.IO) {
+        val name = newName.trim()
+        if (name.isEmpty() || '/' in name || name == "." || name == "..") {
+            throw FileBrowserException("名称无效：$newName")
+        }
+        if (name == location.path.substringAfterLast('/')) {
+            throw FileBrowserException("名称没有变化")
+        }
+        val target = targetOf(location.source)
+        val parentPath = location.path.substringBeforeLast('/', missingDelimiterValue = "").ifBlank { "/" }
+        val parent = FileLocation(location.source, parentPath)
+        if (list(parent).any { it.name == name }) {
+            throw FileBrowserException("同名项目已存在：$name")
+        }
+        val deviceLock = synchronized(deviceTransferLocks) {
+            deviceTransferLocks.getOrPut(target.deviceKey) { Mutex() }
+        }
+        var locked = deviceLock.tryLock()
+        if (!locked) {
+            onWaiting(location.source.name)
+            deviceLock.lock()
+            locked = true
+        }
+        try {
+            if (isCancelled()) throw CancellationException("重命名已取消")
+            onWaiting(null)
+            when (val result = MtpNativeBridge.rename(
+                deviceKey = target.deviceKey,
+                storageId = target.storageId,
+                remotePath = location.path,
+                newName = name,
+            )) {
+                is BridgeResult.Failure -> throw FileBrowserException("MTP 重命名失败：${result.message}")
+                is BridgeResult.Success -> Unit
+            }
+        } finally {
+            if (locked) deviceLock.unlock()
+            onWaiting(null)
+        }
+    }
+
     override suspend fun delete(
         location: FileLocation,
         recursive: Boolean,

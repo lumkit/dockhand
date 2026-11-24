@@ -47,6 +47,7 @@ import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
+import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
 import dockhand.shared.generated.resources.Res
@@ -145,6 +146,10 @@ fun HomeScreen() {
         onDeleteRequestBackgroundChange = homeViewModel::onDeleteRequestBackgroundChange,
         onDeleteRequestDismiss = homeViewModel::onDeleteRequestDismiss,
         onDeleteRequestConfirm = homeViewModel::onDeleteRequestConfirm,
+        onRenameRequestNameChange = homeViewModel::onRenameRequestNameChange,
+        onRenameRequestBackgroundChange = homeViewModel::onRenameRequestBackgroundChange,
+        onRenameRequestDismiss = homeViewModel::onRenameRequestDismiss,
+        onRenameRequestConfirm = homeViewModel::onRenameRequestConfirm,
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
@@ -188,6 +193,10 @@ private fun HomeScreenContent(
     onDeleteRequestBackgroundChange: (Boolean) -> Unit,
     onDeleteRequestDismiss: () -> Unit,
     onDeleteRequestConfirm: () -> Unit,
+    onRenameRequestNameChange: (String) -> Unit,
+    onRenameRequestBackgroundChange: (Boolean) -> Unit,
+    onRenameRequestDismiss: () -> Unit,
+    onRenameRequestConfirm: () -> Unit,
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
@@ -371,6 +380,14 @@ private fun HomeScreenContent(
                 onBackgroundChange = onDeleteRequestBackgroundChange,
                 onDismiss = onDeleteRequestDismiss,
                 onConfirm = onDeleteRequestConfirm,
+            )
+
+            RenameRequestDialog(
+                request = uiState.renameRequest,
+                onNameChange = onRenameRequestNameChange,
+                onBackgroundChange = onRenameRequestBackgroundChange,
+                onDismiss = onRenameRequestDismiss,
+                onConfirm = onRenameRequestConfirm,
             )
         }
     }

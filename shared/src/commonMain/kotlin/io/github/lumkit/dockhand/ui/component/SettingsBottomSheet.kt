@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -111,7 +114,7 @@ fun SettingsBottomSheet(
     var scale by remember(interfaceScale) { mutableFloatStateOf(interfaceScale / 100f) }
     LaunchedEffect(interfaceScale) { scale = interfaceScale / 100f }
     var showScaleDialog by remember { mutableStateOf(false) }
-    var scaleDraft by remember { mutableStateOf("") }
+    val scaleInput = rememberTextFieldState()
     var showColorDialog by remember { mutableStateOf(false) }
     var dialogColor by remember { mutableStateOf(keyColor) }
     val themeModes = ColorSchemeMode.entries
@@ -177,7 +180,9 @@ fun SettingsBottomSheet(
                     },
                     hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                     onClick = {
-                        scaleDraft = (scale * 100).roundToInt().toString()
+                        scaleInput.setTextAndPlaceCursorAtEnd(
+                            (scale * 100).roundToInt().toString()
+                        )
                         showScaleDialog = true
                     },
                 )
@@ -281,14 +286,9 @@ fun SettingsBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 TextField(
-                    value = scaleDraft,
-                    onValueChange = { value ->
-                        if (value.all(Char::isDigit) && value.length <= 3) {
-                            scaleDraft = value
-                        }
-                    },
+                    state = scaleInput,
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -296,7 +296,8 @@ fun SettingsBottomSheet(
                 ) {
                     Button(
                         onClick = {
-                            val percent = scaleDraft.toIntOrNull() ?: (scale * 100).roundToInt()
+                            val percent = scaleInput.text.toString().toIntOrNull()
+                                ?: (scale * 100).roundToInt()
                             val safeScale = (percent / 100f).coerceIn(0.8f, 1.1f)
                             scale = safeScale
                             onInterfaceScaleChange((safeScale * 100).roundToInt())

@@ -93,6 +93,17 @@ interface FileBrowserRepository {
         throw FileBrowserException("当前文件系统不支持移动")
     }
 
+    /** 重命名文件/目录的耗时任务入口。 */
+    suspend fun renameWithProgress(
+        entry: FileEntry,
+        newName: String,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持重命名")
+    }
+
     /** 删除文件/目录的耗时任务入口。 */
     suspend fun deleteWithProgress(
         entries: List<FileEntry>,
@@ -249,6 +260,27 @@ class DefaultFileBrowserRepository(
                 recursive = true,
                 isCancelled = isCancelled,
             )
+        }
+    }
+
+    override suspend fun renameWithProgress(
+        entry: FileEntry,
+        newName: String,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        try {
+            onProgress(0, 1)
+            providerFor(entry.location.source).rename(
+                location = entry.location,
+                newName = newName,
+                isCancelled = isCancelled,
+                onWaiting = onWaiting,
+            )
+            onProgress(1, 1)
+        } finally {
+            onWaiting(null)
         }
     }
 

@@ -11,6 +11,32 @@ import kotlin.test.assertEquals
 
 class LocalCopyEngineTest {
     @Test
+    fun renamesFile() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-rename")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            Files.writeString(home.resolve("old.txt"), "hello")
+            val location = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.resolve("old.txt").toString(),
+            )
+
+            provider.rename(location, "new.txt")
+
+            assertEquals(false, Files.exists(home.resolve("old.txt")))
+            assertEquals("hello", Files.readString(home.resolve("new.txt")))
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Test
     fun movesFileAndDeletesSource() = runBlocking {
         val root = Files.createTempDirectory("dockhand-move")
         try {

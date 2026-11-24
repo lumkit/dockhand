@@ -398,6 +398,12 @@ private fun FileEntryRow(
                                 onClick = { dispatch(FileContextAction.Delete) },
                             )
                         )
+                        add(
+                            DropdownItem(
+                                text = renameLabel,
+                                onClick = { dispatch(FileContextAction.Rename) },
+                            )
+                        )
                     }
                 )
             )

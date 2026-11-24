@@ -28,6 +28,8 @@ import dockhand.shared.generated.resources.task_copy_title
 import dockhand.shared.generated.resources.task_delete_detail
 import dockhand.shared.generated.resources.task_delete_title
 import dockhand.shared.generated.resources.task_move_title
+import dockhand.shared.generated.resources.task_rename_detail
+import dockhand.shared.generated.resources.task_rename_title
 import dockhand.shared.generated.resources.task_waiting_message
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
@@ -385,7 +387,69 @@ class HomeViewModel(
                     it.copy(deleteRequest = DeleteRequestState(entry = entry))
                 }
             }
+            FileContextAction.Rename -> {
+                _state.update {
+                    it.copy(
+                        renameRequest = RenameRequestState(
+                            entry = entry,
+                            newName = entry.name,
+                        )
+                    )
+                }
+            }
             else -> Unit
+        }
+    }
+
+    fun onRenameRequestNameChange(name: String) {
+        _state.update { state ->
+            state.copy(renameRequest = state.renameRequest?.copy(newName = name))
+        }
+    }
+
+    fun onRenameRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(renameRequest = state.renameRequest?.copy(background = background))
+        }
+    }
+
+    fun onRenameRequestDismiss() {
+        _state.update { it.copy(renameRequest = null) }
+    }
+
+    fun onRenameRequestConfirm() {
+        val request = _state.value.renameRequest ?: return
+        val newName = request.newName.trim()
+        if (newName.isEmpty()) return
+        if (newName == request.entry.name) {
+            _state.update { it.copy(renameRequest = null) }
+            return
+        }
+        _state.update { it.copy(renameRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_rename_title, request.entry.name)
+            val detail = getString(Res.string.task_rename_detail, newName)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.renameWithProgress(
+                    entry = request.entry,
+                    newName = newName,
+                    onProgress = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
         }
     }
 

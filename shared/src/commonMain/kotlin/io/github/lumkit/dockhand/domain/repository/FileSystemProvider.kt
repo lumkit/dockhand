@@ -90,6 +90,14 @@ interface FileSystemProvider {
         onWaiting: (deviceName: String?) -> Unit = {},
     ): Unit = throw FileBrowserException("该文件系统不支持删除：${location.source.name}")
 
+    /** 在同一目录内重命名文件/目录。 */
+    suspend fun rename(
+        location: FileLocation,
+        newName: String,
+        isCancelled: () -> Boolean = { false },
+        onWaiting: (deviceName: String?) -> Unit = {},
+    ): Unit = throw FileBrowserException("该文件系统不支持重命名：${location.source.name}")
+
     /** 目标是否已经存在。默认返回 false，支持覆盖检查的 provider 应覆盖。 */
     suspend fun exists(location: FileLocation): Boolean = false
 
