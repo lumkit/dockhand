@@ -30,6 +30,19 @@ val jdk25Home = javaToolchains.launcherFor {
     languageVersion.set(JavaLanguageVersion.of(25))
 }.get().metadata.installationPath.asFile.absolutePath
 
+val isAppStoreBuild = providers.gradleProperty("dockhand.appStore")
+    .orNull
+    .toBoolean()
+val macSignEnabled = providers.gradleProperty("dockhand.macSign")
+    .orNull
+    .toBoolean()
+val macSignIdentity = providers.gradleProperty("dockhand.macSignIdentity").orNull
+val macSignKeychain = providers.gradleProperty("dockhand.macKeychain").orNull
+val macNotaryAppleId = providers.gradleProperty("dockhand.notaryAppleId").orNull
+val macNotaryPassword = providers.gradleProperty("dockhand.notaryPassword").orNull
+val macNotaryTeamId = providers.gradleProperty("dockhand.notaryTeamId").orNull
+val macProvisioningProfile = providers.gradleProperty("dockhand.provisioningProfile").orNull
+
 compose.desktop {
     application {
         mainClass = "io.github.lumkit.dockhand.MainKt"
@@ -56,15 +69,47 @@ compose.desktop {
             macOS {
                 bundleID = "io.github.lumkit.dockhand"
                 packageName = "Dockhand"
+                // CFBundleVersion，App Store 每次上传必须递增
+                packageBuildVersion = "1"
+                // App Store 构建必须启用沙盒；当前默认使用 Developer ID 的
+                // Hardened Runtime entitlements。沙盒化的文件访问仍需改造。
+                appStore = isAppStoreBuild
+                entitlementsFile.set(
+                    project.file(
+                        if (isAppStoreBuild) "entitlements-appstore.plist"
+                        else "entitlements.plist"
+                    )
+                )
+                macProvisioningProfile?.let { provisioningProfile.set(project.file(it)) }
                 iconFile.set(project.file("icons/Dockhand.icns"))
                 dockName = "Dockhand"
                 setDockNameSameAsPackageName = true
                 appCategory = "public.app-category.utilities"
                 minimumSystemVersion = "12.0"
+                signing {
+                    sign.set(macSignEnabled)
+                    macSignIdentity?.let { identity.set(it) }
+                    macSignKeychain?.let { keychain.set(it) }
+                }
+                notarization {
+                    macNotaryAppleId?.let { appleID.set(it) }
+                    macNotaryPassword?.let { password.set(it) }
+                    macNotaryTeamId?.let { teamID.set(it) }
+                }
                 infoPlist {
                     extraKeysRawXml = """
                         <key>CFBundleDisplayName</key>
                         <string>Dockhand</string>
+                        <key>NSDesktopFolderUsageDescription</key>
+                        <string>Dockhand 需要访问桌面文件，以便浏览和管理文件。</string>
+                        <key>NSDocumentsFolderUsageDescription</key>
+                        <string>Dockhand 需要访问文稿文件，以便浏览和管理文件。</string>
+                        <key>NSDownloadsFolderUsageDescription</key>
+                        <string>Dockhand 需要访问下载文件，以便浏览和管理文件。</string>
+                        <key>NSRemovableVolumesUsageDescription</key>
+                        <string>Dockhand 需要访问外接磁盘，以便浏览和管理其中的文件。</string>
+                        <key>NSNetworkVolumesUsageDescription</key>
+                        <string>Dockhand 需要访问网络卷，以便浏览和管理其中的文件。</string>
                     """.trimIndent()
                 }
             }
@@ -85,3 +130,49 @@ compose.desktop {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// macOS bundle compliance
+// ---------------------------------------------------------------------------
+fun injectPrivacyManifest(
+    taskName: String,
+    appPath: String,
+) {
+    tasks.configureEach {
+        if (name != taskName) return@configureEach
+        inputs.file(project.file("PrivacyInfo.xcprivacy"))
+        doLast {
+            val app = project.file(appPath)
+            val resources = app.resolve("Contents/Resources").apply { mkdirs() }
+            project.copy {
+                from(project.file("PrivacyInfo.xcprivacy"))
+                into(resources)
+            }
+            // 复制资源会改变 bundle 内容，必须重新签名，否则签名失效。
+            val entitlements = project.file(
+                if (isAppStoreBuild) "entitlements-appstore.plist"
+                else "entitlements.plist"
+            )
+            val identity = macSignIdentity ?: "-"
+            val result = ProcessBuilder(
+                "/usr/bin/codesign",
+                "--force",
+                "--deep",
+                "--options", "runtime",
+                "--entitlements", entitlements.absolutePath,
+                "--sign", identity,
+                app.absolutePath,
+            ).inheritIO().start().waitFor()
+            check(result == 0) { "codesign failed with exit code $result" }
+        }
+    }
+}
+
+injectPrivacyManifest(
+    "createDistributableImpl",
+    "build/compose/binaries/main/app/Dockhand.app",
+)
+injectPrivacyManifest(
+    "createReleaseDistributableImpl",
+    "build/compose/binaries/main-release/app/Dockhand.app",
+)
