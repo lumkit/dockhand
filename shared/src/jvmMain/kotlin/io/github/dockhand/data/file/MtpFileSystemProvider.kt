@@ -12,6 +12,11 @@ import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.repository.FileSystemProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -42,6 +47,7 @@ class MtpFileSystemProvider(
 ) : FileSystemProvider {
 
     private val requestIds = AtomicLong()
+    private val transferIds = AtomicLong()
     private val indexMutex = Mutex()
     private val indexedDirectories = object : LinkedHashMap<FileLocation, List<FileEntry>>(4, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<FileLocation, List<FileEntry>>): Boolean =
@@ -190,17 +196,46 @@ class MtpFileSystemProvider(
         list(FileLocation(location.source, parentPath)).any { it.name == name }
     }
 
+    override suspend fun copyNative(
+        source: FileLocation,
+        destinationDirectory: FileLocation,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val sourceTarget = targetOf(source.source)
+        val destinationTarget = targetOf(destinationDirectory.source)
+        if (sourceTarget.deviceKey != destinationTarget.deviceKey) {
+            return@withContext false
+        }
+        val name = source.path.substringAfterLast('/')
+        val destinationPath = appendPath(destinationDirectory.path, name)
+        when (val result = MtpNativeBridge.copyObject(
+            deviceKey = sourceTarget.deviceKey,
+            sourceStorageId = sourceTarget.storageId,
+            sourcePath = source.path,
+            destinationStorageId = destinationTarget.storageId,
+            destinationPath = destinationPath,
+        )) {
+            is BridgeResult.Failure -> false
+            is BridgeResult.Success -> true
+        }
+    }
+
     override suspend fun exportToLocal(
         source: FileLocation,
         localPath: String,
+        onProgress: (completed: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         val target = targetOf(source.source)
-        when (val result = MtpNativeBridge.download(
-            deviceKey = target.deviceKey,
-            storageId = target.storageId,
-            remotePath = source.path,
-            localPath = localPath,
-        )) {
+        val requestId = transferIds.incrementAndGet()
+        val result = runTransferWithProgress(requestId, onProgress) {
+            MtpNativeBridge.downloadWithProgress(
+                requestId = requestId,
+                deviceKey = target.deviceKey,
+                storageId = target.storageId,
+                remotePath = source.path,
+                localPath = localPath,
+            )
+        }
+        when (result) {
             is BridgeResult.Failure -> throw FileBrowserException("MTP 下载失败：${result.message}")
             is BridgeResult.Success -> Unit
         }
@@ -210,19 +245,53 @@ class MtpFileSystemProvider(
         localPath: String,
         destination: FileLocation,
         overwrite: Boolean,
+        onProgress: (completed: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         val target = targetOf(destination.source)
         if (overwrite) {
             delete(destination, recursive = true)
         }
-        when (val result = invokeUpload(
-            deviceKey = target.deviceKey,
-            storageId = target.storageId,
-            localPath = localPath,
-            remotePath = destination.path,
-        )) {
+        val requestId = transferIds.incrementAndGet()
+        val result = runTransferWithProgress(requestId, onProgress) {
+            MtpNativeBridge.uploadWithProgress(
+                requestId = requestId,
+                deviceKey = target.deviceKey,
+                storageId = target.storageId,
+                localPath = localPath,
+                remotePath = destination.path,
+            )
+        }
+        when (result) {
             is BridgeResult.Failure -> throw FileBrowserException("MTP 上传失败：${result.message}")
             is BridgeResult.Success -> Unit
+        }
+    }
+
+    @OptIn(InternalCoroutinesApi::class)
+    private suspend fun <T> runTransferWithProgress(
+        requestId: Long,
+        onProgress: (Long, Long) -> Unit,
+        transfer: suspend () -> BridgeResult<T>,
+    ): BridgeResult<T> = coroutineScope {
+        val deferred = async(Dispatchers.IO) { transfer() }
+        val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion(
+            onCancelling = true,
+        ) { cause ->
+            if (cause != null) {
+                MtpNativeBridge.cancelTransfer(requestId)
+            }
+        }
+        try {
+            while (!deferred.isCompleted) {
+                MtpNativeBridge.transferProgress(requestId)?.let { (completed, total) ->
+                    if (total > 0) onProgress(completed, total)
+                }
+                delay(100)
+            }
+            deferred.await()
+        } finally {
+            cancellation?.dispose()
+            MtpNativeBridge.clearTransferProgress(requestId)
         }
     }
 

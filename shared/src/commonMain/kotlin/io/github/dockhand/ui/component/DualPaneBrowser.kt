@@ -61,6 +61,7 @@ fun DualPaneBrowser(
             onGoUp = { onGoUp(focusedPane) },
             onCreate = { name, createFile -> onCreate(focusedPane, name, createFile) },
             onSync = { onSync(focusedPane) },
+            onRefresh = { onRetry(focusedPane) },
             onDismissOperationError = onDismissOperationError,
         )
 

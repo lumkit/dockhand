@@ -137,6 +137,51 @@ internal object MtpNativeBridge {
             ValueLayout.ADDRESS,
         ),
     )
+    private val copyObjectHandle: MethodHandle = downcall(
+        "dockhand_mtp_copy_object",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+        ),
+    )
+    private val uploadProgressHandle: MethodHandle = downcall(
+        "dockhand_mtp_upload_progress",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        ),
+    )
+    private val downloadProgressHandle: MethodHandle = downcall(
+        "dockhand_mtp_download_progress",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        ),
+    )
+    private val transferProgressHandle: MethodHandle = downcall(
+        "dockhand_mtp_transfer_progress",
+        FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+    )
+    private val transferClearHandle: MethodHandle = downcall(
+        "dockhand_mtp_transfer_clear",
+        FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG),
+    )
+    private val cancelTransferHandle: MethodHandle = downcall(
+        "dockhand_mtp_cancel_transfer",
+        FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG),
+    )
     private val freeHandle: MethodHandle = downcall(
         "dockhand_mtp_free",
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS),
@@ -297,6 +342,122 @@ internal object MtpNativeBridge {
         } finally {
             arena.close()
         }
+    }
+
+    fun copyObject(
+        deviceKey: Long,
+        sourceStorageId: Long,
+        sourcePath: String,
+        destinationStorageId: Long,
+        destinationPath: String,
+    ): BridgeResult<Unit> {
+        val arena = Arena.ofConfined()
+        return try {
+            val source = arena.allocateFrom(sourcePath)
+            val destination = arena.allocateFrom(destinationPath)
+            val data = callJson(
+                copyObjectHandle,
+                deviceKey,
+                sourceStorageId,
+                source,
+                destinationStorageId,
+                destination,
+            )
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(Unit)
+            }
+        } catch (error: Throwable) {
+            BridgeResult.Failure("MTP 设备端复制失败：${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            arena.close()
+        }
+    }
+
+    fun uploadWithProgress(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        localPath: String,
+        remotePath: String,
+    ): BridgeResult<Long> {
+        val arena = Arena.ofConfined()
+        return try {
+            val local = arena.allocateFrom(localPath)
+            val remote = arena.allocateFrom(remotePath)
+            val data = callJson(
+                uploadProgressHandle,
+                requestId,
+                deviceKey,
+                storageId,
+                local,
+                remote,
+            )
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(
+                    result.value.jsonObject["handle"]?.jsonPrimitive?.longOrNull
+                        ?: return BridgeResult.Failure("MTP 上传没有返回 handle")
+                )
+            }
+        } catch (error: Throwable) {
+            BridgeResult.Failure("MTP 上传失败：${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            arena.close()
+        }
+    }
+
+    fun downloadWithProgress(
+        requestId: Long,
+        deviceKey: Long,
+        storageId: Long,
+        remotePath: String,
+        localPath: String,
+    ): BridgeResult<Long> {
+        val arena = Arena.ofConfined()
+        return try {
+            val remote = arena.allocateFrom(remotePath)
+            val local = arena.allocateFrom(localPath)
+            val data = callJson(
+                downloadProgressHandle,
+                requestId,
+                deviceKey,
+                storageId,
+                remote,
+                local,
+            )
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(
+                    result.value.jsonObject["bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+                )
+            }
+        } catch (error: Throwable) {
+            BridgeResult.Failure("MTP 下载失败：${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            arena.close()
+        }
+    }
+
+    fun transferProgress(requestId: Long): Pair<Long, Long>? {
+        val data = callJson(transferProgressHandle, requestId)
+        val value = when (val result = parse(data)) {
+            is BridgeResult.Failure -> return null
+            is BridgeResult.Success -> result.value
+        }
+        if (value is JsonNull) return null
+        val progress = value.jsonObject
+        val completed = progress["completed"]?.jsonPrimitive?.longOrNull ?: return null
+        val total = progress["total"]?.jsonPrimitive?.longOrNull ?: return null
+        return completed to total
+    }
+
+    fun clearTransferProgress(requestId: Long) {
+        runCatching { transferClearHandle.invokeWithArguments(requestId) }
+    }
+
+    fun cancelTransfer(requestId: Long) {
+        runCatching { cancelTransferHandle.invokeWithArguments(requestId) }
     }
 
     fun delete(deviceKey: Long, storageId: Long, remotePath: String): BridgeResult<Unit> {

@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 enum class TaskState {
     Running,
@@ -44,6 +46,8 @@ data class AppTask(
     val progress: TaskProgress = TaskProgress(),
     val isBackground: Boolean = false,
     val error: String? = null,
+    val speedBytesPerSecond: Double? = null,
+    val etaSeconds: Long? = null,
 )
 
 /** 系统通知；返回 false 时由 UI 用 snackbar 兜底。 */
@@ -56,15 +60,53 @@ object NoopTaskNotifier : TaskNotifier {
 }
 
 class TaskContext internal constructor(
-    private val onProgress: (TaskProgress) -> Unit,
+    private val onProgress: (progress: TaskProgress, speed: Double?, etaSeconds: Long?) -> Unit,
     private val rollbacks: MutableList<suspend () -> Unit>,
     private val job: Job,
 ) {
+    private var sample: ProgressSample? = null
+
+    private data class ProgressSample(
+        val at: TimeMark,
+        val completed: Long,
+        val speed: Double?,
+    )
+
     val isCancelled: Boolean
         get() = !job.isActive
 
     fun report(completed: Long?, total: Long?) {
-        onProgress(TaskProgress(completed, total))
+        val progress = TaskProgress(completed, total)
+        var speed: Double? = null
+        var eta: Long? = null
+        if (
+            completed != null &&
+            total != null &&
+            total > 1024 &&
+            completed in 0..total
+        ) {
+            val now = TimeSource.Monotonic.markNow()
+            val previous = sample
+            if (previous != null && completed >= previous.completed) {
+                val elapsed = previous.at.elapsedNow().inWholeMilliseconds / 1000.0
+                if (elapsed > 0.05) {
+                    val instant = (completed - previous.completed) / elapsed
+                    speed = previous.speed
+                        ?.let { it * 0.7 + instant * 0.3 }
+                        ?: instant
+                    speed = speed.takeIf { it > 0.0 }
+                } else {
+                    speed = previous.speed
+                }
+            }
+            if (speed != null) {
+                eta = ((total - completed) / speed).toLong().coerceAtLeast(0)
+            }
+            sample = ProgressSample(now, completed, speed)
+        } else {
+            sample = null
+        }
+        onProgress(progress, speed, eta)
     }
 
     fun addRollback(block: suspend () -> Unit) {
@@ -91,7 +133,7 @@ class TaskManager(
         title: String,
         detail: String? = null,
         background: Boolean,
-        onSuccess: (() -> Unit)? = null,
+        onFinished: (() -> Unit)? = null,
         operation: suspend TaskContext.() -> Unit,
     ): Long {
         val id = nextId++
@@ -99,15 +141,20 @@ class TaskManager(
         _tasks.update { it + AppTask(id, title, detail, isBackground = background) }
         jobs[id] = scope.launch {
             val context = TaskContext(
-                onProgress = { progress ->
-                    updateTask(id) { it.copy(progress = progress) }
+                onProgress = { progress, speed, eta ->
+                    updateTask(id) {
+                        it.copy(
+                            progress = progress,
+                            speedBytesPerSecond = speed,
+                            etaSeconds = eta,
+                        )
+                    }
                 },
                 rollbacks = rollbacks,
                 job = currentCoroutineContext()[Job] ?: error("task job missing"),
             )
             try {
                 context.operation()
-                runCatching { onSuccess?.invoke() }
                 updateTask(id) { it.copy(state = TaskState.Completed) }
                 if (background) notify(id)
                 removeTask(id)
@@ -125,6 +172,7 @@ class TaskManager(
                 if (background) notify(id)
                 removeTask(id)
             } finally {
+                runCatching { onFinished?.invoke() }
                 jobs.remove(id)
             }
         }

@@ -58,12 +58,20 @@ import dockhand.shared.generated.resources.task_completed
 import dockhand.shared.generated.resources.task_failed
 import dockhand.shared.generated.resources.task_progress_unknown
 import dockhand.shared.generated.resources.task_running
+import dockhand.shared.generated.resources.task_eta_days_hours
+import dockhand.shared.generated.resources.task_eta_hours_minutes
+import dockhand.shared.generated.resources.task_eta_less_than_second
+import dockhand.shared.generated.resources.task_eta_minutes_seconds
+import dockhand.shared.generated.resources.task_eta_seconds
+import dockhand.shared.generated.resources.task_speed
+import dockhand.shared.generated.resources.task_speed_eta
 import dockhand.shared.generated.resources.tasks_badge_overflow
 import dockhand.shared.generated.resources.tasks_empty
 import dockhand.shared.generated.resources.tasks_tooltip_title
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.BadgedBox
@@ -408,6 +416,7 @@ private fun TopBarActions(
                                     } else {
                                         onDismissTask(task.id)
                                     }
+                                    popupShow = false
                                 },
                             )
                         }
@@ -444,19 +453,44 @@ private fun TopBarActions(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TextButton(
-                text = stringResource(Res.string.action_cancel),
-                onClick = { pendingCancel = null },
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
                 text = stringResource(Res.string.action_confirm),
                 onClick = {
                     taskToCancel?.let { onCancelTask(it.id) }
                     pendingCancel = null
                 },
                 modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+            )
+            TextButton(
+                text = stringResource(Res.string.action_cancel),
+                onClick = { pendingCancel = null },
+                modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+@Composable
+private fun formatEta(seconds: Long): String {
+    val value = seconds.coerceAtLeast(0)
+    return when {
+        value <= 0 -> stringResource(Res.string.task_eta_less_than_second)
+        value < 60 -> stringResource(Res.string.task_eta_seconds, value)
+        value < 3600 -> stringResource(
+            Res.string.task_eta_minutes_seconds,
+            value / 60,
+            value % 60,
+        )
+        value < 86_400 -> stringResource(
+            Res.string.task_eta_hours_minutes,
+            value / 3600,
+            (value % 3600) / 60,
+        )
+        else -> stringResource(
+            Res.string.task_eta_days_hours,
+            value / 86_400,
+            (value % 86_400) / 3600,
+        )
     }
 }
 
@@ -497,6 +531,22 @@ private fun TaskRow(
                     progress = fraction,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                val speed = task.speedBytesPerSecond
+                if (speed != null) {
+                    val speedText = formatFileSize(speed.toLong())
+                    Text(
+                        text = task.etaSeconds?.let { eta ->
+                            stringResource(
+                                Res.string.task_speed_eta,
+                                speedText,
+                                formatEta(eta),
+                            )
+                        } ?: stringResource(Res.string.task_speed, speedText),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
             }
         }
         IconButton(

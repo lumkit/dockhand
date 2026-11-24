@@ -140,22 +140,28 @@ class LocalFileSystemProvider(
         )
     }
 
+    override fun localPath(location: FileLocation): String? = location.path
+
     override suspend fun exportToLocal(
         source: FileLocation,
         localPath: String,
+        onProgress: (completed: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         ensureLocal(source)
+        val total = runCatching { Files.size(source.toLocalPath()) }.getOrDefault(0L)
         Files.copy(
             source.toLocalPath(),
             Path.of(localPath),
             StandardCopyOption.REPLACE_EXISTING,
         )
+        onProgress(total, total)
     }
 
     override suspend fun importFromLocal(
         localPath: String,
         destination: FileLocation,
         overwrite: Boolean,
+        onProgress: (completed: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         ensureLocal(destination)
         val target = destination.toLocalPath()
@@ -163,11 +169,13 @@ class LocalFileSystemProvider(
             throw FileBrowserException("目标已存在：${destination.path}")
         }
         target.parent?.let { Files.createDirectories(it) }
+        val total = runCatching { Files.size(Path.of(localPath)) }.getOrDefault(0L)
         Files.copy(
             Path.of(localPath),
             target,
             if (overwrite) StandardCopyOption.REPLACE_EXISTING else StandardCopyOption.COPY_ATTRIBUTES,
         )
+        onProgress(total, total)
     }
 
     override suspend fun exists(location: FileLocation): Boolean = withContext(Dispatchers.IO) {

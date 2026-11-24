@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use tokio::io::AsyncWriteExt;
@@ -19,6 +20,44 @@ fn active_lists() -> &'static Mutex<HashMap<u64, mtp_rs::CancelToken>> {
 fn cancelled_list_requests() -> &'static Mutex<HashSet<u64>> {
     static CANCELLED: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
     CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn transfer_progress() -> &'static Mutex<HashMap<u64, (u64, u64)>> {
+    static PROGRESS: OnceLock<Mutex<HashMap<u64, (u64, u64)>>> = OnceLock::new();
+    PROGRESS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn set_transfer_progress(request_id: u64, completed: u64, total: u64) {
+    transfer_progress()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(request_id, (completed, total));
+}
+
+fn clear_transfer_progress(request_id: u64) {
+    transfer_progress()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
+}
+
+fn cancelled_transfers() -> &'static Mutex<HashSet<u64>> {
+    static CANCELLED: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+    CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn is_transfer_cancelled(request_id: u64) -> bool {
+    cancelled_transfers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains(&request_id)
+}
+
+fn clear_transfer_cancelled(request_id: u64) {
+    cancelled_transfers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -291,6 +330,103 @@ async fn upload_file(device_key: u64, storage_id: u64, local_path: String, remot
     Ok(json!({ "handle": handle.0, "size": size }))
 }
 
+async fn upload_file_progress(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    local_path: String,
+    remote_path: String,
+) -> Result<Value, String> {
+    let local = Path::new(&local_path);
+    let size = tokio::fs::metadata(local)
+        .await
+        .map_err(|error| format!("无法读取本地文件：{error}"))?
+        .len();
+    let file = tokio::fs::File::open(local)
+        .await
+        .map_err(|error| format!("无法打开本地文件：{error}"))?;
+    let stream = ReaderStream::new(file);
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
+    let (parent_path, name) = split_parent(&remote_path)?;
+    let parent = resolve_folder(&storage, &parent_path).await?;
+    if is_transfer_cancelled(request_id) {
+        clear_transfer_cancelled(request_id);
+        return Err("MTP 传输已取消".to_string());
+    }
+    set_transfer_progress(request_id, 0, size);
+    let result = storage
+        .upload_with_progress(parent, NewObjectInfo::file(name, size), stream, move |progress| {
+            if is_transfer_cancelled(request_id) {
+                return ControlFlow::Break(());
+            }
+            set_transfer_progress(
+                request_id,
+                progress.bytes_transferred,
+                progress.total_bytes.unwrap_or(size),
+            );
+            ControlFlow::Continue(())
+        })
+        .await;
+    clear_transfer_progress(request_id);
+    clear_transfer_cancelled(request_id);
+    let handle = result.map_err(|error| error.to_string())?;
+    Ok(json!({ "handle": handle.0, "size": size }))
+}
+
+async fn download_file_progress(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    remote_path: String,
+    local_path: String,
+) -> Result<Value, String> {
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
+    let (parent_path, name) = split_parent(&remote_path)?;
+    let parent = resolve_folder(&storage, &parent_path).await?;
+    let objects = storage
+        .list_objects(parent)
+        .await
+        .map_err(|error| error_message(&error))?;
+    let object = objects
+        .into_iter()
+        .find(|item| item.filename == name && !item.is_folder())
+        .ok_or_else(|| format!("文件不存在：{remote_path}"))?;
+
+    let total = object.size;
+    let mut downloaded = 0u64;
+    if is_transfer_cancelled(request_id) {
+        clear_transfer_cancelled(request_id);
+        return Err("MTP 传输已取消".to_string());
+    }
+    set_transfer_progress(request_id, 0, total);
+    let mut download = storage
+        .download(object.handle, ByteRange::Full)
+        .await
+        .map_err(|error| error_message(&error))?;
+    let mut file = tokio::fs::File::create(&local_path)
+        .await
+        .map_err(|error| format!("无法创建本地文件：{error}"))?;
+    while let Some(chunk) = download.next_chunk().await {
+        if is_transfer_cancelled(request_id) {
+            clear_transfer_progress(request_id);
+            clear_transfer_cancelled(request_id);
+            return Err("MTP 传输已取消".to_string());
+        }
+        let bytes = chunk.map_err(|error| error_message(&error))?;
+        downloaded += bytes.len() as u64;
+        set_transfer_progress(request_id, downloaded, total);
+        file.write_all(&bytes)
+            .await
+            .map_err(|error| format!("写入本地文件失败：{error}"))?;
+    }
+    file.flush()
+        .await
+        .map_err(|error| format!("写入本地文件失败：{error}"))?;
+    clear_transfer_progress(request_id);
+    clear_transfer_cancelled(request_id);
+    Ok(json!({ "bytes": total }))
+}
+
 async fn download_file(
     device_key: u64,
     storage_id: u64,
@@ -426,6 +562,153 @@ pub extern "C" fn dockhand_mtp_upload(
     run_operation(async move {
         upload_file(device_key, storage_id, local_path?, remote_path?).await
     })
+}
+
+async fn copy_object_entry(
+    device_key: u64,
+    source_storage_id: u64,
+    source_path: String,
+    destination_storage_id: u64,
+    destination_path: String,
+) -> Result<Value, String> {
+    let (device, source_storage) = open_storage(device_key, source_storage_id, false).await?;
+    let (source_parent_path, source_name) = split_parent(&source_path)?;
+    let source_parent = resolve_folder(&source_storage, &source_parent_path).await?;
+    let objects = source_storage
+        .list_objects(source_parent)
+        .await
+        .map_err(|error| error_message(&error))?;
+    let object = objects
+        .into_iter()
+        .find(|item| item.filename == source_name)
+        .ok_or_else(|| format!("文件不存在：{source_path}"))?;
+
+    let (destination_parent_path, destination_name) = split_parent(&destination_path)?;
+    if destination_name != source_name {
+        return Err("设备端复制不支持同时重命名".to_string());
+    }
+    let other_storage = if destination_storage_id == source_storage_id {
+        None
+    } else {
+        Some(
+            device
+                .storage(StorageId(destination_storage_id))
+                .await
+                .map_err(|error| error_message(&error))?,
+        )
+    };
+    let destination_parent = resolve_folder(
+        other_storage.as_ref().unwrap_or(&source_storage),
+        &destination_parent_path,
+    )
+    .await?;
+    let handle = source_storage
+        .copy_object(
+            object.handle,
+            destination_parent.unwrap_or(ObjectHandle::ROOT),
+            Some(StorageId(destination_storage_id)),
+        )
+        .await
+        .map_err(|error| error_message(&error))?;
+    Ok(json!({ "handle": handle.0 }))
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_copy_object(
+    device_key: u64,
+    source_storage_id: u64,
+    source_path: *const c_char,
+    destination_storage_id: u64,
+    destination_path: *const c_char,
+) -> *mut c_char {
+    let source_path = read_c_string(source_path);
+    let destination_path = read_c_string(destination_path);
+    run_operation(async move {
+        copy_object_entry(
+            device_key,
+            source_storage_id,
+            source_path?,
+            destination_storage_id,
+            destination_path?,
+        )
+        .await
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_upload_progress(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    local_path: *const c_char,
+    remote_path: *const c_char,
+) -> *mut c_char {
+    let local_path = read_c_string(local_path);
+    let remote_path = read_c_string(remote_path);
+    run_operation(async move {
+        upload_file_progress(
+            request_id,
+            device_key,
+            storage_id,
+            local_path?,
+            remote_path?,
+        )
+        .await
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_download_progress(
+    request_id: u64,
+    device_key: u64,
+    storage_id: u64,
+    remote_path: *const c_char,
+    local_path: *const c_char,
+) -> *mut c_char {
+    let remote_path = read_c_string(remote_path);
+    let local_path = read_c_string(local_path);
+    run_operation(async move {
+        download_file_progress(
+            request_id,
+            device_key,
+            storage_id,
+            remote_path?,
+            local_path?,
+        )
+        .await
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_transfer_progress(request_id: u64) -> *mut c_char {
+    let progress = transfer_progress()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&request_id)
+        .copied();
+    to_c_string(
+        json!({
+            "ok": true,
+            "data": progress.map(|(completed, total)| json!({
+                "completed": completed,
+                "total": total,
+            })),
+        })
+        .to_string(),
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_cancel_transfer(request_id: u64) {
+    cancelled_transfers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(request_id);
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_transfer_clear(request_id: u64) {
+    clear_transfer_progress(request_id);
 }
 
 #[no_mangle]

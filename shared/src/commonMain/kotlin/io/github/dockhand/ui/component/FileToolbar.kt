@@ -35,6 +35,7 @@ import dockhand.shared.generated.resources.field_name
 import dockhand.shared.generated.resources.tooltip_back
 import dockhand.shared.generated.resources.tooltip_forward
 import dockhand.shared.generated.resources.tooltip_new
+import dockhand.shared.generated.resources.tooltip_refresh
 import dockhand.shared.generated.resources.tooltip_sync
 import dockhand.shared.generated.resources.tooltip_up
 import org.jetbrains.compose.resources.stringResource
@@ -49,6 +50,7 @@ import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Replace
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -73,6 +75,7 @@ fun FileToolbar(
     onGoUp: () -> Unit,
     onCreate: (String, Boolean) -> Unit,
     onSync: () -> Unit,
+    onRefresh: () -> Unit,
     onDismissOperationError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +129,14 @@ fun FileToolbar(
                 modifier = Modifier.weight(1f),
                 iconRotate = 90f,
                 onClick = onGoUp,
+            )
+            ToolbarAction(
+                icon = MiuixIcons.Refresh,
+                tooltip = stringResource(Res.string.tooltip_refresh),
+                enabled = canCreate,
+                modifier = Modifier.weight(1f),
+                iconRotate = 90f,
+                onClick = onRefresh,
             )
         }
 

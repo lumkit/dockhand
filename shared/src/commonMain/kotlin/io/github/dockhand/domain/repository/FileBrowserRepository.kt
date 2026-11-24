@@ -69,6 +69,7 @@ interface FileBrowserRepository {
         destinationDirectory: FileLocation,
         overwrite: Boolean = false,
         onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onBytes: (completed: Long, total: Long) -> Unit = { _, _ -> },
         isCancelled: () -> Boolean = { false },
     ) {
         copy(entries, destinationDirectory, overwrite)
@@ -139,6 +140,7 @@ class DefaultFileBrowserRepository(
         destinationDirectory: FileLocation,
         overwrite: Boolean,
         onProgress: (completed: Long?, total: Long?) -> Unit,
+        onBytes: (completed: Long, total: Long) -> Unit,
         isCancelled: () -> Boolean,
     ) {
         if (entries.isEmpty()) return
@@ -170,6 +172,7 @@ class DefaultFileBrowserRepository(
                         overwrite = overwrite,
                         tempDirectory = tempDirectory,
                         tempCounter = tempCounter,
+                        onBytes = onBytes,
                         isCancelled = isCancelled,
                     )
                     copiedRoot?.let(createdRoots::add)
@@ -201,6 +204,7 @@ class DefaultFileBrowserRepository(
         overwrite: Boolean,
         tempDirectory: String,
         tempCounter: IntArray,
+        onBytes: (Long, Long) -> Unit,
         isCancelled: () -> Boolean,
     ): FileLocation? {
         if (isCancelled()) throw CancellationException("复制已取消")
@@ -227,9 +231,30 @@ class DefaultFileBrowserRepository(
                     overwrite = overwrite,
                     tempDirectory = tempDirectory,
                     tempCounter = tempCounter,
+                    onBytes = onBytes,
                     isCancelled = isCancelled,
                 )
             }
+            return target
+        }
+
+        val sourceLocalPath = sourceProvider.localPath(entry.location)
+        val destinationLocalPath = destinationProvider.localPath(target)
+        if (sourceLocalPath != null && destinationProvider.kind == FileSourceKind.Mtp) {
+            destinationProvider.importFromLocal(
+                localPath = sourceLocalPath,
+                destination = target,
+                overwrite = overwrite,
+                onProgress = onBytes,
+            )
+            return target
+        }
+        if (sourceProvider.kind == FileSourceKind.Mtp && destinationLocalPath != null) {
+            sourceProvider.exportToLocal(
+                source = entry.location,
+                localPath = destinationLocalPath,
+                onProgress = onBytes,
+            )
             return target
         }
 
@@ -238,9 +263,9 @@ class DefaultFileBrowserRepository(
             "${tempCounter[0]++}-${entry.name.replace('/', '_')}",
         )
         try {
-            sourceProvider.exportToLocal(entry.location, tempPath)
+            sourceProvider.exportToLocal(entry.location, tempPath, onBytes)
             if (isCancelled()) throw CancellationException("复制已取消")
-            destinationProvider.importFromLocal(tempPath, target, overwrite)
+            destinationProvider.importFromLocal(tempPath, target, overwrite, onBytes)
         } finally {
             deleteTaskTempPath(tempPath)
         }

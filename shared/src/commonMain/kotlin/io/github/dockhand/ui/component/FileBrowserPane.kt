@@ -1,5 +1,6 @@
 package io.github.dockhand.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -143,7 +144,7 @@ fun FileBrowserPane(
                 .fillMaxSize()
                 .alpha(if (isFocused) 1f else INACTIVE_PANE_ALPHA)
         ) {
-            if (pane.isLoading && pane.entries.isNotEmpty()) {
+            AnimatedVisibility(visible = pane.isLoading && pane.entries.isNotEmpty()) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 

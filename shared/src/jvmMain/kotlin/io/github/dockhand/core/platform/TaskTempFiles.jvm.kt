@@ -1,6 +1,7 @@
 package io.github.dockhand.core.platform
 
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.Comparator
 
@@ -16,5 +17,24 @@ actual fun deleteTaskTempPath(path: String) {
         }
     } else {
         Files.deleteIfExists(target)
+    }
+}
+
+actual fun cleanupTaskTempDirectories() {
+    val tempRoot = Path.of(System.getProperty("java.io.tmpdir"))
+    if (!Files.isDirectory(tempRoot)) return
+    val prefixes = listOf("dockhand-copy-", "dockhand-mtp-")
+    runCatching {
+        Files.newDirectoryStream(tempRoot).use { entries ->
+            entries.forEach { entry ->
+                val name = entry.fileName?.toString().orEmpty()
+                if (
+                    prefixes.any(name::startsWith) &&
+                    Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)
+                ) {
+                    runCatching { deleteTaskTempPath(entry.toString()) }
+                }
+            }
+        }
     }
 }

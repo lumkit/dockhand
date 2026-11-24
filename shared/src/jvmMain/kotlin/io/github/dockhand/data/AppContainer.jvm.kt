@@ -3,6 +3,7 @@ package io.github.dockhand.data
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import io.github.dockhand.core.platform.cleanupTaskTempDirectories
 import io.github.dockhand.core.platform.defaultAppDataDirectory
 import io.github.dockhand.data.database.createDatabase
 import io.github.dockhand.data.datastore.SettingsRepository
@@ -27,6 +28,7 @@ actual fun rememberAppContainer(): AppContainer {
 }
 
 private fun createAppContainer(): AppContainer {
+    cleanupTaskTempDirectories()
     val dataDir = defaultAppDataDirectory().apply { mkdirs() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

@@ -59,16 +59,26 @@ interface FileSystemProvider {
     /** 统计目录磁盘占用/项目数；不支持或无需统计时返回 null。 */
     suspend fun usage(entry: FileEntry): FileUsage? = null
 
-    /** 把一个文件导出到本机临时路径；跨 provider 复制时使用。 */
-    suspend fun exportToLocal(source: FileLocation, localPath: String): Unit =
-        throw FileBrowserException("该文件系统不支持导出：${source.source.name}")
+    /** 把一个文件导出到本机路径；跨 provider 复制时使用。 */
+    suspend fun exportToLocal(
+        source: FileLocation,
+        localPath: String,
+        onProgress: (completed: Long, total: Long) -> Unit = { _, _ -> },
+    ): Unit = throw FileBrowserException("该文件系统不支持导出：${source.source.name}")
 
-    /** 把本机临时文件导入到目标路径；跨 provider 复制时使用。 */
+    /** 把本机文件导入到目标路径；跨 provider 复制时使用。 */
     suspend fun importFromLocal(
         localPath: String,
         destination: FileLocation,
         overwrite: Boolean,
+        onProgress: (completed: Long, total: Long) -> Unit = { _, _ -> },
     ): Unit = throw FileBrowserException("该文件系统不支持导入：${destination.source.name}")
+
+    /** 本地 provider 可提供实际路径，供跨 provider 直接传输。 */
+    fun localPath(location: FileLocation): String? = null
+
+    /** provider 原生复制（例如 MTP 设备端 copy_object）；不支持时返回 false。 */
+    suspend fun copyNative(source: FileLocation, destinationDirectory: FileLocation): Boolean = false
 
     /** 删除文件/目录，供任务回滚使用。 */
     suspend fun delete(location: FileLocation, recursive: Boolean): Unit =

@@ -238,23 +238,24 @@ class HomeViewModel(
                 title = title,
                 detail = detail,
                 background = request.background,
-                onSuccess = { refreshPanesAt(request.destination) },
+                onFinished = { refreshAllPanes() },
             ) {
                 files.copyWithProgress(
                     entries = listOf(request.entry),
                     destinationDirectory = request.destination,
                     overwrite = false,
                     onProgress = { completed, total -> report(completed, total) },
+                    onBytes = { completed, total -> report(completed, total) },
                     isCancelled = { isCancelled },
                 )
             }
         }
     }
 
-    private fun refreshPanesAt(location: FileLocation) {
+    private fun refreshAllPanes() {
         PaneId.entries.forEach { paneId ->
-            if (_state.value.pane(paneId).location == location) {
-                // MTP 没有 watcher，复制完成后必须显式刷新目标目录。
+            _state.value.pane(paneId).location?.let { location ->
+                // 任务结束/取消后两侧都刷新；MTP 没有 watcher，必须显式重新加载。
                 load(paneId, location)
             }
         }
