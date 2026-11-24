@@ -110,6 +110,12 @@ val buildVideoThumbnailer = tasks.register<Exec>("buildVideoThumbnailer") {
     commandLine(
         "/usr/bin/swiftc",
         "-O",
+        "-target",
+        if (System.getProperty("os.arch") in setOf("aarch64", "arm64")) {
+            "arm64-apple-macos12.0"
+        } else {
+            "x86_64-apple-macos12.0"
+        },
         "-framework", "AVFoundation",
         "-framework", "ImageIO",
         "-framework", "UniformTypeIdentifiers",

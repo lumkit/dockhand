@@ -1,5 +1,30 @@
 # macOS 打包与合规
 
+## 互联网直发还需要什么
+
+当前 release 包是 **ad-hoc 签名**，只能本机运行，不能直接公网分发。
+
+发布前还缺：
+
+1. Apple Developer Program 账号
+2. `Developer ID Application` 证书
+3. 用 Developer ID 重新签名
+4. 公证 DMG
+5. 给 DMG 装订公证票据
+6. 下载页、隐私政策、第三方许可证清单
+7. 决定是否支持 Intel Mac
+
+当前构建目标只有 `arm64`：
+
+```text
+Dockhand: arm64
+video-thumbnailer: arm64
+libdockhand_mtp.dylib: arm64
+```
+
+如果只支持 Apple Silicon，可以直接发布；如果要覆盖 Intel Mac，需要做
+universal 构建，或者分别发布 arm64/x86_64 两套包。
+
 ## 当前分发模式
 
 默认构建面向 **Developer ID + Hardened Runtime**，不是 Mac App Store 构建。
