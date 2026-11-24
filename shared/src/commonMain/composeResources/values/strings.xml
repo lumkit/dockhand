@@ -93,6 +93,8 @@
     <string name="task_eta_hours_minutes">%1$d小时%2$d分</string>
     <string name="task_eta_days_hours">%1$d天%2$d小时</string>
     <string name="task_speed">%1$s/s</string>
+    <string name="task_dialog_background">后台执行</string>
+    <string name="task_dialog_cancel">取消任务</string>
     <string name="task_cancel_title">取消任务</string>
     <string name="task_cancel_message">确定要取消「%1$s」吗？</string>
     <string name="action_view_info">查看简介</string>

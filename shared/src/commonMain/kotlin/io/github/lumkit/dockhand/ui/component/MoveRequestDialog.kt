@@ -46,25 +46,6 @@ fun MoveRequestDialog(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
-                modifier = Modifier.clickable(
-                    indication = null,
-                    interactionSource = null,
-                ) {
-                    onBackgroundChange(!request.background)
-                },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Checkbox(
-                    state = if (request.background) ToggleableState.On else ToggleableState.Off,
-                    onClick = null,
-                )
-                Text(
-                    text = stringResource(Res.string.copy_dialog_background),
-                    style = MiuixTheme.textStyles.body1,
-                )
-            }
-            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

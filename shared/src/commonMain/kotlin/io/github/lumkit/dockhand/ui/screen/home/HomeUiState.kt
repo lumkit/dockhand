@@ -130,6 +130,8 @@ data class HomeUiState(
     val keyColor: Color = DEFAULT_KEY_COLOR,
     val showHiddenItems: Boolean = false,
     val restorableTrashPaths: Set<String> = emptySet(),
+    /** 当前显示进度弹窗的前台任务。 */
+    val activeTaskId: Long? = null,
     /** 界面缩放百分比，范围 80..110。 */
     val interfaceScale: Int = 100,
     val placesError: String? = null,

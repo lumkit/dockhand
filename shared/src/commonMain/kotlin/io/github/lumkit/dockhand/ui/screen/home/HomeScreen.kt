@@ -57,6 +57,7 @@ import io.github.lumkit.dockhand.ui.component.EmptyTrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
 import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
 import io.github.lumkit.dockhand.ui.component.RestoreRequestDialog
+import io.github.lumkit.dockhand.ui.component.TaskProgressDialog
 import io.github.lumkit.dockhand.ui.component.TrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
@@ -141,6 +142,9 @@ fun HomeScreen() {
         tasks = tasks,
         onCancelTask = homeViewModel::onCancelTask,
         onDismissTask = homeViewModel::onDismissTask,
+        onActiveTaskBackground = homeViewModel::onActiveTaskBackground,
+        onActiveTaskCancel = homeViewModel::onActiveTaskCancel,
+        onTaskProgressOpen = homeViewModel::onTaskProgressOpen,
         onSnackbarShown = homeViewModel::onSnackbarShown,
         onPlaceClick = homeViewModel::onPlaceClick,
         onPaneFocus = homeViewModel::onPaneFocus,
@@ -200,6 +204,9 @@ private fun HomeScreenContent(
     tasks: List<AppTask>,
     onCancelTask: (Long) -> Unit,
     onDismissTask: (Long) -> Unit,
+    onActiveTaskBackground: () -> Unit,
+    onActiveTaskCancel: () -> Unit,
+    onTaskProgressOpen: (Long) -> Unit,
     onSnackbarShown: () -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     onPaneFocus: (PaneId) -> Unit,
@@ -256,6 +263,7 @@ private fun HomeScreenContent(
     val windowPlacement = windowState.placement
     val direction = LocalLayoutDirection.current
     val snackbarHostState = remember { SnackbarHostState() }
+    var showProgressCancelConfirm by remember { mutableStateOf(false) }
     val inlineRenameBounds = remember { mutableStateOf<Rect?>(null) }
     val focusManager = LocalFocusManager.current
 
@@ -298,6 +306,7 @@ private fun HomeScreenContent(
                             tasks = tasks,
                             onCancelTask = onCancelTask,
                             onDismissTask = onDismissTask,
+                            onTaskProgressOpen = onTaskProgressOpen,
                         )
                     }
                 }
@@ -366,6 +375,7 @@ private fun HomeScreenContent(
                                 tasks = tasks,
                                 onCancelTask = onCancelTask,
                                 onDismissTask = onDismissTask,
+                                onTaskProgressOpen = onTaskProgressOpen,
                             )
                         }
                     }
@@ -470,6 +480,49 @@ private fun HomeScreenContent(
                 onDismiss = onEmptyTrashRequestDismiss,
                 onConfirm = onEmptyTrashRequestConfirm,
             )
+
+            TaskProgressDialog(
+                task = uiState.activeTaskId?.let { id -> tasks.firstOrNull { it.id == id } },
+                onBackground = onActiveTaskBackground,
+                onCancel = { showProgressCancelConfirm = true },
+            )
+
+            val activeTask = uiState.activeTaskId?.let { id ->
+                tasks.firstOrNull { it.id == id }
+            }
+            LaunchedEffect(uiState.activeTaskId) {
+                if (uiState.activeTaskId == null) {
+                    showProgressCancelConfirm = false
+                }
+            }
+            OverlayDialog(
+                show = showProgressCancelConfirm && activeTask != null,
+                title = stringResource(Res.string.task_cancel_title),
+                summary = activeTask?.let {
+                    stringResource(Res.string.task_cancel_message, it.title)
+                },
+                onDismissRequest = { showProgressCancelConfirm = false },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        text = stringResource(Res.string.action_confirm),
+                        onClick = {
+                            showProgressCancelConfirm = false
+                            onActiveTaskCancel()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                    TextButton(
+                        text = stringResource(Res.string.action_cancel),
+                        onClick = { showProgressCancelConfirm = false },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
         }
     }
@@ -498,6 +551,7 @@ private fun TopBarActions(
     tasks: List<AppTask>,
     onCancelTask: (Long) -> Unit,
     onDismissTask: (Long) -> Unit,
+    onTaskProgressOpen: (Long) -> Unit,
 ) {
     var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
     var popupShow by remember { mutableStateOf(false) }
@@ -570,6 +624,10 @@ private fun TopBarActions(
                         items(tasks, key = { it.id }) { task ->
                             TaskRow(
                                 task = task,
+                                onOpen = {
+                                    popupShow = false
+                                    onTaskProgressOpen(task.id)
+                                },
                                 onClose = {
                                     if (task.state == TaskState.Running || task.state == TaskState.Waiting) {
                                         pendingCancel = task
@@ -655,6 +713,7 @@ private fun formatEta(seconds: Long): String {
 @Composable
 private fun TaskRow(
     task: AppTask,
+    onOpen: () -> Unit,
     onClose: () -> Unit,
 ) {
     val status = when (task.state) {
@@ -667,7 +726,7 @@ private fun TaskRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {}
+            .clickable(onClick = onOpen)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

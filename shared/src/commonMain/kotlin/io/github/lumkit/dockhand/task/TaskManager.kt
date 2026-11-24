@@ -177,12 +177,14 @@ class TaskManager(
             try {
                 context.operation()
                 updateTask(id) { it.copy(state = TaskState.Completed) }
-                if (background) notify(id)
+                if (isBackground(id)) notify(id)
                 removeTask(id)
             } catch (e: CancellationException) {
                 withContext(NonCancellable) { runRollbacks(rollbacks) }
                 updateTask(id) { it.copy(state = TaskState.Cancelled) }
-                if (background) withContext(NonCancellable) { notify(id) }
+                if (isBackground(id)) {
+                    withContext(NonCancellable) { notify(id) }
+                }
                 removeTask(id)
                 throw e
             } catch (e: Exception) {
@@ -190,7 +192,7 @@ class TaskManager(
                 updateTask(id) {
                     it.copy(state = TaskState.Failed, error = e.message)
                 }
-                if (background) notify(id)
+                if (isBackground(id)) notify(id)
                 removeTask(id)
             } finally {
                 runCatching { onFinished?.invoke() }
@@ -203,6 +205,20 @@ class TaskManager(
     fun cancel(id: Long) {
         jobs[id]?.cancel()
     }
+
+    /** 把前台任务转为后台任务；只有仍在等待/运行的任务可以转换。 */
+    fun promoteToBackground(id: Long) {
+        updateTask(id) { task ->
+            if (task.state == TaskState.Running || task.state == TaskState.Waiting) {
+                task.copy(isBackground = true)
+            } else {
+                task
+            }
+        }
+    }
+
+    private fun isBackground(id: Long): Boolean =
+        _tasks.value.firstOrNull { it.id == id }?.isBackground == true
 
     fun dismiss(id: Long) {
         if (jobs[id] == null) {

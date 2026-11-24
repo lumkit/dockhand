@@ -16,6 +16,7 @@ import io.github.lumkit.dockhand.domain.model.orderedByIds
 import io.github.lumkit.dockhand.domain.model.parentBreadcrumb
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.task.NoopTaskNotifier
+import io.github.lumkit.dockhand.task.TaskContext
 import io.github.lumkit.dockhand.task.TaskManager
 import io.github.lumkit.dockhand.task.TaskNotifier
 import io.github.lumkit.dockhand.ui.component.FileContextAction
@@ -97,6 +98,67 @@ class HomeViewModel(
 
     fun onCancelTask(id: Long) = taskManager.cancel(id)
     fun onDismissTask(id: Long) = taskManager.dismiss(id)
+
+    private var activeTaskId: Long? = null
+
+    fun onTaskProgressOpen(id: Long) {
+        val task = taskManager.tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.state != io.github.lumkit.dockhand.task.TaskState.Running &&
+            task.state != io.github.lumkit.dockhand.task.TaskState.Waiting
+        ) {
+            return
+        }
+        activeTaskId = id
+        _state.update { it.copy(activeTaskId = id) }
+    }
+
+    fun onActiveTaskBackground() {
+        val id = activeTaskId ?: return
+        taskManager.promoteToBackground(id)
+        activeTaskId = null
+        _state.update { it.copy(activeTaskId = null) }
+    }
+
+    fun onActiveTaskCancel() {
+        val id = activeTaskId ?: return
+        taskManager.cancel(id)
+        activeTaskId = null
+        _state.update { it.copy(activeTaskId = null) }
+    }
+
+    private fun startForegroundTask(
+        title: String,
+        detail: String?,
+        showDialog: Boolean = true,
+        operation: suspend TaskContext.() -> Unit,
+    ) {
+        var taskId = 0L
+        taskId = taskManager.start(
+            title = title,
+            detail = detail,
+            background = false,
+            onFinished = {
+                if (activeTaskId == taskId) {
+                    activeTaskId = null
+                    _state.update { it.copy(activeTaskId = null) }
+                }
+                refreshAllPanes()
+            },
+        ) {
+            operation()
+        }
+        if (
+            showDialog &&
+            taskManager.tasks.value.any {
+                it.id == taskId &&
+                    (it.state == io.github.lumkit.dockhand.task.TaskState.Running ||
+                        it.state == io.github.lumkit.dockhand.task.TaskState.Waiting)
+            }
+        ) {
+            activeTaskId = taskId
+            _state.update { it.copy(activeTaskId = taskId) }
+        }
+    }
     fun onSnackbarShown() {
         _state.update { it.copy(snackbarMessage = null) }
     }
@@ -482,11 +544,9 @@ class HomeViewModel(
         scope.launch {
             val title = getString(Res.string.task_empty_trash_title)
             val detail = getString(Res.string.task_empty_trash_detail)
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.emptyTrash(
                     onProgress = { completed, total -> report(completed, total) },
@@ -513,11 +573,9 @@ class HomeViewModel(
             val title = getString(Res.string.task_restore_title, request.entry.name)
             val detail = getString(Res.string.task_restore_detail)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.restoreFromTrash(
                     entry = request.entry,
@@ -552,11 +610,9 @@ class HomeViewModel(
             val title = getString(Res.string.task_trash_title, request.entry.name)
             val detail = getString(Res.string.task_trash_detail)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.trashWithProgress(
                     entries = listOf(request.entry),
@@ -599,26 +655,25 @@ class HomeViewModel(
             return
         }
         _state.update { it.copy(renameRequest = null) }
-        startRenameTask(request.entry, newName, request.background)
+        startRenameTask(request.entry, newName, showDialog = true)
     }
 
     fun onInlineRename(entry: FileEntry, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty() || trimmed == entry.name) return
-        startRenameTask(entry, trimmed, background = false)
+        startRenameTask(entry, trimmed, showDialog = false)
     }
 
-    private fun startRenameTask(entry: FileEntry, newName: String, background: Boolean) {
+    private fun startRenameTask(entry: FileEntry, newName: String, showDialog: Boolean) {
         applyOptimisticRename(entry, newName)
         scope.launch {
             val title = getString(Res.string.task_rename_title, entry.name)
             val detail = getString(Res.string.task_rename_detail, newName)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = background,
-                onFinished = { refreshAllPanes() },
+                showDialog = showDialog,
             ) {
                 files.renameWithProgress(
                     entry = entry,
@@ -677,11 +732,9 @@ class HomeViewModel(
             val title = getString(Res.string.task_delete_title, request.entry.name)
             val detail = getString(Res.string.task_delete_detail)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.deleteWithProgress(
                     entries = listOf(request.entry),
@@ -717,11 +770,9 @@ class HomeViewModel(
             val destinationLabel = request.destination.displayPath()
             val detail = getString(Res.string.task_copy_destination, destinationLabel)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.moveWithProgress(
                     entries = listOf(request.entry),
@@ -760,11 +811,9 @@ class HomeViewModel(
             val destinationLabel = request.destination.displayPath()
             val detail = getString(Res.string.task_copy_destination, destinationLabel)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            taskManager.start(
+            startForegroundTask(
                 title = title,
                 detail = detail,
-                background = request.background,
-                onFinished = { refreshAllPanes() },
             ) {
                 files.copyWithProgress(
                     entries = listOf(request.entry),
