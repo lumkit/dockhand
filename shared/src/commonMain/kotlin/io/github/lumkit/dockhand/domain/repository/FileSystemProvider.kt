@@ -83,8 +83,12 @@ interface FileSystemProvider {
     suspend fun copyNative(source: FileLocation, destinationDirectory: FileLocation): Boolean = false
 
     /** 删除文件/目录，供任务回滚使用。 */
-    suspend fun delete(location: FileLocation, recursive: Boolean): Unit =
-        throw FileBrowserException("该文件系统不支持删除：${location.source.name}")
+    suspend fun delete(
+        location: FileLocation,
+        recursive: Boolean,
+        isCancelled: () -> Boolean = { false },
+        onWaiting: (deviceName: String?) -> Unit = {},
+    ): Unit = throw FileBrowserException("该文件系统不支持删除：${location.source.name}")
 
     /** 目标是否已经存在。默认返回 false，支持覆盖检查的 provider 应覆盖。 */
     suspend fun exists(location: FileLocation): Boolean = false

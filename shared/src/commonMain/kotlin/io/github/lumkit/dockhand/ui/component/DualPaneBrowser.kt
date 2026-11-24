@@ -47,6 +47,13 @@ fun DualPaneBrowser(
     // 跨 provider 复制由任务层通过临时文件中转完成。
     val leftCanTransfer = uiState.leftPane.location != null && uiState.rightPane.location != null
     val rightCanTransfer = uiState.rightPane.location != null && uiState.leftPane.location != null
+    val differentDirectories = uiState.leftPane.location != uiState.rightPane.location
+    val leftCanMove = differentDirectories &&
+        uiState.leftPane.location != null &&
+        uiState.rightPane.location != null
+    val rightCanMove = differentDirectories &&
+        uiState.rightPane.location != null &&
+        uiState.leftPane.location != null
 
     Column(modifier = modifier.fillMaxSize()) {
         FileToolbar(
@@ -85,6 +92,7 @@ fun DualPaneBrowser(
                 onRetry = { onRetry(PaneId.Left) },
                 onLoadMore = { onLoadMore(PaneId.Left) },
                 canTransferToOtherPane = leftCanTransfer,
+                canMoveToOtherPane = leftCanMove,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -106,6 +114,7 @@ fun DualPaneBrowser(
                 onRetry = { onRetry(PaneId.Right) },
                 onLoadMore = { onLoadMore(PaneId.Right) },
                 canTransferToOtherPane = rightCanTransfer,
+                canMoveToOtherPane = rightCanMove,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),

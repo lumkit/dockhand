@@ -45,6 +45,8 @@ import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
 import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
+import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
+import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
 import dockhand.shared.generated.resources.Res
@@ -137,6 +139,12 @@ fun HomeScreen() {
         onCopyRequestBackgroundChange = homeViewModel::onCopyRequestBackgroundChange,
         onCopyRequestDismiss = homeViewModel::onCopyRequestDismiss,
         onCopyRequestConfirm = homeViewModel::onCopyRequestConfirm,
+        onMoveRequestBackgroundChange = homeViewModel::onMoveRequestBackgroundChange,
+        onMoveRequestDismiss = homeViewModel::onMoveRequestDismiss,
+        onMoveRequestConfirm = homeViewModel::onMoveRequestConfirm,
+        onDeleteRequestBackgroundChange = homeViewModel::onDeleteRequestBackgroundChange,
+        onDeleteRequestDismiss = homeViewModel::onDeleteRequestDismiss,
+        onDeleteRequestConfirm = homeViewModel::onDeleteRequestConfirm,
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
@@ -174,6 +182,12 @@ private fun HomeScreenContent(
     onCopyRequestBackgroundChange: (Boolean) -> Unit,
     onCopyRequestDismiss: () -> Unit,
     onCopyRequestConfirm: () -> Unit,
+    onMoveRequestBackgroundChange: (Boolean) -> Unit,
+    onMoveRequestDismiss: () -> Unit,
+    onMoveRequestConfirm: () -> Unit,
+    onDeleteRequestBackgroundChange: (Boolean) -> Unit,
+    onDeleteRequestDismiss: () -> Unit,
+    onDeleteRequestConfirm: () -> Unit,
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
@@ -343,6 +357,20 @@ private fun HomeScreenContent(
                 onBackgroundChange = onCopyRequestBackgroundChange,
                 onDismiss = onCopyRequestDismiss,
                 onConfirm = onCopyRequestConfirm,
+            )
+
+            MoveRequestDialog(
+                request = uiState.moveRequest,
+                onBackgroundChange = onMoveRequestBackgroundChange,
+                onDismiss = onMoveRequestDismiss,
+                onConfirm = onMoveRequestConfirm,
+            )
+
+            DeleteRequestDialog(
+                request = uiState.deleteRequest,
+                onBackgroundChange = onDeleteRequestBackgroundChange,
+                onDismiss = onDeleteRequestDismiss,
+                onConfirm = onDeleteRequestConfirm,
             )
         }
     }

@@ -25,6 +25,9 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import dockhand.shared.generated.resources.error_name_invalid
 import dockhand.shared.generated.resources.task_copy_destination
 import dockhand.shared.generated.resources.task_copy_title
+import dockhand.shared.generated.resources.task_delete_detail
+import dockhand.shared.generated.resources.task_delete_title
+import dockhand.shared.generated.resources.task_move_title
 import dockhand.shared.generated.resources.task_waiting_message
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
@@ -362,7 +365,109 @@ class HomeViewModel(
                     }
                 }
             }
+            FileContextAction.Move -> {
+                val destination = _state.value.pane(paneId.other).location
+                if (destination == null) {
+                    setOperationError("另一侧没有打开目录")
+                } else {
+                    _state.update {
+                        it.copy(
+                            moveRequest = MoveRequestState(
+                                entry = entry,
+                                destination = destination,
+                            )
+                        )
+                    }
+                }
+            }
+            FileContextAction.Delete -> {
+                _state.update {
+                    it.copy(deleteRequest = DeleteRequestState(entry = entry))
+                }
+            }
             else -> Unit
+        }
+    }
+
+    fun onDeleteRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(deleteRequest = state.deleteRequest?.copy(background = background))
+        }
+    }
+
+    fun onDeleteRequestDismiss() {
+        _state.update { it.copy(deleteRequest = null) }
+    }
+
+    fun onDeleteRequestConfirm() {
+        val request = _state.value.deleteRequest ?: return
+        _state.update { it.copy(deleteRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_delete_title, request.entry.name)
+            val detail = getString(Res.string.task_delete_detail)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.deleteWithProgress(
+                    entries = listOf(request.entry),
+                    onProgress = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+    }
+
+    fun onMoveRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(moveRequest = state.moveRequest?.copy(background = background))
+        }
+    }
+
+    fun onMoveRequestDismiss() {
+        _state.update { it.copy(moveRequest = null) }
+    }
+
+    fun onMoveRequestConfirm() {
+        val request = _state.value.moveRequest ?: return
+        _state.update { it.copy(moveRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_move_title, request.entry.name)
+            val destinationLabel = request.destination.displayPath()
+            val detail = getString(Res.string.task_copy_destination, destinationLabel)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.moveWithProgress(
+                    entries = listOf(request.entry),
+                    destinationDirectory = request.destination,
+                    overwrite = false,
+                    onProgress = { completed, total -> report(completed, total) },
+                    onBytes = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
         }
     }
 

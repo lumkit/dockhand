@@ -76,6 +76,19 @@ data class CopyRequestState(
     val background: Boolean = false,
 )
 
+@Immutable
+data class MoveRequestState(
+    val entry: FileEntry,
+    val destination: FileLocation,
+    val background: Boolean = false,
+)
+
+@Immutable
+data class DeleteRequestState(
+    val entry: FileEntry,
+    val background: Boolean = false,
+)
+
 const val STARTUP_PATH_LAST = "__last__"
 const val STARTUP_PATH_DESKTOP = "local:desktop"
 val DEFAULT_KEY_COLOR = Color(0xFF6750A4)
@@ -107,6 +120,8 @@ data class HomeUiState(
     /** 系统通知不可用时的兜底提示。 */
     val snackbarMessage: String? = null,
     val copyRequest: CopyRequestState? = null,
+    val moveRequest: MoveRequestState? = null,
+    val deleteRequest: DeleteRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,

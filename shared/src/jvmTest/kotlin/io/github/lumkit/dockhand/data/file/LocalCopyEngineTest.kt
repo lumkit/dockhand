@@ -11,6 +11,39 @@ import kotlin.test.assertEquals
 
 class LocalCopyEngineTest {
     @Test
+    fun movesFileAndDeletesSource() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-move")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            Files.writeString(home.resolve("note.txt"), "hello")
+            val destination = Files.createDirectories(home.resolve("destination"))
+            val repository = DefaultFileBrowserRepository(listOf(provider))
+            val sourceLocation = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.toString(),
+            )
+            val destinationLocation = sourceLocation.copy(path = destination.toString())
+            val entry = provider.list(sourceLocation).first { it.name == "note.txt" }
+
+            repository.moveWithProgress(
+                entries = listOf(entry),
+                destinationDirectory = destinationLocation,
+            )
+
+            assertEquals("hello", Files.readString(destination.resolve("note.txt")))
+            assertEquals(false, Files.exists(home.resolve("note.txt")))
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Test
     fun copiesNestedDirectoryThroughRepository() = runBlocking {
         val root = Files.createTempDirectory("dockhand-copy")
         try {

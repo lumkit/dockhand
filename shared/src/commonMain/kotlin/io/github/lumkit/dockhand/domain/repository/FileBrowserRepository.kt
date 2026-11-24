@@ -76,6 +76,32 @@ interface FileBrowserRepository {
         copy(entries, destinationDirectory, overwrite)
         onProgress(entries.size.toLong(), entries.size.toLong())
     }
+
+    /**
+     * 移动：先复制到目标，再删除源。
+     * 跨设备移动通过复制引擎的中转/流式路径完成。
+     */
+    suspend fun moveWithProgress(
+        entries: List<FileEntry>,
+        destinationDirectory: FileLocation,
+        overwrite: Boolean = false,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onBytes: (completed: Long, total: Long) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持移动")
+    }
+
+    /** 删除文件/目录的耗时任务入口。 */
+    suspend fun deleteWithProgress(
+        entries: List<FileEntry>,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持删除")
+    }
 }
 
 class DefaultFileBrowserRepository(
@@ -195,6 +221,57 @@ class DefaultFileBrowserRepository(
             throw e
         } finally {
             deleteTaskTempPath(tempDirectory)
+        }
+    }
+
+    override suspend fun moveWithProgress(
+        entries: List<FileEntry>,
+        destinationDirectory: FileLocation,
+        overwrite: Boolean,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onBytes: (completed: Long, total: Long) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        copyWithProgress(
+            entries = entries,
+            destinationDirectory = destinationDirectory,
+            overwrite = overwrite,
+            onProgress = onProgress,
+            onBytes = onBytes,
+            onWaiting = onWaiting,
+            isCancelled = isCancelled,
+        )
+        entries.forEach { entry ->
+            if (isCancelled()) throw CancellationException("移动已取消")
+            providerFor(entry.location.source).delete(
+                location = entry.location,
+                recursive = true,
+                isCancelled = isCancelled,
+            )
+        }
+    }
+
+    override suspend fun deleteWithProgress(
+        entries: List<FileEntry>,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        try {
+            entries.forEachIndexed { index, entry ->
+                if (isCancelled()) throw CancellationException("删除已取消")
+                onProgress(index.toLong(), entries.size.toLong())
+                providerFor(entry.location.source).delete(
+                    location = entry.location,
+                    recursive = true,
+                    isCancelled = isCancelled,
+                    onWaiting = onWaiting,
+                )
+                onProgress((index + 1).toLong(), entries.size.toLong())
+            }
+        } finally {
+            onWaiting(null)
         }
     }
 

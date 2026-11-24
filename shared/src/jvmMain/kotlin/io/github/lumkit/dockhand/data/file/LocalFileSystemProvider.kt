@@ -188,6 +188,8 @@ class LocalFileSystemProvider(
     override suspend fun delete(
         location: FileLocation,
         recursive: Boolean,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         ensureLocal(location)
         val target = location.toLocalPath()
@@ -197,7 +199,10 @@ class LocalFileSystemProvider(
                 Files.delete(target)
             } else {
                 Files.walk(target).use { paths ->
-                    paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                    paths.sorted(Comparator.reverseOrder()).forEach {
+                        if (isCancelled()) throw kotlinx.coroutines.CancellationException("删除已取消")
+                        Files.deleteIfExists(it)
+                    }
                 }
             }
         } else {

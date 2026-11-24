@@ -363,7 +363,33 @@ class MtpFileSystemProvider(
     override suspend fun delete(
         location: FileLocation,
         recursive: Boolean,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
+        val target = targetOf(location.source)
+        val deviceLock = synchronized(deviceTransferLocks) {
+            deviceTransferLocks.getOrPut(target.deviceKey) { Mutex() }
+        }
+        var locked = deviceLock.tryLock()
+        if (!locked) {
+            onWaiting(location.source.name)
+            deviceLock.lock()
+            locked = true
+        }
+        try {
+            onWaiting(null)
+            deleteRecursive(location, recursive, isCancelled)
+        } finally {
+            if (locked) deviceLock.unlock()
+            onWaiting(null)
+        }
+    }
+
+    private suspend fun deleteRecursive(
+        location: FileLocation,
+        recursive: Boolean,
+        isCancelled: () -> Boolean,
+    ) {
         val target = targetOf(location.source)
         val parentPath = location.path.substringBeforeLast('/', missingDelimiterValue = "").ifBlank { "/" }
         val name = location.path.substringAfterLast('/')
@@ -371,9 +397,11 @@ class MtpFileSystemProvider(
         val entry = runCatching { list(parent).firstOrNull { it.name == name } }.getOrNull()
         if (recursive && entry?.isDirectory == true) {
             list(location).forEach { child ->
-                delete(child.location, recursive = true)
+                if (isCancelled()) throw CancellationException("MTP 删除已取消")
+                deleteRecursive(child.location, recursive = true, isCancelled = isCancelled)
             }
         }
+        if (isCancelled()) throw CancellationException("MTP 删除已取消")
         when (val result = MtpNativeBridge.delete(
             deviceKey = target.deviceKey,
             storageId = target.storageId,

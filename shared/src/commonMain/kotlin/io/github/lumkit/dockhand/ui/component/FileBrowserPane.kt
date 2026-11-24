@@ -111,6 +111,7 @@ fun FileBrowserPane(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     canTransferToOtherPane: Boolean = false,
+    canMoveToOtherPane: Boolean = false,
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
@@ -217,6 +218,7 @@ fun FileBrowserPane(
                                     paneId = pane.id,
                                     selected = row.id in pane.selectedIds,
                                     canTransferToOtherPane = canTransferToOtherPane,
+                                    canMoveToOtherPane = canMoveToOtherPane,
                                     showContextMenu = contextMenuEntryId == row.id,
                                     onClick = { onEntryClick(row.entry) },
                                     onDoubleClick = { onEntryDoubleClick(row.entry) },
@@ -278,6 +280,7 @@ private fun FileEntryRow(
     paneId: PaneId,
     selected: Boolean,
     canTransferToOtherPane: Boolean,
+    canMoveToOtherPane: Boolean,
     showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -337,12 +340,14 @@ private fun FileEntryRow(
                             onClick = { dispatch(FileContextAction.Copy) },
                         )
                     )
-                    add(
-                        DropdownItem(
-                            text = moveLabel,
-                            onClick = { dispatch(FileContextAction.Move) },
+                    if (canMoveToOtherPane) {
+                        add(
+                            DropdownItem(
+                                text = moveLabel,
+                                onClick = { dispatch(FileContextAction.Move) },
+                            )
                         )
-                    )
+                    }
                 }
                 add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
                 add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
@@ -372,16 +377,28 @@ private fun FileEntryRow(
         } else if (canTransferToOtherPane) {
             add(
                 DropdownEntry(
-                    items = listOf(
-                        DropdownItem(
-                            text = copyLabel,
-                            onClick = { dispatch(FileContextAction.Copy) },
-                        ),
-                        DropdownItem(
-                            text = moveLabel,
-                            onClick = { dispatch(FileContextAction.Move) },
-                        ),
-                    )
+                    items = buildList {
+                        add(
+                            DropdownItem(
+                                text = copyLabel,
+                                onClick = { dispatch(FileContextAction.Copy) },
+                            )
+                        )
+                        if (canMoveToOtherPane) {
+                            add(
+                                DropdownItem(
+                                    text = moveLabel,
+                                    onClick = { dispatch(FileContextAction.Move) },
+                                )
+                            )
+                        }
+                        add(
+                            DropdownItem(
+                                text = deleteLabel,
+                                onClick = { dispatch(FileContextAction.Delete) },
+                            )
+                        )
+                    }
                 )
             )
         }
