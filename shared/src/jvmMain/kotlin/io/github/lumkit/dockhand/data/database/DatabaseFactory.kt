@@ -14,5 +14,6 @@ import java.io.File
 fun createDatabase(file: File): DockhandDatabase =
     Room.databaseBuilder<DockhandDatabase>(name = file.absolutePath)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()

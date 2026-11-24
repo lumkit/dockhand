@@ -3,7 +3,7 @@ package io.github.lumkit.dockhand.data
 import io.github.lumkit.dockhand.data.database.createDatabase
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.datastore.createSettingsDataStore
-import io.github.lumkit.dockhand.data.repository.NoteRepository
+import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,16 +28,19 @@ class PersistenceTest {
         val dir = Files.createTempDirectory("dockhand-room").toFile()
         val database = createDatabase(File(dir, "test.db"))
         try {
-            val notes = NoteRepository(database.noteDao())
-            assertTrue(notes.observeNotes().first().isEmpty())
+            val history = TrashHistoryRepository(database.trashHistoryDao())
+            assertTrue(history.observeAll().first().isEmpty())
 
-            notes.addNote("第一条")
-            notes.addNote("第二条")
+            history.record("/tmp/a.txt", "/tmp/.Trash/a.txt")
+            history.record("/tmp/b.txt", "/tmp/.Trash/b.txt")
 
-            val stored = notes.observeNotes().first()
-            assertEquals(listOf("第二条", "第一条"), stored.map { it.text })
-            assertEquals(2, notes.observeCount().first())
+            val stored = history.observeAll().first()
+            assertEquals(listOf("/tmp/.Trash/b.txt", "/tmp/.Trash/a.txt"), stored.map { it.trashedPath })
+            assertEquals("/tmp/a.txt", history.findByTrashedPath("/tmp/.Trash/a.txt")?.originalPath)
             assertTrue(File(dir, "test.db").exists())
+
+            history.clear()
+            assertTrue(history.observeAll().first().isEmpty())
         } finally {
             database.close()
             dir.deleteRecursively()

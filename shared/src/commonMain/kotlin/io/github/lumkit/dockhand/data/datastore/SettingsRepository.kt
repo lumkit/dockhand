@@ -32,6 +32,7 @@ internal object SettingsKeys {
     val WindowHeight = intPreferencesKey("window_height_dp")
     val InterfaceScale = intPreferencesKey("interface_scale")
     val KeyColor = intPreferencesKey("key_color")
+    val ShowHiddenItems = booleanPreferencesKey("show_hidden_items")
 
     fun startupPath(pane: String): Preferences.Key<String> =
         stringPreferencesKey("startup_path_${pane.lowercase()}")
@@ -131,6 +132,14 @@ class SettingsRepository(
                 path = raw.substring(separator + 1),
             )
         }
+
+    val showHiddenItems: Flow<Boolean> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.ShowHiddenItems] ?: false }
+
+    suspend fun setShowHiddenItems(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.ShowHiddenItems] = enabled }
+    }
 
     val interfaceScale: Flow<Int> = dataStore.data
         .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }

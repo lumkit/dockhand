@@ -1,59 +1,23 @@
 package io.github.lumkit.dockhand.ui.component
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dockhand.shared.generated.resources.Res
-import dockhand.shared.generated.resources.action_cancel
-import dockhand.shared.generated.resources.action_close
-import dockhand.shared.generated.resources.action_confirm
-import dockhand.shared.generated.resources.checkbox_create_file
-import dockhand.shared.generated.resources.dialog_new
-import dockhand.shared.generated.resources.field_name
-import dockhand.shared.generated.resources.tooltip_back
-import dockhand.shared.generated.resources.tooltip_forward
-import dockhand.shared.generated.resources.tooltip_new
-import dockhand.shared.generated.resources.tooltip_refresh
-import dockhand.shared.generated.resources.tooltip_sync
-import dockhand.shared.generated.resources.tooltip_up
+import dockhand.shared.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Checkbox
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TooltipBox
+import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
-import top.yukonga.miuix.kmp.icon.extended.ChevronForward
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.icon.extended.Replace
+import top.yukonga.miuix.kmp.icon.extended.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
@@ -70,6 +34,8 @@ fun FileToolbar(
     canGoUp: Boolean,
     canCreate: Boolean,
     canSync: Boolean,
+    showEmptyTrash: Boolean,
+    canEmptyTrash: Boolean,
     operationError: String?,
     onBack: () -> Unit,
     onForward: () -> Unit,
@@ -77,6 +43,7 @@ fun FileToolbar(
     onCreate: (String, Boolean) -> Unit,
     onSync: () -> Unit,
     onRefresh: () -> Unit,
+    onEmptyTrash: () -> Unit,
     onDismissOperationError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -139,6 +106,15 @@ fun FileToolbar(
                 iconRotate = 90f,
                 onClick = onRefresh,
             )
+            if (showEmptyTrash) {
+                ToolbarAction(
+                    icon = MiuixIcons.Clear,
+                    tooltip = stringResource(Res.string.tooltip_empty_trash),
+                    enabled = canEmptyTrash,
+                    modifier = Modifier.weight(1f),
+                    onClick = onEmptyTrash,
+                )
+            }
         }
 
         if (operationError != null) {

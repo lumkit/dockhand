@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.lumkit.dockhand.domain.model.FileEntry
+import io.github.lumkit.dockhand.domain.model.isTrashLocation
 import io.github.lumkit.dockhand.ui.screen.home.HomeUiState
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -37,6 +38,7 @@ fun DualPaneBrowser(
     onGoUp: (PaneId) -> Unit,
     onCreate: (PaneId, String, Boolean) -> Unit,
     onSync: (PaneId) -> Unit,
+    onEmptyTrash: () -> Unit,
     onDismissOperationError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -63,6 +65,9 @@ fun DualPaneBrowser(
             canGoUp = focusedState.canGoUp,
             canCreate = focusedState.location != null,
             canSync = canSync,
+            showEmptyTrash = focusedState.location?.isTrashLocation() == true,
+            canEmptyTrash = focusedState.location?.isTrashLocation() == true &&
+                focusedState.entries.isNotEmpty(),
             operationError = uiState.operationError,
             onBack = { onBack(focusedPane) },
             onForward = { onForward(focusedPane) },
@@ -70,6 +75,7 @@ fun DualPaneBrowser(
             onCreate = { name, createFile -> onCreate(focusedPane, name, createFile) },
             onSync = { onSync(focusedPane) },
             onRefresh = { onRetry(focusedPane) },
+            onEmptyTrash = onEmptyTrash,
             onDismissOperationError = onDismissOperationError,
         )
 
@@ -95,6 +101,8 @@ fun DualPaneBrowser(
                 onLoadMore = { onLoadMore(PaneId.Left) },
                 canTransferToOtherPane = leftCanTransfer,
                 canMoveToOtherPane = leftCanMove,
+                canTrash = uiState.leftPane.location?.isTrashLocation() != true,
+                restorableTrashPaths = uiState.restorableTrashPaths,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -118,6 +126,8 @@ fun DualPaneBrowser(
                 onLoadMore = { onLoadMore(PaneId.Right) },
                 canTransferToOtherPane = rightCanTransfer,
                 canMoveToOtherPane = rightCanMove,
+                canTrash = uiState.rightPane.location?.isTrashLocation() != true,
+                restorableTrashPaths = uiState.restorableTrashPaths,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),

@@ -53,8 +53,11 @@ import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
+import io.github.lumkit.dockhand.ui.component.EmptyTrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
 import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
+import io.github.lumkit.dockhand.ui.component.RestoreRequestDialog
+import io.github.lumkit.dockhand.ui.component.TrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
 import io.github.lumkit.dockhand.ui.component.LocalInlineRenameBounds
@@ -85,10 +88,10 @@ import dockhand.shared.generated.resources.tasks_tooltip_title
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.BadgedBox
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -127,6 +130,7 @@ fun HomeScreen() {
         HomeViewModel(
             files = container.files,
             settings = container.settings,
+            trashHistory = container.trashHistory,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -159,6 +163,16 @@ fun HomeScreen() {
         onRenameRequestBackgroundChange = homeViewModel::onRenameRequestBackgroundChange,
         onRenameRequestDismiss = homeViewModel::onRenameRequestDismiss,
         onRenameRequestConfirm = homeViewModel::onRenameRequestConfirm,
+        onTrashRequestBackgroundChange = homeViewModel::onTrashRequestBackgroundChange,
+        onTrashRequestDismiss = homeViewModel::onTrashRequestDismiss,
+        onTrashRequestConfirm = homeViewModel::onTrashRequestConfirm,
+        onRestoreRequestBackgroundChange = homeViewModel::onRestoreRequestBackgroundChange,
+        onRestoreRequestDismiss = homeViewModel::onRestoreRequestDismiss,
+        onRestoreRequestConfirm = homeViewModel::onRestoreRequestConfirm,
+        onEmptyTrashRequest = homeViewModel::onEmptyTrashRequest,
+        onEmptyTrashRequestBackgroundChange = homeViewModel::onEmptyTrashRequestBackgroundChange,
+        onEmptyTrashRequestDismiss = homeViewModel::onEmptyTrashRequestDismiss,
+        onEmptyTrashRequestConfirm = homeViewModel::onEmptyTrashRequestConfirm,
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
@@ -167,6 +181,7 @@ fun HomeScreen() {
         onColorSchemeModeChange = homeViewModel::onColorSchemeModeChange,
         onKeyColorChange = homeViewModel::onKeyColorChange,
         onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
+        onShowHiddenItemsChange = homeViewModel::onShowHiddenItemsChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
         onLoadMore = homeViewModel::onLoadMore,
@@ -207,6 +222,16 @@ private fun HomeScreenContent(
     onRenameRequestBackgroundChange: (Boolean) -> Unit,
     onRenameRequestDismiss: () -> Unit,
     onRenameRequestConfirm: () -> Unit,
+    onTrashRequestBackgroundChange: (Boolean) -> Unit,
+    onTrashRequestDismiss: () -> Unit,
+    onTrashRequestConfirm: () -> Unit,
+    onRestoreRequestBackgroundChange: (Boolean) -> Unit,
+    onRestoreRequestDismiss: () -> Unit,
+    onRestoreRequestConfirm: () -> Unit,
+    onEmptyTrashRequest: () -> Unit,
+    onEmptyTrashRequestBackgroundChange: (Boolean) -> Unit,
+    onEmptyTrashRequestDismiss: () -> Unit,
+    onEmptyTrashRequestConfirm: () -> Unit,
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
@@ -215,6 +240,7 @@ private fun HomeScreenContent(
     onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
+    onShowHiddenItemsChange: (Boolean) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
     onRetry: (PaneId) -> Unit,
@@ -310,9 +336,11 @@ private fun HomeScreenContent(
                     colorSchemeMode = uiState.colorSchemeMode,
                     keyColor = uiState.keyColor,
                     interfaceScale = uiState.interfaceScale,
+                    showHiddenItems = uiState.showHiddenItems,
                     onColorSchemeModeChange = onColorSchemeModeChange,
                     onKeyColorChange = onKeyColorChange,
                     onInterfaceScaleChange = onInterfaceScaleChange,
+                    onShowHiddenItemsChange = onShowHiddenItemsChange,
                     onPlaceMove = onPlaceMove,
                     onMtpStorageClick = onMtpStorageClick,
                     onMtpShortcutMove = onMtpShortcutMove,
@@ -386,6 +414,7 @@ private fun HomeScreenContent(
                             onGoUp = onGoUp,
                             onCreate = onCreate,
                             onSync = onSync,
+                            onEmptyTrash = onEmptyTrashRequest,
                             onDismissOperationError = onDismissOperationError,
                         )
                     }
@@ -419,6 +448,27 @@ private fun HomeScreenContent(
                 onBackgroundChange = onRenameRequestBackgroundChange,
                 onDismiss = onRenameRequestDismiss,
                 onConfirm = onRenameRequestConfirm,
+            )
+
+            TrashRequestDialog(
+                request = uiState.trashRequest,
+                onBackgroundChange = onTrashRequestBackgroundChange,
+                onDismiss = onTrashRequestDismiss,
+                onConfirm = onTrashRequestConfirm,
+            )
+
+            RestoreRequestDialog(
+                request = uiState.restoreRequest,
+                onBackgroundChange = onRestoreRequestBackgroundChange,
+                onDismiss = onRestoreRequestDismiss,
+                onConfirm = onRestoreRequestConfirm,
+            )
+
+            EmptyTrashRequestDialog(
+                request = uiState.emptyTrashRequest,
+                onBackgroundChange = onEmptyTrashRequestBackgroundChange,
+                onDismiss = onEmptyTrashRequestDismiss,
+                onConfirm = onEmptyTrashRequestConfirm,
             )
         }
         }

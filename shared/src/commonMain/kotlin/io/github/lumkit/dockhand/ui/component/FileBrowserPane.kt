@@ -68,6 +68,7 @@ import dockhand.shared.generated.resources.action_move_to_left
 import dockhand.shared.generated.resources.action_move_to_right
 import dockhand.shared.generated.resources.action_move_to_trash
 import dockhand.shared.generated.resources.action_rename
+import dockhand.shared.generated.resources.action_restore
 import dockhand.shared.generated.resources.action_services
 import dockhand.shared.generated.resources.action_terminal_tab_file
 import dockhand.shared.generated.resources.action_terminal_tab_folder
@@ -133,6 +134,8 @@ fun FileBrowserPane(
     onLoadMore: () -> Unit,
     canTransferToOtherPane: Boolean = false,
     canMoveToOtherPane: Boolean = false,
+    canTrash: Boolean = true,
+    restorableTrashPaths: Set<String> = emptySet(),
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -247,6 +250,8 @@ fun FileBrowserPane(
                                     selected = row.id in pane.selectedIds,
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
+                                    canTrash = canTrash,
+                                    canRestore = row.entry.location.path in restorableTrashPaths,
                                     onInlineRename = { name -> onInlineRename(row.entry, name) },
                                     showContextMenu = contextMenuEntryId == row.id,
                                     onClick = { onEntryClick(row.entry) },
@@ -275,7 +280,7 @@ fun FileBrowserPane(
                                         Text(
                                             text = stringResource(Res.string.text_loading_more),
                                             modifier = Modifier.padding(start = 8.dp),
-                                            style = MiuixTheme.textStyles.body2,
+                                            style = MiuixTheme.textStyles.body1,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
                                     }
@@ -310,6 +315,8 @@ private fun FileEntryRow(
     selected: Boolean,
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
+    canTrash: Boolean,
+    canRestore: Boolean,
     onInlineRename: (String) -> Unit,
     showContextMenu: Boolean,
     onClick: () -> Unit,
@@ -334,6 +341,7 @@ private fun FileEntryRow(
         if (paneId == PaneId.Left) Res.string.action_move_to_right else Res.string.action_move_to_left
     )
     val trashLabel = stringResource(Res.string.action_move_to_trash)
+    val restoreLabel = stringResource(Res.string.action_restore)
     val deleteLabel = stringResource(Res.string.action_delete)
     val renameLabel = stringResource(Res.string.action_rename)
     val compressLabel = stringResource(Res.string.action_compress)
@@ -417,7 +425,12 @@ private fun FileEntryRow(
                         )
                     }
                 }
-                add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
+                if (canTrash) {
+                    add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
+                }
+                if (canRestore) {
+                    add(DropdownItem(text = restoreLabel, onClick = { dispatch(FileContextAction.Restore) }))
+                }
                 add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
                 add(DropdownItem(text = renameLabel, onClick = { dispatch(FileContextAction.Rename) }))
                 add(DropdownItem(text = compressLabel, onClick = { dispatch(FileContextAction.Compress) }))
@@ -485,6 +498,7 @@ private fun FileEntryRow(
                 .padding(horizontal = 8.dp, vertical = 1.dp)
                 .squircleClip(10.dp)
                 .background(rowColor)
+                .alpha(if (row.entry.isHidden) 0.45f else 1f)
                 .combinedClickable(
                     onClick = {
                         if (editing) {
@@ -496,11 +510,12 @@ private fun FileEntryRow(
                     },
                     onDoubleClick = onDoubleClick,
                 )
-                .pointerInput(onSecondaryClick) {
+                .pointerInput(onSecondaryClick, editing) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
                             if (
+                                !editing &&
                                 event.type == PointerEventType.Press &&
                                 event.buttons.isSecondaryPressed
                             ) {
@@ -564,7 +579,7 @@ private fun FileEntryRow(
                             shape = RoundedCornerShape(6.dp),
                         )
                         .padding(horizontal = 4.dp, vertical = 2.dp),
-                    textStyle = MiuixTheme.textStyles.headline1.copy(
+                    textStyle = MiuixTheme.textStyles.body1.copy(
                         fontWeight = FontWeight.Medium,
                         color = MiuixTheme.colorScheme.onSurface,
                     ),
@@ -587,14 +602,14 @@ private fun FileEntryRow(
                     } else {
                         Modifier.fillMaxWidth()
                     },
-                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                    fontSize = MiuixTheme.textStyles.body1.fontSize,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
             }
             Text(
                 text = row.summary.orEmpty(),
-                fontSize = MiuixTheme.textStyles.body2.fontSize,
+                fontSize = MiuixTheme.textStyles.footnote2.fontSize,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }

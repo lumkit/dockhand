@@ -2,6 +2,7 @@ package io.github.lumkit.dockhand.domain.repository
 
 import io.github.lumkit.dockhand.core.platform.createTaskTempDirectory
 import io.github.lumkit.dockhand.core.platform.deleteTaskTempPath
+import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
@@ -44,6 +45,9 @@ interface FileBrowserRepository {
     suspend fun usage(entry: FileEntry): FileUsage? = null
 
     fun observeChanges(location: FileLocation): Flow<Unit>
+
+    /** 配置所有 provider 是否显示隐藏项目。 */
+    fun setShowHiddenItems(show: Boolean) = Unit
 
     suspend fun createDirectory(parent: FileLocation, name: String)
 
@@ -104,6 +108,34 @@ interface FileBrowserRepository {
         throw FileBrowserException("当前文件系统不支持重命名")
     }
 
+    /** 移到废纸篓的耗时任务入口。 */
+    suspend fun trashWithProgress(
+        entries: List<FileEntry>,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持废纸篓")
+    }
+
+    /** 清空废纸篓并清理恢复记录的耗时任务入口。 */
+    suspend fun emptyTrash(
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持清空废纸篓")
+    }
+
+    /** 从废纸篓恢复文件/目录的耗时任务入口。 */
+    suspend fun restoreFromTrash(
+        entry: FileEntry,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        onWaiting: (deviceName: String?) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ) {
+        throw FileBrowserException("当前文件系统不支持恢复")
+    }
+
     /** 删除文件/目录的耗时任务入口。 */
     suspend fun deleteWithProgress(
         entries: List<FileEntry>,
@@ -117,7 +149,12 @@ interface FileBrowserRepository {
 
 class DefaultFileBrowserRepository(
     private val providers: List<FileSystemProvider>,
+    private val trashHistory: TrashHistoryRepository? = null,
 ) : FileBrowserRepository {
+
+    override fun setShowHiddenItems(show: Boolean) {
+        providers.forEach { provider -> provider.setShowHiddenItems(show) }
+    }
 
     override fun observePlaces(): Flow<List<FilePlace>> {
         if (providers.isEmpty()) return flowOf(emptyList())
@@ -260,6 +297,68 @@ class DefaultFileBrowserRepository(
                 recursive = true,
                 isCancelled = isCancelled,
             )
+        }
+    }
+
+    override suspend fun trashWithProgress(
+        entries: List<FileEntry>,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        try {
+            entries.forEachIndexed { index, entry ->
+                if (isCancelled()) throw CancellationException("移到废纸篓已取消")
+                onProgress(index.toLong(), entries.size.toLong())
+                val trashed = providerFor(entry.location.source).trash(
+                    location = entry.location,
+                    isCancelled = isCancelled,
+                    onWaiting = onWaiting,
+                )
+                trashHistory?.record(
+                    originalPath = entry.location.path,
+                    trashedPath = trashed.path,
+                )
+                onProgress((index + 1).toLong(), entries.size.toLong())
+            }
+        } finally {
+            onWaiting(null)
+        }
+    }
+
+    override suspend fun emptyTrash(
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        providers.forEach { provider ->
+            provider.emptyTrash(
+                onProgress = onProgress,
+                isCancelled = isCancelled,
+            )
+        }
+        trashHistory?.clear()
+    }
+
+    override suspend fun restoreFromTrash(
+        entry: FileEntry,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        onWaiting: (deviceName: String?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        val record = trashHistory?.findByTrashedPath(entry.location.path)
+            ?: throw FileBrowserException("找不到该项目的恢复记录")
+        try {
+            onProgress(0, 1)
+            providerFor(entry.location.source).restoreFromTrash(
+                trashed = entry.location,
+                original = FileLocation(entry.location.source, record.originalPath),
+                isCancelled = isCancelled,
+                onWaiting = onWaiting,
+            )
+            trashHistory.remove(entry.location.path)
+            onProgress(1, 1)
+        } finally {
+            onWaiting(null)
         }
     }
 

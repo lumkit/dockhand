@@ -98,6 +98,30 @@ interface FileSystemProvider {
         onWaiting: (deviceName: String?) -> Unit = {},
     ): Unit = throw FileBrowserException("该文件系统不支持重命名：${location.source.name}")
 
+    /** 把文件/目录移到系统废纸篓。 */
+    suspend fun trash(
+        location: FileLocation,
+        isCancelled: () -> Boolean = { false },
+        onWaiting: (deviceName: String?) -> Unit = {},
+    ): FileLocation = throw FileBrowserException("该文件系统不支持废纸篓：${location.source.name}")
+
+    /** 是否在列表中显示以 "." 开头的隐藏项目。 */
+    fun setShowHiddenItems(show: Boolean) = Unit
+
+    /** 清空该文件系统的废纸篓内容，保留废纸篓目录本身。 */
+    suspend fun emptyTrash(
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        isCancelled: () -> Boolean = { false },
+    ) = Unit
+
+    /** 从废纸篓恢复到指定原始路径。 */
+    suspend fun restoreFromTrash(
+        trashed: FileLocation,
+        original: FileLocation,
+        isCancelled: () -> Boolean = { false },
+        onWaiting: (deviceName: String?) -> Unit = {},
+    ): Unit = throw FileBrowserException("该文件系统不支持恢复：${trashed.source.name}")
+
     /** 目标是否已经存在。默认返回 false，支持覆盖检查的 provider 应覆盖。 */
     suspend fun exists(location: FileLocation): Boolean = false
 

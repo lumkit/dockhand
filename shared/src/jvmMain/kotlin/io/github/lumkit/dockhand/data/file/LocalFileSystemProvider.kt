@@ -62,6 +62,11 @@ class LocalFileSystemProvider(
         name = sourceName,
         kind = FileSourceKind.Local,
     )
+    private var showHiddenItems = false
+
+    override fun setShowHiddenItems(show: Boolean) {
+        showHiddenItems = show
+    }
 
     private val quickAccess = listOf(
         FilePlaceKind.Desktop to "Desktop",
@@ -70,6 +75,7 @@ class LocalFileSystemProvider(
         FilePlaceKind.Pictures to "Pictures",
         FilePlaceKind.Music to "Music",
         FilePlaceKind.Movies to "Movies",
+        FilePlaceKind.Trash to ".Trash",
     )
 
     override fun observePlaces(): Flow<List<FilePlace>> = combine(
@@ -230,6 +236,71 @@ class LocalFileSystemProvider(
         if (Files.exists(target)) {
             throw FileBrowserException("同名项目已存在：$name")
         }
+        Files.move(source, target)
+    }
+
+    override suspend fun trash(
+        location: FileLocation,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
+    ): FileLocation = withContext(Dispatchers.IO) {
+        ensureLocal(location)
+        if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+        val trashDirectory = homeDirectory.resolve(".Trash")
+        Files.createDirectories(trashDirectory)
+        val source = location.toLocalPath()
+        val name = source.fileName?.toString() ?: throw FileBrowserException("路径无效：${location.path}")
+        val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+        val base = name.substring(0, dot)
+        val extension = name.substring(dot)
+        var index = 0
+        var target = trashDirectory.resolve(name)
+        while (Files.exists(target)) {
+            index++
+            target = trashDirectory.resolve("$base $index$extension")
+        }
+        Files.move(source, target)
+        FileLocation(location.source, target.toAbsolutePath().normalize().toString())
+    }
+
+    override suspend fun emptyTrash(
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        isCancelled: () -> Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        val trashDirectory = homeDirectory.resolve(".Trash")
+        if (!Files.isDirectory(trashDirectory)) {
+            onProgress(0, 0)
+            return@withContext
+        }
+        val children = Files.newDirectoryStream(trashDirectory).use { it.toList() }
+        onProgress(0, children.size.toLong())
+        children.forEachIndexed { index, child ->
+            if (isCancelled()) throw kotlinx.coroutines.CancellationException("清空废纸篓已取消")
+            Files.walk(child).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach {
+                    if (isCancelled()) throw kotlinx.coroutines.CancellationException("清空废纸篓已取消")
+                    Files.deleteIfExists(it)
+                }
+            }
+            onProgress((index + 1).toLong(), children.size.toLong())
+        }
+    }
+
+    override suspend fun restoreFromTrash(
+        trashed: FileLocation,
+        original: FileLocation,
+        isCancelled: () -> Boolean,
+        onWaiting: (deviceName: String?) -> Unit,
+    ): Unit = withContext(Dispatchers.IO) {
+        ensureLocal(trashed)
+        ensureLocal(original)
+        if (isCancelled()) throw kotlinx.coroutines.CancellationException("恢复已取消")
+        val source = trashed.toLocalPath()
+        val target = original.toLocalPath()
+        if (Files.exists(target)) {
+            throw FileBrowserException("原路径已存在同名项目：${original.path}")
+        }
+        target.parent?.let { Files.createDirectories(it) }
         Files.move(source, target)
     }
 
@@ -425,6 +496,9 @@ class LocalFileSystemProvider(
         label: String,
     ) {
         val normalized = path.toAbsolutePath().normalize()
+        if (kind == FilePlaceKind.Trash) {
+            runCatching { Files.createDirectories(normalized) }
+        }
         if (!Files.isDirectory(normalized)) return
         places += FilePlace(
             id = "local:${kind.name.lowercase()}",
@@ -483,7 +557,8 @@ class LocalFileSystemProvider(
 
     private fun readEntry(path: Path): FileEntry? {
         val name = path.fileName?.toString() ?: return null
-        if (name.startsWith(".")) return null
+        val hidden = name.startsWith(".")
+        if (hidden && !showHiddenItems) return null
 
         val attributes = runCatching {
             Files.readAttributes(path, BasicFileAttributes::class.java)
@@ -506,7 +581,7 @@ class LocalFileSystemProvider(
             childCount = if (isDirectory) countVisibleChildren(path) else null,
             modifiedAt = attributes.lastModifiedTime().toMillis(),
             extension = extension,
-            isHidden = false,
+            isHidden = hidden,
         )
     }
 
@@ -517,7 +592,7 @@ class LocalFileSystemProvider(
     private fun countVisibleChildren(directory: Path): Int? = runCatching {
         Files.newDirectoryStream(directory).use { children ->
             children.count { child ->
-                child.fileName?.toString()?.startsWith(".") != true
+                showHiddenItems || child.fileName?.toString()?.startsWith(".") != true
             }
         }
     }.getOrNull()

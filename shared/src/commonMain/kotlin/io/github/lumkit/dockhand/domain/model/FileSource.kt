@@ -41,6 +41,13 @@ data class FileLocation(
     }
 }
 
+/** 当前路径是否是本地废纸篓目录。 */
+fun FileLocation.isTrashLocation(): Boolean {
+    if (source.kind != FileSourceKind.Local) return false
+    val normalized = path.trimEnd('/')
+    return normalized.endsWith("/.Trash") || "/.Trash/" in normalized
+}
+
 /** UI 展示用路径：MTP 显示“设备/存储名 + 逻辑路径”。 */
 fun FileLocation.displayPath(): String =
     if (source.kind == FileSourceKind.Mtp) {

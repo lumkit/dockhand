@@ -48,6 +48,7 @@ import dockhand.shared.generated.resources.text_local
 import dockhand.shared.generated.resources.text_mounted_disks
 import dockhand.shared.generated.resources.text_no_local_places
 import dockhand.shared.generated.resources.text_movies
+import dockhand.shared.generated.resources.text_trash
 import dockhand.shared.generated.resources.text_mtp_devices
 import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_no_mounted_disks
@@ -74,6 +75,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.ExpandLess
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
@@ -118,9 +120,11 @@ fun HomeDrawerContent(
     colorSchemeMode: ColorSchemeMode,
     keyColor: Color,
     interfaceScale: Int,
+    showHiddenItems: Boolean,
     onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
+    onShowHiddenItemsChange: (Boolean) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -274,9 +278,11 @@ fun HomeDrawerContent(
         colorSchemeMode = colorSchemeMode,
         keyColor = keyColor,
         interfaceScale = interfaceScale,
+        showHiddenItems = showHiddenItems,
         onColorSchemeModeChange = onColorSchemeModeChange,
         onKeyColorChange = onKeyColorChange,
         onInterfaceScaleChange = onInterfaceScaleChange,
+        onShowHiddenItemsChange = onShowHiddenItemsChange,
     )
 }
 
@@ -536,6 +542,7 @@ private fun FilePlace.displayLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
+    FilePlaceKind.Trash -> stringResource(Res.string.text_trash)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,
@@ -556,6 +563,7 @@ private fun FilePlace.icon(): Any = when (kind) {
     FilePlaceKind.Pictures -> MiuixIcons.Image
     FilePlaceKind.Music -> MiuixIcons.Music
     FilePlaceKind.Movies -> MiuixIcons.Play
+    FilePlaceKind.Trash -> MiuixIcons.Delete
     FilePlaceKind.Volume -> painterResource(Res.drawable.ic_storage)
     FilePlaceKind.MtpDevice,
     FilePlaceKind.MtpStorage -> painterResource(Res.drawable.ic_mtp)

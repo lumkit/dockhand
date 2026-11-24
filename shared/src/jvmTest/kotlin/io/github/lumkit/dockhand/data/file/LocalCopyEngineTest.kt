@@ -11,6 +11,43 @@ import kotlin.test.assertEquals
 
 class LocalCopyEngineTest {
     @Test
+    fun movesFileToTrash() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-trash")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            Files.writeString(home.resolve("trash-me.txt"), "hello")
+            val location = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.resolve("trash-me.txt").toString(),
+            )
+
+            provider.trash(location)
+
+            assertEquals(false, Files.exists(home.resolve("trash-me.txt")))
+            assertEquals("hello", Files.readString(home.resolve(".Trash/trash-me.txt")))
+
+            val trashed = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.resolve(".Trash/trash-me.txt").toString(),
+            )
+            provider.restoreFromTrash(trashed, location)
+            assertEquals("hello", Files.readString(home.resolve("trash-me.txt")))
+
+            provider.trash(location)
+            provider.emptyTrash()
+            assertEquals(0, Files.list(home.resolve(".Trash")).use { it.count() })
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Test
     fun renamesFile() = runBlocking {
         val root = Files.createTempDirectory("dockhand-rename")
         try {

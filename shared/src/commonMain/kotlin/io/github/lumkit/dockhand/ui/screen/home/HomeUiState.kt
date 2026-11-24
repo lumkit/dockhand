@@ -96,6 +96,23 @@ data class RenameRequestState(
     val background: Boolean = false,
 )
 
+@Immutable
+data class TrashRequestState(
+    val entry: FileEntry,
+    val background: Boolean = false,
+)
+
+@Immutable
+data class RestoreRequestState(
+    val entry: FileEntry,
+    val background: Boolean = false,
+)
+
+@Immutable
+data class EmptyTrashRequestState(
+    val background: Boolean = false,
+)
+
 const val STARTUP_PATH_LAST = "__last__"
 const val STARTUP_PATH_DESKTOP = "local:desktop"
 val DEFAULT_KEY_COLOR = Color(0xFF6750A4)
@@ -111,6 +128,8 @@ data class HomeUiState(
     val colorSchemeMode: ColorSchemeMode = ColorSchemeMode.System,
     /** 莫奈主题的手动主色调。 */
     val keyColor: Color = DEFAULT_KEY_COLOR,
+    val showHiddenItems: Boolean = false,
+    val restorableTrashPaths: Set<String> = emptySet(),
     /** 界面缩放百分比，范围 80..110。 */
     val interfaceScale: Int = 100,
     val placesError: String? = null,
@@ -130,6 +149,9 @@ data class HomeUiState(
     val moveRequest: MoveRequestState? = null,
     val deleteRequest: DeleteRequestState? = null,
     val renameRequest: RenameRequestState? = null,
+    val trashRequest: TrashRequestState? = null,
+    val restoreRequest: RestoreRequestState? = null,
+    val emptyTrashRequest: EmptyTrashRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,

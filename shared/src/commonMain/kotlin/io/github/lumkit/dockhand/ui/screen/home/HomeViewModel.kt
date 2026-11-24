@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand.ui.screen.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
+import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileEntry
@@ -27,9 +28,15 @@ import dockhand.shared.generated.resources.task_copy_destination
 import dockhand.shared.generated.resources.task_copy_title
 import dockhand.shared.generated.resources.task_delete_detail
 import dockhand.shared.generated.resources.task_delete_title
+import dockhand.shared.generated.resources.task_empty_trash_detail
+import dockhand.shared.generated.resources.task_empty_trash_title
 import dockhand.shared.generated.resources.task_move_title
 import dockhand.shared.generated.resources.task_rename_detail
 import dockhand.shared.generated.resources.task_rename_title
+import dockhand.shared.generated.resources.task_restore_detail
+import dockhand.shared.generated.resources.task_restore_title
+import dockhand.shared.generated.resources.task_trash_detail
+import dockhand.shared.generated.resources.task_trash_title
 import dockhand.shared.generated.resources.task_waiting_message
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
@@ -67,6 +74,7 @@ class HomeViewModel(
     private val files: FileBrowserRepository,
     /** 侧边栏顺序等 UI 设置；测试可省略。 */
     private val settings: SettingsRepository? = null,
+    private val trashHistory: TrashHistoryRepository? = null,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -114,6 +122,34 @@ class HomeViewModel(
                 .catch { }
                 .collect { sources ->
                     _state.update { it.copy(mtpExpandedSources = sources) }
+                }
+        }
+    }
+    private var appliedShowHiddenItems: Boolean? = null
+    private val trashHistoryJob: Job? = trashHistory?.let { repository ->
+        scope.launch {
+            repository.observeAll()
+                .catch { }
+                .collect { records ->
+                    _state.update { state ->
+                        state.copy(
+                            restorableTrashPaths = records.map { it.trashedPath }.toSet()
+                        )
+                    }
+                }
+        }
+    }
+    private val showHiddenItemsJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.showHiddenItems
+                .catch { }
+                .collect { enabled ->
+                    _state.update { it.copy(showHiddenItems = enabled) }
+                    applyShowHiddenItems(
+                        enabled,
+                        refresh = _state.value.leftPane.location != null ||
+                            _state.value.rightPane.location != null,
+                    )
                 }
         }
     }
@@ -284,6 +320,21 @@ class HomeViewModel(
         }
     }
 
+    fun onShowHiddenItemsChange(enabled: Boolean) {
+        _state.update { it.copy(showHiddenItems = enabled) }
+        settings?.let { repository ->
+            scope.launch { repository.setShowHiddenItems(enabled) }
+        }
+        applyShowHiddenItems(enabled, refresh = true)
+    }
+
+    private fun applyShowHiddenItems(show: Boolean, refresh: Boolean) {
+        if (appliedShowHiddenItems == show) return
+        appliedShowHiddenItems = show
+        files.setShowHiddenItems(show)
+        if (refresh) refreshAllPanes()
+    }
+
     fun onRestoreWindowSizeChange(enabled: Boolean) {
         _state.update { it.copy(restoreWindowSize = enabled) }
         settings?.let { repository ->
@@ -397,7 +448,129 @@ class HomeViewModel(
                     )
                 }
             }
+            FileContextAction.Trash -> {
+                _state.update {
+                    it.copy(trashRequest = TrashRequestState(entry = entry))
+                }
+            }
+            FileContextAction.Restore -> {
+                _state.update {
+                    it.copy(restoreRequest = RestoreRequestState(entry = entry))
+                }
+            }
             else -> Unit
+        }
+    }
+
+    fun onEmptyTrashRequest() {
+        _state.update { it.copy(emptyTrashRequest = EmptyTrashRequestState()) }
+    }
+
+    fun onEmptyTrashRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(emptyTrashRequest = state.emptyTrashRequest?.copy(background = background))
+        }
+    }
+
+    fun onEmptyTrashRequestDismiss() {
+        _state.update { it.copy(emptyTrashRequest = null) }
+    }
+
+    fun onEmptyTrashRequestConfirm() {
+        val request = _state.value.emptyTrashRequest ?: return
+        _state.update { it.copy(emptyTrashRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_empty_trash_title)
+            val detail = getString(Res.string.task_empty_trash_detail)
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.emptyTrash(
+                    onProgress = { completed, total -> report(completed, total) },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+    }
+
+    fun onRestoreRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(restoreRequest = state.restoreRequest?.copy(background = background))
+        }
+    }
+
+    fun onRestoreRequestDismiss() {
+        _state.update { it.copy(restoreRequest = null) }
+    }
+
+    fun onRestoreRequestConfirm() {
+        val request = _state.value.restoreRequest ?: return
+        _state.update { it.copy(restoreRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_restore_title, request.entry.name)
+            val detail = getString(Res.string.task_restore_detail)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.restoreFromTrash(
+                    entry = request.entry,
+                    onProgress = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+    }
+
+    fun onTrashRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(trashRequest = state.trashRequest?.copy(background = background))
+        }
+    }
+
+    fun onTrashRequestDismiss() {
+        _state.update { it.copy(trashRequest = null) }
+    }
+
+    fun onTrashRequestConfirm() {
+        val request = _state.value.trashRequest ?: return
+        _state.update { it.copy(trashRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_trash_title, request.entry.name)
+            val detail = getString(Res.string.task_trash_detail)
+            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onFinished = { refreshAllPanes() },
+            ) {
+                files.trashWithProgress(
+                    entries = listOf(request.entry),
+                    onProgress = { completed, total -> report(completed, total) },
+                    onWaiting = { deviceName ->
+                        if (deviceName == null) {
+                            running()
+                        } else {
+                            waiting(waitingTemplate.replace("%s", deviceName))
+                        }
+                    },
+                    isCancelled = { isCancelled },
+                )
+            }
         }
     }
 

@@ -12,6 +12,9 @@
     <string name="startup_right_path">启动路径 - 右窗口</string>
     <string name="startup_last_path">上次路径</string>
     <string name="settings_restore_window_size">恢复窗口大小</string>
+    <string name="framework_section">框架</string>
+    <string name="settings_show_hidden_items">显示隐藏项目</string>
+    <string name="settings_show_hidden_items_summary">在文件列表中显示以点开头的项目</string>
     <string name="appearance_section">外观</string>
     <string name="theme_mode">主题模式</string>
     <string name="theme_mode_summary">选择应用内的色彩风格</string>
@@ -35,6 +38,7 @@
     <string name="text_camera">相片</string>
     <string name="text_music">音乐</string>
     <string name="text_movies">影片</string>
+    <string name="text_trash">废纸篓</string>
     <string name="text_no_mtp_devices">未连接 MTP 设备</string>
     <string name="text_mtp_hint">通过 USB 连接 Android 设备后，这里会出现它的存储。</string>
 
@@ -49,6 +53,12 @@
     <string name="delete_dialog_title">删除项目</string>
     <string name="rename_dialog_title">重命名项目</string>
     <string name="rename_dialog_summary">为%1$s设置新名称</string>
+    <string name="trash_dialog_title">移到废纸篓</string>
+    <string name="trash_dialog_summary">将%1$s移到废纸篓？</string>
+    <string name="restore_dialog_title">恢复项目</string>
+    <string name="restore_dialog_summary">将%1$s恢复到原路径？</string>
+    <string name="empty_trash_dialog_title">清空废纸篓</string>
+    <string name="empty_trash_dialog_summary">确定要删除废纸篓里的所有项目吗？</string>
     <string name="copy_dialog_background">后台执行</string>
     <string name="copy_dialog_summary">是否将%1$s复制到%2$s？</string>
     <string name="move_dialog_summary">是否将%1$s移动到%2$s？</string>
@@ -59,6 +69,12 @@
     <string name="task_delete_detail">删除后不可恢复</string>
     <string name="task_rename_title">重命名 %1$s</string>
     <string name="task_rename_detail">改为 %1$s</string>
+    <string name="task_trash_title">移到废纸篓 %1$s</string>
+    <string name="task_trash_detail">可从废纸篓恢复</string>
+    <string name="task_restore_title">恢复 %1$s</string>
+    <string name="task_restore_detail">恢复到原路径</string>
+    <string name="task_empty_trash_title">清空废纸篓</string>
+    <string name="task_empty_trash_detail">删除废纸篓全部内容</string>
     <string name="task_copy_destination">到 %1$s</string>
     <string name="tasks_tooltip_title">后台任务</string>
     <string name="tasks_empty">暂无任务</string>
@@ -103,6 +119,7 @@
     <string name="action_move_to_right">移动 -></string>
     <string name="action_move_to_left">&lt;- 移动</string>
     <string name="action_move_to_trash">移到废纸篓</string>
+    <string name="action_restore">恢复项目</string>
     <string name="action_delete">删除</string>
     <string name="action_rename">重命名</string>
     <string name="action_compress">压缩</string>
@@ -126,6 +143,7 @@
     <string name="tooltip_sync">同步路径到另一窗口</string>
     <string name="tooltip_up">上一级</string>
     <string name="tooltip_refresh">刷新目录</string>
+    <string name="tooltip_empty_trash">清空废纸篓</string>
     <string name="dialog_new">新建</string>
     <string name="field_name">名称</string>
     <string name="checkbox_create_file">创建文件</string>

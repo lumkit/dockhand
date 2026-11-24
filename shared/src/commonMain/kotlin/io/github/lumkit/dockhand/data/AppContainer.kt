@@ -2,7 +2,7 @@ package io.github.lumkit.dockhand.data
 
 import androidx.compose.runtime.Composable
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
-import io.github.lumkit.dockhand.data.repository.NoteRepository
+import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.task.NoopTaskNotifier
 import io.github.lumkit.dockhand.task.TaskNotifier
@@ -13,8 +13,8 @@ import io.github.lumkit.dockhand.task.TaskNotifier
  */
 class AppContainer(
     val settings: SettingsRepository,
-    val notes: NoteRepository,
     val files: FileBrowserRepository,
+    val trashHistory: TrashHistoryRepository? = null,
     val taskNotifier: TaskNotifier = NoopTaskNotifier,
     private val onClose: () -> Unit = {},
 ) {

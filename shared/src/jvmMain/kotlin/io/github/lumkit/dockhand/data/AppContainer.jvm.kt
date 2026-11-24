@@ -10,7 +10,7 @@ import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.datastore.createSettingsDataStore
 import io.github.lumkit.dockhand.data.file.LocalFileSystemProvider
 import io.github.lumkit.dockhand.data.file.MtpFileSystemProvider
-import io.github.lumkit.dockhand.data.repository.NoteRepository
+import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.repository.DefaultFileBrowserRepository
 import io.github.lumkit.dockhand.task.MacTaskNotifier
 import kotlinx.coroutines.CoroutineScope
@@ -34,16 +34,18 @@ fun createAppContainer(): AppContainer {
 
     val dataStore = createSettingsDataStore(File(dataDir, "settings.preferences_pb"), scope)
     val database = createDatabase(File(dataDir, "dockhand.db"))
+    val trashHistory = TrashHistoryRepository(database.trashHistoryDao())
 
     return AppContainer(
         settings = SettingsRepository(dataStore),
-        notes = NoteRepository(database.noteDao()),
         files = DefaultFileBrowserRepository(
             providers = listOf(
                 LocalFileSystemProvider(),
                 MtpFileSystemProvider(),
-            )
+            ),
+            trashHistory = trashHistory,
         ),
+        trashHistory = trashHistory,
         taskNotifier = MacTaskNotifier(),
         onClose = { database.close() },
     )

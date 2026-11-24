@@ -47,6 +47,7 @@ class MtpFileSystemProvider(
 
     private val requestIds = AtomicLong()
     private val transferIds = AtomicLong()
+    private var showHiddenItems = false
     private val deviceTransferLocks = mutableMapOf<Long, Mutex>()
     private val deviceCooldowns = mutableMapOf<Long, Long>()
     private val indexMutex = Mutex()
@@ -56,6 +57,10 @@ class MtpFileSystemProvider(
     }
 
     override val kind: FileSourceKind = FileSourceKind.Mtp
+
+    override fun setShowHiddenItems(show: Boolean) {
+        showHiddenItems = show
+    }
 
     override fun observePlaces(): Flow<List<FilePlace>> = flow {
         while (true) {
@@ -183,6 +188,7 @@ class MtpFileSystemProvider(
                 is BridgeResult.Success -> bridge.value
                     .asSequence()
                     .filter { it.name.isNotEmpty() }
+                    .filter { showHiddenItems || !it.name.startsWith(".") }
                     .map { entry -> entry.toFileEntry(location.source, location.path) }
                     .toList()
             }
@@ -592,7 +598,7 @@ class MtpFileSystemProvider(
             size = if (isDirectory) null else size,
             modifiedAt = parseModifiedLocal(modifiedLocal),
             extension = extension,
-            isHidden = false,
+            isHidden = name.startsWith("."),
         )
     }
 

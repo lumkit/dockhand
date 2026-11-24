@@ -58,6 +58,11 @@ dependencies {
     // Room 的注解处理器只跑在 JVM 目标上
     add("kspJvm", libs.androidx.room.compiler)
 }
+
+// Room schema 随源码保留，保证后续迁移有历史版本可对照。
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
 // ---------------------------------------------------------------------------
 // Rust MTP bridge
 // ---------------------------------------------------------------------------

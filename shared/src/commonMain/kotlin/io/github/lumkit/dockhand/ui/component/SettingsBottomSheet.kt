@@ -46,12 +46,16 @@ import dockhand.shared.generated.resources.startup_left_path
 import dockhand.shared.generated.resources.startup_right_path
 import dockhand.shared.generated.resources.settings_restore_window_size
 import dockhand.shared.generated.resources.settings_restore_window_size_summary
+import dockhand.shared.generated.resources.settings_show_hidden_items
+import dockhand.shared.generated.resources.settings_show_hidden_items_summary
+import dockhand.shared.generated.resources.framework_section
 import dockhand.shared.generated.resources.startup_section
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_music
+import dockhand.shared.generated.resources.text_trash
 import dockhand.shared.generated.resources.text_pictures
 import dockhand.shared.generated.resources.text_settings
 import io.github.lumkit.dockhand.domain.model.FilePlace
@@ -104,6 +108,8 @@ fun SettingsBottomSheet(
     onKeyColorChange: (Color) -> Unit,
     interfaceScale: Int,
     onInterfaceScaleChange: (Int) -> Unit,
+    showHiddenItems: Boolean,
+    onShowHiddenItemsChange: (Boolean) -> Unit,
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -185,6 +191,23 @@ fun SettingsBottomSheet(
                         )
                         showScaleDialog = true
                     },
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+            SmallTitle(stringResource(Res.string.framework_section))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.defaultColors(
+                    color = MiuixTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                SwitchPreference(
+                    checked = showHiddenItems,
+                    onCheckedChange = onShowHiddenItemsChange,
+                    title = stringResource(Res.string.settings_show_hidden_items),
+                    summary = stringResource(Res.string.settings_show_hidden_items_summary),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
@@ -373,6 +396,7 @@ private fun FilePlace.settingsLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
+    FilePlaceKind.Trash -> stringResource(Res.string.text_trash)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,

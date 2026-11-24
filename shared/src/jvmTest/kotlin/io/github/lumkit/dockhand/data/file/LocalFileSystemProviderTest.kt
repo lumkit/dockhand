@@ -53,6 +53,10 @@ class LocalFileSystemProviderTest {
             assertEquals(0, entries.first { it.name == "zdir" }.childCount)
             assertEquals("a", Files.readString(Path.of(entries.first { it.name == "A.txt" }.location.path)))
             assertTrue(entries.none { it.name == ".hidden" })
+
+            provider.setShowHiddenItems(true)
+            val withHidden = provider.list(homePlace.location)
+            assertTrue(withHidden.any { it.name == ".hidden" && it.isHidden })
         } finally {
             root.toFile().deleteRecursively()
         }
