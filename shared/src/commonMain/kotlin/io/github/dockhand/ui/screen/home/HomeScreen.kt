@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -103,6 +104,7 @@ import top.yukonga.miuix.kmp.icon.extended.Tasks
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.squircle.squircleClip
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.LocalWindowState
 import top.yukonga.miuix.kmp.window.MiuixCaptionBar
@@ -140,6 +142,9 @@ fun HomeScreen() {
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
         onStartupPathChange = homeViewModel::onStartupPathChange,
         onRestoreWindowSizeChange = homeViewModel::onRestoreWindowSizeChange,
+        onColorSchemeModeChange = homeViewModel::onColorSchemeModeChange,
+        onKeyColorChange = homeViewModel::onKeyColorChange,
+        onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
         onLoadMore = homeViewModel::onLoadMore,
@@ -174,6 +179,9 @@ private fun HomeScreenContent(
     onMtpShortcutMove: (String, Int) -> Boolean,
     onStartupPathChange: (PaneId, String) -> Unit,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
+    onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
+    onKeyColorChange: (Color) -> Unit,
+    onInterfaceScaleChange: (Int) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
     onRetry: (PaneId) -> Unit,
@@ -246,6 +254,12 @@ private fun HomeScreenContent(
                     onStartupPathChange = onStartupPathChange,
                     restoreWindowSize = uiState.restoreWindowSize,
                     onRestoreWindowSizeChange = onRestoreWindowSizeChange,
+                    colorSchemeMode = uiState.colorSchemeMode,
+                    keyColor = uiState.keyColor,
+                    interfaceScale = uiState.interfaceScale,
+                    onColorSchemeModeChange = onColorSchemeModeChange,
+                    onKeyColorChange = onKeyColorChange,
+                    onInterfaceScaleChange = onInterfaceScaleChange,
                     onPlaceMove = onPlaceMove,
                     onMtpStorageClick = onMtpStorageClick,
                     onMtpShortcutMove = onMtpShortcutMove,

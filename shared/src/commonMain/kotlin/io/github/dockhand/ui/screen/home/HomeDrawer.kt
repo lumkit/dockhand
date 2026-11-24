@@ -91,6 +91,7 @@ import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.squircle.squircleClip
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -114,6 +115,12 @@ fun HomeDrawerContent(
     onStartupPathChange: (PaneId, String) -> Unit,
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
+    colorSchemeMode: ColorSchemeMode,
+    keyColor: Color,
+    interfaceScale: Int,
+    onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
+    onKeyColorChange: (Color) -> Unit,
+    onInterfaceScaleChange: (Int) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -264,6 +271,12 @@ fun HomeDrawerContent(
         onStartupRightPathChange = { onStartupPathChange(PaneId.Right, it) },
         restoreWindowSize = restoreWindowSize,
         onRestoreWindowSizeChange = onRestoreWindowSizeChange,
+        colorSchemeMode = colorSchemeMode,
+        keyColor = keyColor,
+        interfaceScale = interfaceScale,
+        onColorSchemeModeChange = onColorSchemeModeChange,
+        onKeyColorChange = onKeyColorChange,
+        onInterfaceScaleChange = onInterfaceScaleChange,
     )
 }
 

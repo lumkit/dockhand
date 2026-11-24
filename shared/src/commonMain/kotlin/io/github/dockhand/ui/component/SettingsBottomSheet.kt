@@ -1,13 +1,43 @@
 package io.github.dockhand.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
+import dockhand.shared.generated.resources.action_cancel
+import dockhand.shared.generated.resources.action_confirm
+import dockhand.shared.generated.resources.appearance_section
+import dockhand.shared.generated.resources.interface_scale
+import dockhand.shared.generated.resources.interface_scale_range
+import dockhand.shared.generated.resources.interface_scale_summary
+import dockhand.shared.generated.resources.main_color
+import dockhand.shared.generated.resources.theme_dark
+import dockhand.shared.generated.resources.theme_light
+import dockhand.shared.generated.resources.theme_mode
+import dockhand.shared.generated.resources.theme_mode_summary
+import dockhand.shared.generated.resources.theme_monet_dark
+import dockhand.shared.generated.resources.theme_monet_light
+import dockhand.shared.generated.resources.theme_monet_system
+import dockhand.shared.generated.resources.theme_system
 import dockhand.shared.generated.resources.startup_last_path
 import dockhand.shared.generated.resources.startup_left_path
 import dockhand.shared.generated.resources.startup_right_path
@@ -26,19 +56,36 @@ import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.ui.screen.home.STARTUP_PATH_LAST
 import org.jetbrains.compose.resources.stringResource
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Surface
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.menu.OverlayDropdownMenu
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.squircle.squircleClip
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlin.math.roundToInt
 
 /**
  * 设置底部弹窗。
  */
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun SettingsBottomSheet(
     show: Boolean,
@@ -48,6 +95,12 @@ fun SettingsBottomSheet(
     startupRightPath: String,
     onStartupLeftPathChange: (String) -> Unit,
     onStartupRightPathChange: (String) -> Unit,
+    colorSchemeMode: ColorSchemeMode,
+    onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
+    keyColor: Color,
+    onKeyColorChange: (Color) -> Unit,
+    interfaceScale: Int,
+    onInterfaceScaleChange: (Int) -> Unit,
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -55,6 +108,14 @@ fun SettingsBottomSheet(
     val localPlaces = remember(places) {
         places.filter { it.group == FilePlaceGroup.Local }
     }
+    var scale by remember(interfaceScale) { mutableFloatStateOf(interfaceScale / 100f) }
+    LaunchedEffect(interfaceScale) { scale = interfaceScale / 100f }
+    var showScaleDialog by remember { mutableStateOf(false) }
+    var scaleDraft by remember { mutableStateOf("") }
+    var showColorDialog by remember { mutableStateOf(false) }
+    var dialogColor by remember { mutableStateOf(keyColor) }
+    val themeModes = ColorSchemeMode.entries
+    val scrollState = rememberScrollState()
     OverlayBottomSheet(
         show = show,
         modifier = modifier,
@@ -64,8 +125,65 @@ fun SettingsBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .verticalScrollBar(scrollState)
                 .padding(16.dp),
         ) {
+            SmallTitle(stringResource(Res.string.appearance_section))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.defaultColors(
+                    color = MiuixTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                OverlayDropdownPreference(
+                    items = themeModes.map { themeModeLabel(it) },
+                    selectedIndex = colorSchemeMode.ordinal,
+                    title = stringResource(Res.string.theme_mode),
+                    summary = stringResource(Res.string.theme_mode_summary),
+                    onSelectedIndexChange = { onColorSchemeModeChange(themeModes[it]) },
+                )
+                AnimatedVisibility(visible = colorSchemeMode >= ColorSchemeMode.MonetSystem) {
+                    ArrowPreference(
+                        title = stringResource(Res.string.main_color),
+                        summary = keyColor.toHexString(),
+                        endActions = {
+                            Surface(
+                                modifier = Modifier.size(32.dp)
+                                    .squircleClip(12.dp),
+                                color = keyColor,
+                            ) {}
+                        },
+                        onClick = {
+                            dialogColor = keyColor
+                            showColorDialog = true
+                        },
+                    )
+                }
+
+                SliderPreference(
+                    value = scale,
+                    onValueChange = { scale = it },
+                    onValueChangeFinished = {
+                        onInterfaceScaleChange((scale * 100).roundToInt())
+                    },
+                    title = stringResource(Res.string.interface_scale),
+                    summary = stringResource(Res.string.interface_scale_summary),
+                    valueRange = 0.8f..1.1f,
+                    showKeyPoints = true,
+                    keyPoints = listOf(0.8f, 0.9f, 1.0f, 1.1f),
+                    endActions = {
+                        Text(text = "${(scale * 100).roundToInt()}%")
+                    },
+                    hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                    onClick = {
+                        scaleDraft = (scale * 100).roundToInt().toString()
+                        showScaleDialog = true
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
             SmallTitle(stringResource(Res.string.startup_section))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -109,6 +227,111 @@ fun SettingsBottomSheet(
             }
         }
     }
+
+    if (showColorDialog) {
+        OverlayDialog(
+            show = true,
+            title = stringResource(Res.string.main_color),
+            summary = dialogColor.toHexString(),
+            onDismissRequest = { showColorDialog = false },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ColorPalette(
+                    color = dialogColor,
+                    onColorChanged = { dialogColor = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            onKeyColorChange(dialogColor)
+                            showColorDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.action_confirm))
+                    }
+                    Button(
+                        onClick = { showColorDialog = false },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.action_cancel))
+                    }
+                }
+            }
+        }
+    }
+
+    if (showScaleDialog) {
+        OverlayDialog(
+            show = true,
+            title = stringResource(Res.string.interface_scale),
+            summary = stringResource(Res.string.interface_scale_range),
+            onDismissRequest = { showScaleDialog = false },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextField(
+                    value = scaleDraft,
+                    onValueChange = { value ->
+                        if (value.all(Char::isDigit) && value.length <= 3) {
+                            scaleDraft = value
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            val percent = scaleDraft.toIntOrNull() ?: (scale * 100).roundToInt()
+                            val safeScale = (percent / 100f).coerceIn(0.8f, 1.1f)
+                            scale = safeScale
+                            onInterfaceScaleChange((safeScale * 100).roundToInt())
+                            showScaleDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.action_confirm))
+                    }
+                    Button(
+                        onClick = { showScaleDialog = false },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.action_cancel))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun Color.toHexString(): String {
+    val rgb = toArgb() and 0xFFFFFF
+    return "#" + rgb.toString(16).uppercase().padStart(6, '0')
+}
+
+@Composable
+private fun themeModeLabel(mode: ColorSchemeMode): String = when (mode) {
+    ColorSchemeMode.System -> stringResource(Res.string.theme_system)
+    ColorSchemeMode.Light -> stringResource(Res.string.theme_light)
+    ColorSchemeMode.Dark -> stringResource(Res.string.theme_dark)
+    ColorSchemeMode.MonetSystem -> stringResource(Res.string.theme_monet_system)
+    ColorSchemeMode.MonetLight -> stringResource(Res.string.theme_monet_light)
+    ColorSchemeMode.MonetDark -> stringResource(Res.string.theme_monet_dark)
 }
 
 @Composable
@@ -153,6 +376,7 @@ private fun FilePlace.settingsLabel(): String = when (kind) {
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,
     FilePlaceKind.MtpStorage -> label
+
     FilePlaceKind.MtpCamera,
     FilePlaceKind.MtpDownloads,
     FilePlaceKind.MtpMovies,

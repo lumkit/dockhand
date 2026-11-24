@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -28,6 +30,8 @@ internal object SettingsKeys {
     val RestoreWindowSize = booleanPreferencesKey("restore_window_size")
     val WindowWidth = intPreferencesKey("window_width_dp")
     val WindowHeight = intPreferencesKey("window_height_dp")
+    val InterfaceScale = intPreferencesKey("interface_scale")
+    val KeyColor = intPreferencesKey("key_color")
 
     fun startupPath(pane: String): Preferences.Key<String> =
         stringPreferencesKey("startup_path_${pane.lowercase()}")
@@ -127,6 +131,22 @@ class SettingsRepository(
                 path = raw.substring(separator + 1),
             )
         }
+
+    val interfaceScale: Flow<Int> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> (prefs[SettingsKeys.InterfaceScale] ?: 100).coerceIn(80, 110) }
+
+    suspend fun setInterfaceScale(value: Int) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.InterfaceScale] = value.coerceIn(80, 110) }
+    }
+
+    val keyColor: Flow<Color?> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.KeyColor]?.let { Color(it) } }
+
+    suspend fun setKeyColor(color: Color) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.KeyColor] = color.toArgb() }
+    }
 
     val restoreWindowSize: Flow<Boolean> = dataStore.data
         .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }

@@ -6,6 +6,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import io.github.dockhand.data.AppContainer
 import io.github.dockhand.data.rememberAppContainer
 import io.github.dockhand.ui.screen.home.HomeScreen
@@ -29,12 +32,27 @@ fun App() {
 @Composable
 fun App(container: AppContainer) {
     val mode by container.settings.colorSchemeMode.collectAsState(initial = ColorSchemeMode.System)
+    val keyColor by container.settings.keyColor.collectAsState(initial = null)
+    val interfaceScale by container.settings.interfaceScale.collectAsState(initial = 100)
     // ThemeController 的 colorSchemeMode 是只读状态，切换模式时重建一个即可
-    val controller = remember(mode) { ThemeController(colorSchemeMode = mode) }
+    val controller = remember(mode, keyColor) {
+        ThemeController(
+            colorSchemeMode = mode,
+            keyColor = keyColor ?: Color(0xFF6750A4),
+        )
+    }
+    val baseDensity = LocalDensity.current
+    val scaledDensity = remember(baseDensity, interfaceScale) {
+        Density(
+            density = baseDensity.density * interfaceScale / 100f,
+            fontScale = baseDensity.fontScale,
+        )
+    }
 
     DockhandTheme(controller = controller) {
         CompositionLocalProvider(
-            LocalAppContainer provides container
+            LocalAppContainer provides container,
+            LocalDensity provides scaledDensity,
         ) {
             HomeScreen()
         }

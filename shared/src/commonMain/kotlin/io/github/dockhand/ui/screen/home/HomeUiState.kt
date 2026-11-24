@@ -1,6 +1,7 @@
 package io.github.dockhand.ui.screen.home
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.Color
 import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FileEntry
 import io.github.dockhand.domain.model.FileInfo
@@ -8,6 +9,7 @@ import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.breadcrumbs
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
 enum class PaneId {
     Left,
@@ -76,6 +78,7 @@ data class CopyRequestState(
 
 const val STARTUP_PATH_LAST = "__last__"
 const val STARTUP_PATH_DESKTOP = "local:desktop"
+val DEFAULT_KEY_COLOR = Color(0xFF6750A4)
 
 @Immutable
 data class HomeUiState(
@@ -85,6 +88,11 @@ data class HomeUiState(
     val startupRightPath: String = STARTUP_PATH_DESKTOP,
     /** Floating 模式关闭时是否恢复上次窗口大小。 */
     val restoreWindowSize: Boolean = true,
+    val colorSchemeMode: ColorSchemeMode = ColorSchemeMode.System,
+    /** 莫奈主题的手动主色调。 */
+    val keyColor: Color = DEFAULT_KEY_COLOR,
+    /** 界面缩放百分比，范围 80..110。 */
+    val interfaceScale: Int = 100,
     val placesError: String? = null,
     /** 每个侧边栏分组内部的 place id 顺序；由设置持久化。 */
     val drawerPlaceOrder: Map<FilePlaceGroup, List<String>> = emptyMap(),

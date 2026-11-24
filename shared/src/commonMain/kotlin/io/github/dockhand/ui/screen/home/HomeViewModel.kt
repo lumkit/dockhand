@@ -18,8 +18,10 @@ import io.github.dockhand.task.NoopTaskNotifier
 import io.github.dockhand.task.TaskManager
 import io.github.dockhand.task.TaskNotifier
 import io.github.dockhand.ui.component.FileContextAction
+import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.error_name_empty
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import dockhand.shared.generated.resources.error_name_invalid
 import dockhand.shared.generated.resources.task_copy_destination
 import dockhand.shared.generated.resources.task_copy_title
@@ -115,6 +117,27 @@ class HomeViewModel(
             repository.startupPath(PaneId.Left.name)
                 .catch { }
                 .collect { path -> _state.update { it.copy(startupLeftPath = path) } }
+        }
+    }
+    private val colorSchemeJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.colorSchemeMode
+                .catch { }
+                .collect { mode -> _state.update { it.copy(colorSchemeMode = mode) } }
+        }
+    }
+    private val keyColorJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.keyColor
+                .catch { }
+                .collect { color -> _state.update { it.copy(keyColor = color ?: DEFAULT_KEY_COLOR) } }
+        }
+    }
+    private val interfaceScaleJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.interfaceScale
+                .catch { }
+                .collect { scale -> _state.update { it.copy(interfaceScale = scale) } }
         }
     }
     private val restoreWindowSizeJob: Job? = settings?.let { repository ->
@@ -232,6 +255,28 @@ class HomeViewModel(
             if (source != null) return FileLocation(source, last.path)
         }
         return fallback
+    }
+
+    fun onColorSchemeModeChange(mode: ColorSchemeMode) {
+        _state.update { it.copy(colorSchemeMode = mode) }
+        settings?.let { repository ->
+            scope.launch { repository.setColorSchemeMode(mode) }
+        }
+    }
+
+    fun onKeyColorChange(color: Color) {
+        _state.update { it.copy(keyColor = color) }
+        settings?.let { repository ->
+            scope.launch { repository.setKeyColor(color) }
+        }
+    }
+
+    fun onInterfaceScaleChange(scale: Int) {
+        val normalized = scale.coerceIn(80, 110)
+        _state.update { it.copy(interfaceScale = normalized) }
+        settings?.let { repository ->
+            scope.launch { repository.setInterfaceScale(normalized) }
+        }
     }
 
     fun onRestoreWindowSizeChange(enabled: Boolean) {
