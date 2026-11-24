@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand.ui.component
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -100,6 +101,7 @@ import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
 import kotlinx.coroutines.flow.distinctUntilChanged
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.DropdownEntry
@@ -112,7 +114,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TooltipBox
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.verticalScrollBar
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
@@ -727,15 +728,10 @@ private fun FileEntryRow(
                     }
                 },
             startAction = {
-                Icon(
-                    imageVector = if (row.isDirectory) MiuixIcons.Folder else MiuixIcons.File,
+                Image(
+                    painter = painterResource(row.icon),
                     contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = if (row.isDirectory) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    },
+                    modifier = Modifier.size(32.dp),
                 )
             },
             endActions = {
