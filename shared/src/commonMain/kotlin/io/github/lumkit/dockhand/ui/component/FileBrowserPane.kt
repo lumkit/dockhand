@@ -102,7 +102,6 @@ import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
-import coil3.Uri
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
@@ -732,9 +731,9 @@ private fun FileEntryRow(
                     }
                 },
             startAction = {
-                if (row.thumbnailPath != null) {
+                if (row.thumbnailModel != null) {
                     AsyncImage(
-                        model = Uri(scheme = "file", path = row.thumbnailPath),
+                        model = row.thumbnailModel,
                         contentDescription = null,
                         modifier = Modifier
                             .size(36.dp)

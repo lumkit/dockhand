@@ -1,9 +1,11 @@
 package io.github.lumkit.dockhand.ui.screen.home
 
 import androidx.compose.runtime.Immutable
+import coil3.Uri
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.ic_file_folder
 import dockhand.shared.generated.resources.ic_file_generic
+import io.github.lumkit.dockhand.core.thumbnail.VideoThumbnailRequest
 import dockhand.shared.generated.resources.ic_file_ai
 import dockhand.shared.generated.resources.ic_file_avi
 import dockhand.shared.generated.resources.ic_file_bmp
@@ -60,7 +62,7 @@ data class FileRowUi(
     val entry: FileEntry,
     val summary: String?,
     val icon: DrawableResource,
-    val thumbnailPath: String? = null,
+    val thumbnailModel: Any? = null,
 ) {
     val id: String get() = entry.id
     val name: String get() = entry.name
@@ -84,24 +86,27 @@ internal fun List<FileEntry>.toRowUi(
                 itemCountText = entry.childCount?.let(itemCountTexts::get),
             ),
             icon = entry.fileIcon(),
-            thumbnailPath = entry.thumbnailPath(),
+            thumbnailModel = entry.thumbnailModel(),
         )
     }
 
-private val THUMBNAIL_EXTENSIONS = setOf(
+private val IMAGE_THUMBNAIL_EXTENSIONS = setOf(
     "jpg", "jpeg", "png", "webp", "gif", "bmp", "svg",
 )
 
-private fun FileEntry.thumbnailPath(): String? =
-    if (
-        !isDirectory &&
-        location.source.kind == FileSourceKind.Local &&
-        extension?.lowercase() in THUMBNAIL_EXTENSIONS
-    ) {
-        location.path
-    } else {
-        null
+private val VIDEO_THUMBNAIL_EXTENSIONS = setOf(
+    "mp4", "mov", "m4v", "mkv", "avi", "webm", "flv", "mpg", "mpeg", "wmv", "3gp",
+)
+
+private fun FileEntry.thumbnailModel(): Any? {
+    if (isDirectory || location.source.kind != FileSourceKind.Local) return null
+    val ext = extension?.lowercase() ?: return null
+    return when (ext) {
+        in IMAGE_THUMBNAIL_EXTENSIONS -> Uri(scheme = "file", path = location.path)
+        in VIDEO_THUMBNAIL_EXTENSIONS -> VideoThumbnailRequest(location.path)
+        else -> null
     }
+}
 
 /** 图标在构建行数据时决定，LazyColumn 内不再做扩展名判断。 */
 private fun FileEntry.fileIcon(): DrawableResource {

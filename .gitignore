@@ -72,3 +72,6 @@ node_modules/
 *.tmp
 *.swp
 *.swo
+
+# Generated native helpers
+native/video-thumbnailer/video-thumbnailer

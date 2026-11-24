@@ -9,6 +9,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import io.github.lumkit.dockhand.core.thumbnail.installVideoThumbnailSupport
 import io.github.lumkit.dockhand.data.AppContainer
 import io.github.lumkit.dockhand.data.rememberAppContainer
 import io.github.lumkit.dockhand.ui.screen.home.HomeScreen
@@ -31,6 +34,11 @@ fun App() {
 
 @Composable
 fun App(container: AppContainer) {
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .apply { installVideoThumbnailSupport() }
+            .build()
+    }
     val mode by container.settings.colorSchemeMode.collectAsState(initial = ColorSchemeMode.System)
     val keyColor by container.settings.keyColor.collectAsState(initial = null)
     val interfaceScale by container.settings.interfaceScale.collectAsState(initial = 100)

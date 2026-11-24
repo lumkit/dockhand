@@ -98,6 +98,35 @@ tasks.named<ProcessResources>("jvmProcessResources") {
     }
 }
 
+// ---------------------------------------------------------------------------
+// macOS AVFoundation video thumbnailer
+// ---------------------------------------------------------------------------
+val videoThumbnailerDir = rootProject.layout.projectDirectory.dir("native/video-thumbnailer")
+val videoThumbnailerBinary = videoThumbnailerDir.file("video-thumbnailer")
+val buildVideoThumbnailer = tasks.register<Exec>("buildVideoThumbnailer") {
+    group = "build"
+    description = "Builds the AVFoundation video thumbnail helper"
+    workingDir(videoThumbnailerDir)
+    commandLine(
+        "/usr/bin/swiftc",
+        "-O",
+        "-framework", "AVFoundation",
+        "-framework", "ImageIO",
+        "-framework", "UniformTypeIdentifiers",
+        "main.swift",
+        "-o", "video-thumbnailer",
+    )
+    inputs.file(videoThumbnailerDir.file("main.swift"))
+    outputs.file(videoThumbnailerBinary)
+}
+
+tasks.named<ProcessResources>("jvmProcessResources") {
+    dependsOn(buildVideoThumbnailer)
+    from(videoThumbnailerBinary) {
+        into("native")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
