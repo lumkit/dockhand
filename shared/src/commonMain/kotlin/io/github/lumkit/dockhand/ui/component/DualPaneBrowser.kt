@@ -29,6 +29,7 @@ fun DualPaneBrowser(
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
+    onInlineRename: (PaneId, FileEntry, String) -> Unit,
     onRetry: (PaneId) -> Unit,
     onLoadMore: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
@@ -89,6 +90,7 @@ fun DualPaneBrowser(
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Left, entry, action)
                 },
+                onInlineRename = { entry, name -> onInlineRename(PaneId.Left, entry, name) },
                 onRetry = { onRetry(PaneId.Left) },
                 onLoadMore = { onLoadMore(PaneId.Left) },
                 canTransferToOtherPane = leftCanTransfer,
@@ -111,6 +113,7 @@ fun DualPaneBrowser(
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Right, entry, action)
                 },
+                onInlineRename = { entry, name -> onInlineRename(PaneId.Right, entry, name) },
                 onRetry = { onRetry(PaneId.Right) },
                 onLoadMore = { onLoadMore(PaneId.Right) },
                 canTransferToOtherPane = rightCanTransfer,

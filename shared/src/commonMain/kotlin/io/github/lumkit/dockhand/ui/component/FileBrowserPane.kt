@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand.ui.component
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,13 +36,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.innerShadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
@@ -79,6 +99,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
@@ -112,11 +133,13 @@ fun FileBrowserPane(
     onLoadMore: () -> Unit,
     canTransferToOtherPane: Boolean = false,
     canMoveToOtherPane: Boolean = false,
+    onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
 ) {
     val currentOnFocus by rememberUpdatedState(onFocus)
+    val focusManager = LocalFocusManager.current
     var contextMenuEntryId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(pane.location) {
@@ -137,7 +160,12 @@ fun FileBrowserPane(
                 }
             }
             .pointerInput(Unit) {
-                detectTapGestures(onTap = { currentOnFocus() })
+                detectTapGestures(
+                    onTap = {
+                        focusManager.clearFocus()
+                        currentOnFocus()
+                    }
+                )
             }
     ) {
         Column(
@@ -219,6 +247,7 @@ fun FileBrowserPane(
                                     selected = row.id in pane.selectedIds,
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
+                                    onInlineRename = { name -> onInlineRename(row.entry, name) },
                                     showContextMenu = contextMenuEntryId == row.id,
                                     onClick = { onEntryClick(row.entry) },
                                     onDoubleClick = { onEntryDoubleClick(row.entry) },
@@ -281,6 +310,7 @@ private fun FileEntryRow(
     selected: Boolean,
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
+    onInlineRename: (String) -> Unit,
     showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -295,6 +325,7 @@ private fun FileEntryRow(
     }
 
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
+    val focusManager = LocalFocusManager.current
     val infoLabel = stringResource(Res.string.action_view_info)
     val copyLabel = stringResource(
         if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
@@ -317,6 +348,43 @@ private fun FileEntryRow(
     fun dispatch(action: FileContextAction) {
         onContextAction(action)
         onDismissContextMenu()
+    }
+
+    var editing by remember(row.id) { mutableStateOf(false) }
+    var editFieldWasFocused by remember(row.id) { mutableStateOf(false) }
+    val editState = rememberTextFieldState(row.name)
+    val focusRequester = remember { FocusRequester() }
+    val inlineBounds = LocalInlineRenameBounds.current
+
+    fun commitInlineRename() {
+        if (!editing) return
+        editing = false
+        inlineBounds?.value = null
+        onInlineRename(editState.text.toString().trim())
+    }
+
+    DisposableEffect(editing) {
+        onDispose {
+            if (editing) inlineBounds?.value = null
+        }
+    }
+
+    LaunchedEffect(editing) {
+        if (!editing) {
+            editFieldWasFocused = false
+            return@LaunchedEffect
+        }
+        editFieldWasFocused = false
+        editState.setTextAndPlaceCursorAtEnd(row.name)
+        val selectionEnd = if (row.isDirectory) {
+            row.name.length
+        } else {
+            row.name.lastIndexOf('.').takeIf { it > 0 } ?: row.name.length
+        }
+        editState.edit {
+            selection = TextRange(0, selectionEnd)
+        }
+        focusRequester.requestFocus()
     }
 
     val entries = buildList {
@@ -418,7 +486,14 @@ private fun FileEntryRow(
                 .squircleClip(10.dp)
                 .background(rowColor)
                 .combinedClickable(
-                    onClick = onClick,
+                    onClick = {
+                        if (editing) {
+                            commitInlineRename()
+                        } else {
+                            focusManager.clearFocus()
+                        }
+                        onClick()
+                    },
                     onDoubleClick = onDoubleClick,
                 )
                 .pointerInput(onSecondaryClick) {
@@ -447,12 +522,82 @@ private fun FileEntryRow(
                     },
                 )
             },
-            title = row.name,
-            // summary 在列表加载时已经格式化好，LazyColumn 里只读字符串。
-            summary = row.summary,
-            // 单击/双击/右键都由上面的 modifier 处理。
-            onClick = null,
-        )
+            endActions = {
+                if (row.isDirectory) {
+                    Icon(
+                        imageVector = MiuixIcons.ChevronForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        ) {
+            if (editing) {
+                BasicTextField(
+                    state = editState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onGloballyPositioned { coordinates ->
+                            if (editing) {
+                                inlineBounds?.value = coordinates.boundsInRoot()
+                            }
+                        }
+                        .onFocusChanged { focusState ->
+                            if (!editing) return@onFocusChanged
+                            if (focusState.isFocused) {
+                                editFieldWasFocused = true
+                            } else if (editFieldWasFocused) {
+                                commitInlineRename()
+                            }
+                        }
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                                commitInlineRename()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        .background(
+                            color = MiuixTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp),
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    textStyle = MiuixTheme.textStyles.headline1.copy(
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                    lineLimits = TextFieldLineLimits.MultiLine(),
+                )
+            } else {
+                Text(
+                    text = row.name,
+                    modifier = if (selected) {
+                        Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                indication = null,
+                                interactionSource = null,
+                                onDoubleClick = onDoubleClick,
+                            ) {
+                                editing = true
+                            }
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface,
+                )
+            }
+            Text(
+                text = row.summary.orEmpty(),
+                fontSize = MiuixTheme.textStyles.body2.fontSize,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
 
         OverlayCascadingListPopup(
             show = showContextMenu,

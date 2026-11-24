@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,7 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +57,7 @@ import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
 import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
+import io.github.lumkit.dockhand.ui.component.LocalInlineRenameBounds
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
@@ -136,6 +144,7 @@ fun HomeScreen() {
         onEntryDoubleClick = homeViewModel::onEntryDoubleClick,
         onEntrySecondaryClick = homeViewModel::onEntrySecondaryClick,
         onEntryContextAction = homeViewModel::onEntryContextAction,
+        onInlineRename = { _, entry, name -> homeViewModel.onInlineRename(entry, name) },
         onDismissFileInfo = homeViewModel::onDismissFileInfo,
         onCopyRequestBackgroundChange = homeViewModel::onCopyRequestBackgroundChange,
         onCopyRequestDismiss = homeViewModel::onCopyRequestDismiss,
@@ -183,6 +192,7 @@ private fun HomeScreenContent(
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
+    onInlineRename: (PaneId, FileEntry, String) -> Unit,
     onDismissFileInfo: (Long) -> Unit,
     onCopyRequestBackgroundChange: (Boolean) -> Unit,
     onCopyRequestDismiss: () -> Unit,
@@ -220,6 +230,8 @@ private fun HomeScreenContent(
     val windowPlacement = windowState.placement
     val direction = LocalLayoutDirection.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val inlineRenameBounds = remember { mutableStateOf<Rect?>(null) }
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(uiState.snackbarMessage) {
         val message = uiState.snackbarMessage ?: return@LaunchedEffect
@@ -227,8 +239,26 @@ private fun HomeScreenContent(
         onSnackbarShown()
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
+    CompositionLocalProvider(LocalInlineRenameBounds provides inlineRenameBounds) {
+        Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(inlineRenameBounds) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) {
+                            val bounds = inlineRenameBounds.value
+                            if (
+                                bounds != null &&
+                                event.changes.any { !bounds.contains(it.position) }
+                            ) {
+                                focusManager.clearFocus()
+                            }
+                        }
+                    }
+                }
+            },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             MiuixCaptionBar {
@@ -348,6 +378,7 @@ private fun HomeScreenContent(
                             onEntryDoubleClick = onEntryDoubleClick,
                             onEntrySecondaryClick = onEntrySecondaryClick,
                             onEntryContextAction = onEntryContextAction,
+                            onInlineRename = onInlineRename,
                             onRetry = onRetry,
                             onLoadMore = onLoadMore,
                             onBack = onBack,
@@ -389,6 +420,7 @@ private fun HomeScreenContent(
                 onDismiss = onRenameRequestDismiss,
                 onConfirm = onRenameRequestConfirm,
             )
+        }
         }
     }
 

@@ -426,18 +426,29 @@ class HomeViewModel(
             return
         }
         _state.update { it.copy(renameRequest = null) }
+        startRenameTask(request.entry, newName, request.background)
+    }
+
+    fun onInlineRename(entry: FileEntry, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty() || trimmed == entry.name) return
+        startRenameTask(entry, trimmed, background = false)
+    }
+
+    private fun startRenameTask(entry: FileEntry, newName: String, background: Boolean) {
+        applyOptimisticRename(entry, newName)
         scope.launch {
-            val title = getString(Res.string.task_rename_title, request.entry.name)
+            val title = getString(Res.string.task_rename_title, entry.name)
             val detail = getString(Res.string.task_rename_detail, newName)
             val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
             taskManager.start(
                 title = title,
                 detail = detail,
-                background = request.background,
+                background = background,
                 onFinished = { refreshAllPanes() },
             ) {
                 files.renameWithProgress(
-                    entry = request.entry,
+                    entry = entry,
                     newName = newName,
                     onProgress = { completed, total -> report(completed, total) },
                     onWaiting = { deviceName ->
@@ -450,6 +461,29 @@ class HomeViewModel(
                     isCancelled = { isCancelled },
                 )
             }
+        }
+    }
+
+    private fun applyOptimisticRename(entry: FileEntry, newName: String) {
+        val extension = if (newName.startsWith(".")) {
+            null
+        } else {
+            newName.substringAfterLast('.', missingDelimiterValue = "")
+                .takeIf { it.isNotEmpty() }
+        }
+        val optimistic = entry.copy(name = newName, extension = extension)
+        fun List<FileRowUi>.renameRow(): List<FileRowUi> = map { row ->
+            if (row.entry.id == entry.id || row.entry.location == entry.location) {
+                row.copy(entry = optimistic)
+            } else {
+                row
+            }
+        }
+        _state.update { state ->
+            state.copy(
+                leftPane = state.leftPane.copy(entries = state.leftPane.entries.renameRow()),
+                rightPane = state.rightPane.copy(entries = state.rightPane.entries.renameRow()),
+            )
         }
     }
 
