@@ -70,13 +70,15 @@ compose.desktop {
             }
         }
 
-        // Compose Desktop 的 JVM 打包使用 ProGuard；这里开启 release 优化/混淆，
-        // 并把优化后的依赖 jar 合并成单一输出。
+        // Compose Desktop 的 JVM 打包使用 ProGuard；release 只做 shrink，
+        // 并把处理后的依赖 jar 合并成单一输出。
         buildTypes.release {
             proguard {
+                // 启动阶段出现 obfuscate 后的 NoClassDefFoundError；release 先只做
+                // shrink，避免优化/混淆破坏 Compose、Coil 或委托类的运行时查找。
                 isEnabled.set(true)
-                optimize.set(true)
-                obfuscate.set(true)
+                optimize.set(false)
+                obfuscate.set(false)
                 joinOutputJars.set(true)
                 configurationFiles.from(layout.projectDirectory.file("proguard-rules.pro"))
             }
