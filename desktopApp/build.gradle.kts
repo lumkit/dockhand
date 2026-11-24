@@ -32,7 +32,7 @@ val jdk25Home = javaToolchains.launcherFor {
 
 compose.desktop {
     application {
-        mainClass = "io.github.dockhand.MainKt"
+        mainClass = "io.github.lumkit.dockhand.MainKt"
 
         // 菜单栏 / Dock 里的应用名，避免显示成 MainKt
         javaHome = jdk25Home

@@ -1,7 +1,7 @@
 # Dockhand release rules (Compose Desktop uses ProGuard on JVM)
 
 # Entry point
--keep class io.github.dockhand.MainKt {
+-keep class io.github.lumkit.dockhand.MainKt {
     public static void main(java.lang.String[]);
 }
 
@@ -16,8 +16,8 @@
 -keep class top.yukonga.miuix.** { *; }
 
 # FFM bridge is loaded by native symbol names.
--keep class io.github.dockhand.data.file.MtpNativeBridge { *; }
--keep class io.github.dockhand.data.file.MtpNativeBridge$Companion { *; }
+-keep class io.github.lumkit.dockhand.data.file.MtpNativeBridge { *; }
+-keep class io.github.lumkit.dockhand.data.file.MtpNativeBridge$Companion { *; }
 
 # DataStore's protobuf-lite messages are accessed reflectively by field name.
 # Shrinking/renaming them breaks PreferencesProto.preferences_ lookup at startup.
