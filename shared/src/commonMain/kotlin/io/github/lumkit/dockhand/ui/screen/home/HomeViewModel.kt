@@ -2,6 +2,7 @@ package io.github.lumkit.dockhand.ui.screen.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
@@ -76,6 +77,7 @@ class HomeViewModel(
     /** 侧边栏顺序等 UI 设置；测试可省略。 */
     private val settings: SettingsRepository? = null,
     private val trashHistory: TrashHistoryRepository? = null,
+    private val terminalLauncher: TerminalLauncher? = null,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -91,7 +93,10 @@ class HomeViewModel(
         scope = scope,
         notifier = taskNotifier,
         onFallbackMessage = { message ->
-            _state.update { it.copy(snackbarMessage = message) }
+            snackbarRetryAction = null
+            _state.update {
+                it.copy(snackbarMessage = message, snackbarCanRetry = false)
+            }
         },
     )
     val tasks = taskManager.tasks
@@ -159,8 +164,17 @@ class HomeViewModel(
             _state.update { it.copy(activeTaskId = taskId) }
         }
     }
+    private var snackbarRetryAction: (() -> Unit)? = null
+
     fun onSnackbarShown() {
-        _state.update { it.copy(snackbarMessage = null) }
+        snackbarRetryAction = null
+        _state.update { it.copy(snackbarMessage = null, snackbarCanRetry = false) }
+    }
+
+    fun onSnackbarRetry() {
+        val action = snackbarRetryAction
+        snackbarRetryAction = null
+        action?.invoke()
     }
 
     private val loadJobs = mutableMapOf<PaneId, Job>()
@@ -520,7 +534,44 @@ class HomeViewModel(
                     it.copy(restoreRequest = RestoreRequestState(entry = entry))
                 }
             }
+            FileContextAction.TerminalTab -> openTerminal(entry, newWindow = false)
+            FileContextAction.TerminalWindow -> openTerminal(entry, newWindow = true)
             else -> Unit
+        }
+    }
+
+    private fun openTerminal(entry: FileEntry, newWindow: Boolean) {
+        if (entry.location.source.kind != FileSourceKind.Local) {
+            setOperationError("只有本地目录可以在终端中打开")
+            return
+        }
+        val directory = if (entry.isDirectory) {
+            entry.location.path
+        } else {
+            entry.location.path.substringBeforeLast('/', missingDelimiterValue = "/")
+                .ifBlank { "/" }
+        }
+        openTerminalDirectory(directory, newWindow)
+    }
+
+    fun onBreadcrumbTerminal(breadcrumb: FileBreadcrumb, newWindow: Boolean) {
+        val location = _state.value.focusedLocation ?: return
+        if (location.source.kind != FileSourceKind.Local) return
+        openTerminalDirectory(breadcrumb.path, newWindow)
+    }
+
+    private fun openTerminalDirectory(directory: String, newWindow: Boolean) {
+        val launcher = terminalLauncher ?: run {
+            setOperationError("当前平台不支持打开终端")
+            return
+        }
+        scope.launch {
+            runCatching { launcher.open(directory, newWindow) }
+                .onFailure { error ->
+                    setOperationError(error.message ?: "打开终端失败") {
+                        openTerminalDirectory(directory, newWindow)
+                    }
+                }
         }
     }
 
@@ -1147,7 +1198,7 @@ class HomeViewModel(
                         state
                     }
                 }
-                setOperationError(e.userMessage())
+                setOperationError(e.userMessage()) { onLoadMore(paneId) }
             }
         }
     }
@@ -1190,7 +1241,9 @@ class HomeViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                setOperationError(e.userMessage())
+                setOperationError(e.userMessage()) {
+                    onCreate(paneId, name, createFile)
+                }
             }
         }
     }
@@ -1211,8 +1264,18 @@ class HomeViewModel(
         _state.update { it.copy(operationError = null) }
     }
 
-    private fun setOperationError(message: String) {
-        _state.update { it.copy(operationError = message) }
+    private fun setOperationError(
+        message: String,
+        retry: (() -> Unit)? = null,
+    ) {
+        snackbarRetryAction = retry
+        _state.update {
+            it.copy(
+                operationError = null,
+                snackbarMessage = message,
+                snackbarCanRetry = retry != null,
+            )
+        }
     }
 
     private fun navigate(

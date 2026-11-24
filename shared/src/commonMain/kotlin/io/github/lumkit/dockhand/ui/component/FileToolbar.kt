@@ -117,27 +117,6 @@ fun FileToolbar(
             }
         }
 
-        if (operationError != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 8.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = operationError,
-                    modifier = Modifier.weight(1f),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                TextButton(
-                    text = stringResource(Res.string.action_close),
-                    onClick = onDismissOperationError,
-                )
-            }
-        }
     }
 
     CreateItemDialog(

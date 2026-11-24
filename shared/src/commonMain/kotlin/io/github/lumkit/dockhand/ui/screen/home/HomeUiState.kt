@@ -147,6 +147,7 @@ data class HomeUiState(
     val fileInfoDialogs: List<FileInfoDialogState> = emptyList(),
     /** 系统通知不可用时的兜底提示。 */
     val snackbarMessage: String? = null,
+    val snackbarCanRetry: Boolean = false,
     val copyRequest: CopyRequestState? = null,
     val moveRequest: MoveRequestState? = null,
     val deleteRequest: DeleteRequestState? = null,

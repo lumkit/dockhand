@@ -65,6 +65,7 @@ import io.github.lumkit.dockhand.ui.component.LocalInlineRenameBounds
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
+import dockhand.shared.generated.resources.action_retry
 import dockhand.shared.generated.resources.file_info_title
 import dockhand.shared.generated.resources.ic_backend_task
 import dockhand.shared.generated.resources.ic_home
@@ -104,6 +105,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.verticalScrollBar
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
+import top.yukonga.miuix.kmp.basic.SnackbarResult
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -132,6 +134,7 @@ fun HomeScreen() {
             files = container.files,
             settings = container.settings,
             trashHistory = container.trashHistory,
+            terminalLauncher = container.terminalLauncher,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -146,6 +149,7 @@ fun HomeScreen() {
         onActiveTaskCancel = homeViewModel::onActiveTaskCancel,
         onTaskProgressOpen = homeViewModel::onTaskProgressOpen,
         onSnackbarShown = homeViewModel::onSnackbarShown,
+        onSnackbarRetry = homeViewModel::onSnackbarRetry,
         onPlaceClick = homeViewModel::onPlaceClick,
         onPaneFocus = homeViewModel::onPaneFocus,
         onEntryClick = homeViewModel::onEntryClick,
@@ -187,6 +191,7 @@ fun HomeScreen() {
         onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
         onShowHiddenItemsChange = homeViewModel::onShowHiddenItemsChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
+        onBreadcrumbTerminal = homeViewModel::onBreadcrumbTerminal,
         onRetry = homeViewModel::onRefresh,
         onLoadMore = homeViewModel::onLoadMore,
         onBack = homeViewModel::onBack,
@@ -208,6 +213,7 @@ private fun HomeScreenContent(
     onActiveTaskCancel: () -> Unit,
     onTaskProgressOpen: (Long) -> Unit,
     onSnackbarShown: () -> Unit,
+    onSnackbarRetry: () -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     onPaneFocus: (PaneId) -> Unit,
     onEntryClick: (PaneId, FileEntry) -> Unit,
@@ -249,6 +255,7 @@ private fun HomeScreenContent(
     onInterfaceScaleChange: (Int) -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
+    onBreadcrumbTerminal: (FileBreadcrumb, Boolean) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
     onRetry: (PaneId) -> Unit,
     onLoadMore: (PaneId) -> Unit,
@@ -266,10 +273,17 @@ private fun HomeScreenContent(
     var showProgressCancelConfirm by remember { mutableStateOf(false) }
     val inlineRenameBounds = remember { mutableStateOf<Rect?>(null) }
     val focusManager = LocalFocusManager.current
+    val retryLabel = stringResource(Res.string.action_retry)
 
-    LaunchedEffect(uiState.snackbarMessage) {
+    LaunchedEffect(uiState.snackbarMessage, uiState.snackbarCanRetry) {
         val message = uiState.snackbarMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = if (uiState.snackbarCanRetry) retryLabel else null,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            onSnackbarRetry()
+        }
         onSnackbarShown()
     }
 
@@ -301,6 +315,7 @@ private fun HomeScreenContent(
                         location = uiState.focusedLocation,
                         onBreadcrumbClick = onBreadcrumbClick,
                         onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
+                        onBreadcrumbTerminal = onBreadcrumbTerminal,
                     ) {
                         TopBarActions(
                             tasks = tasks,
@@ -370,6 +385,7 @@ private fun HomeScreenContent(
                             location = uiState.focusedLocation,
                             onBreadcrumbClick = onBreadcrumbClick,
                             onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
+                            onBreadcrumbTerminal = onBreadcrumbTerminal,
                         ) {
                             TopBarActions(
                                 tasks = tasks,

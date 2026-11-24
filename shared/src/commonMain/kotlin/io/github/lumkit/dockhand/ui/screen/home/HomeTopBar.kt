@@ -30,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_copy_path
+import dockhand.shared.generated.resources.action_services
+import dockhand.shared.generated.resources.action_terminal_tab_folder
+import dockhand.shared.generated.resources.action_terminal_window_folder
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
@@ -37,12 +40,13 @@ import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import io.github.lumkit.dockhand.ui.clipboard.copyText
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
-import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
+import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
 import top.yukonga.miuix.kmp.window.LocalWindowState
 
 /**
@@ -56,6 +60,7 @@ fun HomeTopBar(
     location: FileLocation?,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
+    onBreadcrumbTerminal: (FileBreadcrumb, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     actions: @Composable () -> Unit = {},
 ) {
@@ -159,26 +164,59 @@ fun HomeTopBar(
                         .width(anchorWidth)
                         .height(32.dp)
                 ) {
-                    OverlayListPopup(
+                    val entries = listOf(
+                        DropdownEntry(
+                            items = listOf(
+                                DropdownItem(
+                                    text = stringResource(Res.string.action_copy_path),
+                                    onClick = {
+                                        val path = contextMenuCrumb?.path
+                                        contextMenuCrumb = null
+                                        if (path != null) {
+                                            clipboardScope.launch {
+                                                clipboard.copyText(path)
+                                            }
+                                        }
+                                    },
+                                )
+                            )
+                        ),
+                        DropdownEntry(
+                            items = listOf(
+                                DropdownItem(
+                                    text = stringResource(Res.string.action_services),
+                                    children = listOf(
+                                        DropdownItem(
+                                            text = stringResource(Res.string.action_terminal_tab_folder),
+                                            onClick = {
+                                                val crumb = contextMenuCrumb
+                                                contextMenuCrumb = null
+                                                if (crumb != null) {
+                                                    onBreadcrumbTerminal(crumb, false)
+                                                }
+                                            },
+                                        ),
+                                        DropdownItem(
+                                            text = stringResource(Res.string.action_terminal_window_folder),
+                                            onClick = {
+                                                val crumb = contextMenuCrumb
+                                                contextMenuCrumb = null
+                                                if (crumb != null) {
+                                                    onBreadcrumbTerminal(crumb, true)
+                                                }
+                                            },
+                                        ),
+                                    ),
+                                )
+                            )
+                        ),
+                    )
+                    OverlayCascadingListPopup(
                         show = canCopyPath && contextMenuCrumb != null,
+                        entries = entries,
                         alignment = PopupPositionProvider.Align.Start,
                         onDismissRequest = { contextMenuCrumb = null },
-                    ) {
-                        ListPopupColumn {
-                            BasicComponent(
-                                title = stringResource(Res.string.action_copy_path),
-                                onClick = {
-                                    val path = contextMenuCrumb?.path
-                                    contextMenuCrumb = null
-                                    if (path != null) {
-                                        clipboardScope.launch {
-                                            clipboard.copyText(path)
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }
