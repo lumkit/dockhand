@@ -45,10 +45,40 @@ compose.desktop {
         nativeDistributions {
             // 只发 macOS
             targetFormats(TargetFormat.Dmg)
-            packageName = "io.github.dockhand"
+            packageName = "Dockhand"
             packageVersion = "1.0.0"
+            description = "Dockhand dual-pane file browser"
+            vendor = "lumkit"
+            copyright = "Copyright © 2026 lumkit. All rights reserved."
             // DataStore 的 protobuf 需要 sun.misc.Unsafe
             modules("jdk.unsupported")
+
+            macOS {
+                bundleID = "io.github.lumkit.dockhand"
+                packageName = "Dockhand"
+                dockName = "Dockhand"
+                setDockNameSameAsPackageName = true
+                appCategory = "public.app-category.utilities"
+                minimumSystemVersion = "12.0"
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>CFBundleDisplayName</key>
+                        <string>Dockhand</string>
+                    """.trimIndent()
+                }
+            }
+        }
+
+        // Compose Desktop 的 JVM 打包使用 ProGuard；这里开启 release 优化/混淆，
+        // 并把优化后的依赖 jar 合并成单一输出。
+        buildTypes.release {
+            proguard {
+                isEnabled.set(true)
+                optimize.set(true)
+                obfuscate.set(true)
+                joinOutputJars.set(true)
+                configurationFiles.from(layout.projectDirectory.file("proguard-rules.pro"))
+            }
         }
     }
 }

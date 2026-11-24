@@ -1,0 +1,60 @@
+# Dockhand release rules (Compose Desktop uses ProGuard on JVM)
+
+# Entry point
+-keep class io.github.dockhand.MainKt {
+    public static void main(java.lang.String[]);
+}
+
+# Compose runtime/UI use class metadata in several places. Keep the runtime
+# surface intact; application classes remain shrinkable/obfuscatable.
+-keep class androidx.compose.runtime.** { *; }
+-keep class androidx.compose.ui.platform.** { *; }
+-keep class androidx.compose.ui.text.** { *; }
+
+# Miuix and Compose resources: keep generated resource accessors and names.
+-keep class dockhand.shared.generated.resources.** { *; }
+-keep class top.yukonga.miuix.** { *; }
+
+# FFM bridge is loaded by native symbol names.
+-keep class io.github.dockhand.data.file.MtpNativeBridge { *; }
+-keep class io.github.dockhand.data.file.MtpNativeBridge$Companion { *; }
+
+# DataStore's protobuf-lite messages are accessed reflectively by field name.
+# Shrinking/renaming them breaks PreferencesProto.preferences_ lookup at startup.
+-keep class androidx.datastore.preferences.** { *; }
+-keep class androidx.datastore.preferences.protobuf.** { *; }
+-keep class androidx.datastore.preferences.core.** { *; }
+-keep class androidx.datastore.core.** { *; }
+
+# JNA callback descriptors must keep their original class/type names.
+-keep class com.sun.jna.** { *; }
+
+# SQLite JDBC and Skiko use JNI/native method names.
+-keep class org.sqlite.** { *; }
+-keep class org.jetbrains.skiko.** { *; }
+-keep class org.jetbrains.skia.** { *; }
+
+# Room generated databases/DAOs and entities are accessed reflectively.
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao interface * { *; }
+-keep class * extends androidx.room.RoomDatabase_Impl { *; }
+
+# Kotlin serialization generated serializers.
+-keep class kotlinx.serialization.** { *; }
+-keepclassmembers class **$$serializer {
+    *** serializer(...);
+}
+-keepclasseswithmembers class * {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep annotations and metadata needed by reflection/serialization.
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod, MethodParameters, Exceptions, SourceFile, LineNumberTable
+
+# Optional dependencies not present on desktop.
+-dontwarn org.jetbrains.skiko.**
+-dontwarn org.sqlite.**
+-dontwarn kotlinx.coroutines.**
+-dontwarn androidx.**
+-dontwarn java.lang.management.**
