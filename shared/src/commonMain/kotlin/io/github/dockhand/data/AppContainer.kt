@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import io.github.dockhand.data.datastore.SettingsRepository
 import io.github.dockhand.data.repository.NoteRepository
 import io.github.dockhand.domain.repository.FileBrowserRepository
+import io.github.dockhand.task.NoopTaskNotifier
+import io.github.dockhand.task.TaskNotifier
 
 /**
  * 手动依赖容器：DataStore / Room / Repository 都在这里组装。
@@ -13,6 +15,7 @@ class AppContainer(
     val settings: SettingsRepository,
     val notes: NoteRepository,
     val files: FileBrowserRepository,
+    val taskNotifier: TaskNotifier = NoopTaskNotifier,
     private val onClose: () -> Unit = {},
 ) {
     fun close() = onClose()

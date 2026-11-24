@@ -1,11 +1,18 @@
 package io.github.dockhand.domain.repository
 
+import io.github.dockhand.core.platform.createTaskTempDirectory
+import io.github.dockhand.core.platform.deleteTaskTempPath
 import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileSourceKind
+import io.github.dockhand.domain.model.FileInfo
 import io.github.dockhand.domain.model.FileListPage
+import io.github.dockhand.domain.model.FileUsage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FileSource
+import io.github.dockhand.domain.model.toBasicFileInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -32,6 +39,10 @@ interface FileBrowserRepository {
         return FileListPage(page, offset + page.size < all.size, all.size)
     }
 
+    suspend fun info(entry: FileEntry): FileInfo = entry.toBasicFileInfo()
+
+    suspend fun usage(entry: FileEntry): FileUsage? = null
+
     fun observeChanges(location: FileLocation): Flow<Unit>
 
     suspend fun createDirectory(parent: FileLocation, name: String)
@@ -49,6 +60,20 @@ interface FileBrowserRepository {
         destinationDirectory: FileLocation,
         overwrite: Boolean = false,
     )
+
+    /**
+     * 可报告进度、可取消的复制入口。默认退回 [copy]（无进度）。
+     */
+    suspend fun copyWithProgress(
+        entries: List<FileEntry>,
+        destinationDirectory: FileLocation,
+        overwrite: Boolean = false,
+        onProgress: (completed: Long?, total: Long?) -> Unit = { _, _ -> },
+        isCancelled: () -> Boolean = { false },
+    ) {
+        copy(entries, destinationDirectory, overwrite)
+        onProgress(entries.size.toLong(), entries.size.toLong())
+    }
 }
 
 class DefaultFileBrowserRepository(
@@ -76,6 +101,12 @@ class DefaultFileBrowserRepository(
         limit: Int,
     ): FileListPage = providerFor(location.source).listPage(location, offset, limit)
 
+    override suspend fun info(entry: FileEntry): FileInfo =
+        providerFor(entry.location.source).info(entry)
+
+    override suspend fun usage(entry: FileEntry): FileUsage? =
+        providerFor(entry.location.source).usage(entry)
+
     override fun observeChanges(location: FileLocation): Flow<Unit> =
         providerFor(location.source).observeChanges(location)
 
@@ -101,6 +132,162 @@ class DefaultFileBrowserRepository(
             }
             sourceProvider.copy(entry.location, destinationDirectory, overwrite)
         }
+    }
+
+    override suspend fun copyWithProgress(
+        entries: List<FileEntry>,
+        destinationDirectory: FileLocation,
+        overwrite: Boolean,
+        onProgress: (completed: Long?, total: Long?) -> Unit,
+        isCancelled: () -> Boolean,
+    ) {
+        if (entries.isEmpty()) return
+        val destinationProvider = providerFor(destinationDirectory.source)
+        val tempDirectory = createTaskTempDirectory("dockhand-copy-")
+        val createdRoots = mutableListOf<FileLocation>()
+        val tempCounter = intArrayOf(0)
+        try {
+            entries.forEachIndexed { index, entry ->
+                if (isCancelled()) throw CancellationException("复制已取消")
+                val targetName = uniqueTargetName(
+                    destinationProvider = destinationProvider,
+                    destinationParent = destinationDirectory,
+                    sourceName = entry.name,
+                    isDirectory = entry.isDirectory,
+                )
+                val target = FileLocation(
+                    source = destinationDirectory.source,
+                    path = joinPath(destinationDirectory.path, targetName),
+                )
+                val sourceProvider = providerFor(entry.location.source)
+                try {
+                    val copiedRoot = copyEntry(
+                        entry = entry,
+                        target = target,
+                        destinationParent = destinationDirectory,
+                        sourceProvider = sourceProvider,
+                        destinationProvider = destinationProvider,
+                        overwrite = overwrite,
+                        tempDirectory = tempDirectory,
+                        tempCounter = tempCounter,
+                        isCancelled = isCancelled,
+                    )
+                    copiedRoot?.let(createdRoots::add)
+                } catch (e: CancellationException) {
+                    runCatching { destinationProvider.delete(target, recursive = true) }
+                    throw e
+                } catch (e: Exception) {
+                    runCatching { destinationProvider.delete(target, recursive = true) }
+                    throw e
+                }
+                onProgress(index + 1L, entries.size.toLong())
+            }
+        } catch (e: Throwable) {
+            createdRoots.asReversed().forEach { root ->
+                runCatching { destinationProvider.delete(root, recursive = true) }
+            }
+            throw e
+        } finally {
+            deleteTaskTempPath(tempDirectory)
+        }
+    }
+
+    private suspend fun copyEntry(
+        entry: FileEntry,
+        target: FileLocation,
+        destinationParent: FileLocation,
+        sourceProvider: FileSystemProvider,
+        destinationProvider: FileSystemProvider,
+        overwrite: Boolean,
+        tempDirectory: String,
+        tempCounter: IntArray,
+        isCancelled: () -> Boolean,
+    ): FileLocation? {
+        if (isCancelled()) throw CancellationException("复制已取消")
+        val targetName = target.path.substringAfterLast('/')
+        if (
+            sourceProvider === destinationProvider &&
+            sourceProvider.kind == FileSourceKind.Local &&
+            targetName == entry.name
+        ) {
+            sourceProvider.copy(entry.location, destinationParent, overwrite)
+            return target
+        }
+
+        if (entry.isDirectory) {
+            if (overwrite) runCatching { destinationProvider.delete(target, recursive = true) }
+            destinationProvider.createDirectory(destinationParent, targetName)
+            sourceProvider.list(entry.location).forEach { child ->
+                copyEntry(
+                    entry = child,
+                    target = FileLocation(target.source, joinPath(target.path, child.name)),
+                    destinationParent = target,
+                    sourceProvider = sourceProvider,
+                    destinationProvider = destinationProvider,
+                    overwrite = overwrite,
+                    tempDirectory = tempDirectory,
+                    tempCounter = tempCounter,
+                    isCancelled = isCancelled,
+                )
+            }
+            return target
+        }
+
+        val tempPath = joinLocalPath(
+            tempDirectory,
+            "${tempCounter[0]++}-${entry.name.replace('/', '_')}",
+        )
+        try {
+            sourceProvider.exportToLocal(entry.location, tempPath)
+            if (isCancelled()) throw CancellationException("复制已取消")
+            destinationProvider.importFromLocal(tempPath, target, overwrite)
+        } finally {
+            deleteTaskTempPath(tempPath)
+        }
+        return target
+    }
+
+    private suspend fun uniqueTargetName(
+        destinationProvider: FileSystemProvider,
+        destinationParent: FileLocation,
+        sourceName: String,
+        isDirectory: Boolean,
+    ): String {
+        if (!destinationProvider.exists(FileLocation(destinationParent.source, joinPath(destinationParent.path, sourceName)))) {
+            return sourceName
+        }
+        val lastDot = sourceName.lastIndexOf('.')
+        val extension = if (!isDirectory && lastDot > 0) {
+            sourceName.substring(lastDot + 1).takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        val stem = if (extension != null) sourceName.substring(0, lastDot) else sourceName
+        var index = 0
+        while (true) {
+            val suffix = if (index == 0) "_副本" else "_副本$index"
+            val candidate = buildString {
+                append(stem)
+                append(suffix)
+                extension?.let {
+                    append('.')
+                    append(it)
+                }
+            }
+            val location = FileLocation(destinationParent.source, joinPath(destinationParent.path, candidate))
+            if (!destinationProvider.exists(location)) return candidate
+            index++
+        }
+    }
+
+    private fun joinPath(parent: String, name: String): String {
+        val base = parent.trimEnd('/')
+        return if (base.isEmpty()) "/$name" else "$base/$name"
+    }
+
+    private fun joinLocalPath(parent: String, name: String): String {
+        val base = parent.trimEnd('/')
+        return "$base/$name"
     }
 
     private fun providerFor(source: FileSource): FileSystemProvider =

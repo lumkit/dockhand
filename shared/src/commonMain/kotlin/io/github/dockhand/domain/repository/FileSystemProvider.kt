@@ -1,11 +1,15 @@
 package io.github.dockhand.domain.repository
 
+import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileInfo
 import io.github.dockhand.domain.model.FileListPage
+import io.github.dockhand.domain.model.FileUsage
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FileSource
 import io.github.dockhand.domain.model.FileSourceKind
+import io.github.dockhand.domain.model.toBasicFileInfo
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -48,6 +52,30 @@ interface FileSystemProvider {
             total = all.size,
         )
     }
+
+    /** 读取详细属性；默认只返回 [FileEntry] 已有信息。 */
+    suspend fun info(entry: FileEntry): FileInfo = entry.toBasicFileInfo()
+
+    /** 统计目录磁盘占用/项目数；不支持或无需统计时返回 null。 */
+    suspend fun usage(entry: FileEntry): FileUsage? = null
+
+    /** 把一个文件导出到本机临时路径；跨 provider 复制时使用。 */
+    suspend fun exportToLocal(source: FileLocation, localPath: String): Unit =
+        throw FileBrowserException("该文件系统不支持导出：${source.source.name}")
+
+    /** 把本机临时文件导入到目标路径；跨 provider 复制时使用。 */
+    suspend fun importFromLocal(
+        localPath: String,
+        destination: FileLocation,
+        overwrite: Boolean,
+    ): Unit = throw FileBrowserException("该文件系统不支持导入：${destination.source.name}")
+
+    /** 删除文件/目录，供任务回滚使用。 */
+    suspend fun delete(location: FileLocation, recursive: Boolean): Unit =
+        throw FileBrowserException("该文件系统不支持删除：${location.source.name}")
+
+    /** 目标是否已经存在。默认返回 false，支持覆盖检查的 provider 应覆盖。 */
+    suspend fun exists(location: FileLocation): Boolean = false
 
     /** 在 [parent] 下新建一个文件夹。名称冲突时抛 [io.github.dockhand.domain.model.FileBrowserException]。 */
     suspend fun createDirectory(parent: FileLocation, name: String)

@@ -3,6 +3,7 @@ package io.github.dockhand.ui.screen.home
 import androidx.compose.runtime.Immutable
 import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileInfo
 import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
@@ -56,6 +57,24 @@ data class FilePaneState(
 }
 
 @Immutable
+data class FileInfoDialogState(
+    val id: Long,
+    val entry: FileEntry,
+    val info: FileInfo? = null,
+    val isLoading: Boolean = true,
+    /** 目录大小/项目数仍在后台统计。 */
+    val sizeLoading: Boolean = false,
+    val error: String? = null,
+)
+
+@Immutable
+data class CopyRequestState(
+    val entry: FileEntry,
+    val destination: FileLocation,
+    val background: Boolean = false,
+)
+
+@Immutable
 data class HomeUiState(
     val places: List<FilePlace> = emptyList(),
     val placesError: String? = null,
@@ -67,6 +86,11 @@ data class HomeUiState(
     val mtpShortcutOrder: List<String> = DEFAULT_MTP_SHORTCUT_ORDER,
     /** 新建/传输等一次性操作的错误，由顶部工具栏展示。 */
     val operationError: String? = null,
+    /** 已打开的文件简介窗口；不随目录切换关闭，可同时存在多个。 */
+    val fileInfoDialogs: List<FileInfoDialogState> = emptyList(),
+    /** 系统通知不可用时的兜底提示。 */
+    val snackbarMessage: String? = null,
+    val copyRequest: CopyRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,

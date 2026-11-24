@@ -28,6 +28,7 @@ fun DualPaneBrowser(
     onEntryClick: (PaneId, FileEntry) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
+    onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onRetry: (PaneId) -> Unit,
     onLoadMore: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
@@ -43,6 +44,9 @@ fun DualPaneBrowser(
     val otherState = uiState.pane(focusedPane.other)
     val canSync = focusedState.location != null &&
         otherState.location != focusedState.location
+    // 跨 provider 复制由任务层通过临时文件中转完成。
+    val leftCanTransfer = uiState.leftPane.location != null && uiState.rightPane.location != null
+    val rightCanTransfer = uiState.rightPane.location != null && uiState.leftPane.location != null
 
     Column(modifier = modifier.fillMaxSize()) {
         FileToolbar(
@@ -74,8 +78,12 @@ fun DualPaneBrowser(
                 onEntryClick = { onEntryClick(PaneId.Left, it) },
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Left, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Left, it) },
+                onContextAction = { entry, action ->
+                    onEntryContextAction(PaneId.Left, entry, action)
+                },
                 onRetry = { onRetry(PaneId.Left) },
                 onLoadMore = { onLoadMore(PaneId.Left) },
+                canTransferToOtherPane = leftCanTransfer,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -91,8 +99,12 @@ fun DualPaneBrowser(
                 onEntryClick = { onEntryClick(PaneId.Right, it) },
                 onEntryDoubleClick = { onEntryDoubleClick(PaneId.Right, it) },
                 onEntrySecondaryClick = { onEntrySecondaryClick(PaneId.Right, it) },
+                onContextAction = { entry, action ->
+                    onEntryContextAction(PaneId.Right, entry, action)
+                },
                 onRetry = { onRetry(PaneId.Right) },
                 onLoadMore = { onLoadMore(PaneId.Right) },
+                canTransferToOtherPane = rightCanTransfer,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),

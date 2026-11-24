@@ -10,12 +10,19 @@ import io.github.dockhand.domain.model.FileLocation
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.FileSourceKind
+import io.github.dockhand.domain.model.displayPath
 import io.github.dockhand.domain.model.orderedByIds
 import io.github.dockhand.domain.model.parentBreadcrumb
 import io.github.dockhand.domain.repository.FileBrowserRepository
+import io.github.dockhand.task.NoopTaskNotifier
+import io.github.dockhand.task.TaskManager
+import io.github.dockhand.task.TaskNotifier
+import io.github.dockhand.ui.component.FileContextAction
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.error_name_empty
 import dockhand.shared.generated.resources.error_name_invalid
+import dockhand.shared.generated.resources.task_copy_destination
+import dockhand.shared.generated.resources.task_copy_title
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
 import kotlinx.coroutines.CancellationException
@@ -49,6 +56,7 @@ class HomeViewModel(
     private val files: FileBrowserRepository,
     /** 侧边栏顺序等 UI 设置；测试可省略。 */
     private val settings: SettingsRepository? = null,
+    taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** 测试用；默认绑定 [viewModelScope]。 */
@@ -59,9 +67,26 @@ class HomeViewModel(
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+    private val taskManager = TaskManager(
+        scope = scope,
+        notifier = taskNotifier,
+        onFallbackMessage = { message ->
+            _state.update { it.copy(snackbarMessage = message) }
+        },
+    )
+    val tasks = taskManager.tasks
+
+    fun onCancelTask(id: Long) = taskManager.cancel(id)
+    fun onDismissTask(id: Long) = taskManager.dismiss(id)
+    fun onSnackbarShown() {
+        _state.update { it.copy(snackbarMessage = null) }
+    }
+
     private val loadJobs = mutableMapOf<PaneId, Job>()
     private val moreJobs = mutableMapOf<PaneId, Job>()
     private val watchJobs = mutableMapOf<PaneId, Job>()
+    private val fileInfoJobs = mutableMapOf<Long, Job>()
+    private var nextFileInfoId = 0L
     private val placesJob: Job
     private val drawerPlaceOrderJob: Job? = settings?.let { repository ->
         scope.launch {
@@ -159,6 +184,170 @@ class HomeViewModel(
     fun onEntrySecondaryClick(paneId: PaneId, entry: FileEntry) {
         onPaneFocus(paneId)
         selectEntry(paneId, entry)
+    }
+
+    /**
+     * 右键菜单动作入口；具体文件操作后续接入。
+     */
+    fun onEntryContextAction(
+        paneId: PaneId,
+        entry: FileEntry,
+        action: FileContextAction,
+    ) {
+        onPaneFocus(paneId)
+        selectEntry(paneId, entry)
+        when (action) {
+            FileContextAction.ViewInfo -> openFileInfo(entry)
+            FileContextAction.Copy -> {
+                val destination = _state.value.pane(paneId.other).location
+                if (destination == null) {
+                    setOperationError("另一侧没有打开目录")
+                } else {
+                    _state.update {
+                        it.copy(
+                            copyRequest = CopyRequestState(
+                                entry = entry,
+                                destination = destination,
+                            )
+                        )
+                    }
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    fun onCopyRequestBackgroundChange(background: Boolean) {
+        _state.update { state ->
+            state.copy(copyRequest = state.copyRequest?.copy(background = background))
+        }
+    }
+
+    fun onCopyRequestDismiss() {
+        _state.update { it.copy(copyRequest = null) }
+    }
+
+    fun onCopyRequestConfirm() {
+        val request = _state.value.copyRequest ?: return
+        _state.update { it.copy(copyRequest = null) }
+        scope.launch {
+            val title = getString(Res.string.task_copy_title, request.entry.name)
+            val destinationLabel = request.destination.displayPath()
+            val detail = getString(Res.string.task_copy_destination, destinationLabel)
+            taskManager.start(
+                title = title,
+                detail = detail,
+                background = request.background,
+                onSuccess = { refreshPanesAt(request.destination) },
+            ) {
+                files.copyWithProgress(
+                    entries = listOf(request.entry),
+                    destinationDirectory = request.destination,
+                    overwrite = false,
+                    onProgress = { completed, total -> report(completed, total) },
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+    }
+
+    private fun refreshPanesAt(location: FileLocation) {
+        PaneId.entries.forEach { paneId ->
+            if (_state.value.pane(paneId).location == location) {
+                // MTP 没有 watcher，复制完成后必须显式刷新目标目录。
+                load(paneId, location)
+            }
+        }
+    }
+
+    fun onDismissFileInfo(id: Long) {
+        fileInfoJobs.remove(id)?.cancel()
+        _state.update { state ->
+            state.copy(fileInfoDialogs = state.fileInfoDialogs.filterNot { it.id == id })
+        }
+    }
+
+    private fun openFileInfo(entry: FileEntry) {
+        val id = nextFileInfoId++
+        _state.update { state ->
+            state.copy(
+                fileInfoDialogs = state.fileInfoDialogs + FileInfoDialogState(
+                    id = id,
+                    entry = entry,
+                    isLoading = true,
+                )
+            )
+        }
+        fileInfoJobs[id] = scope.launch {
+            try {
+                val info = files.info(entry)
+                _state.update { state ->
+                    state.copy(
+                        fileInfoDialogs = state.fileInfoDialogs.map { dialog ->
+                            if (dialog.id == id) {
+                                dialog.copy(
+                                    info = info,
+                                    isLoading = false,
+                                    sizeLoading = info.isDirectory,
+                                    error = null,
+                                )
+                            } else {
+                                dialog
+                            }
+                        }
+                    )
+                }
+
+                if (info.isDirectory) {
+                    val usage = try {
+                        files.usage(entry)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    _state.update { state ->
+                        state.copy(
+                            fileInfoDialogs = state.fileInfoDialogs.map { dialog ->
+                                if (dialog.id == id) {
+                                    dialog.copy(
+                                        info = usage?.let {
+                                            dialog.info?.copy(
+                                                sizeBytes = it.sizeBytes,
+                                                itemCount = it.itemCount,
+                                            )
+                                        } ?: dialog.info,
+                                        sizeLoading = false,
+                                    )
+                                } else {
+                                    dialog
+                                }
+                            }
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val message = e.userMessage()
+                _state.update { state ->
+                    state.copy(
+                        fileInfoDialogs = state.fileInfoDialogs.map { dialog ->
+                            if (dialog.id == id) {
+                                dialog.copy(
+                                    isLoading = false,
+                                    error = message,
+                                )
+                            } else {
+                                dialog
+                            }
+                        }
+                    )
+                }
+            } finally {
+                fileInfoJobs.remove(id)
+            }
+        }
     }
 
     private fun selectEntry(paneId: PaneId, entry: FileEntry) {
@@ -575,6 +764,8 @@ class HomeViewModel(
         watchJobs.clear()
         moreJobs.values.forEach { it.cancel() }
         moreJobs.clear()
+        fileInfoJobs.values.forEach { it.cancel() }
+        fileInfoJobs.clear()
         super.onCleared()
     }
 

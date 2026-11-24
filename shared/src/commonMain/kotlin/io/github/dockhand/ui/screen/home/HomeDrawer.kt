@@ -1,5 +1,6 @@
 package io.github.dockhand.ui.screen.home
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -23,6 +24,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
@@ -70,6 +72,7 @@ import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.ExpandLess
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
@@ -230,7 +233,7 @@ fun HomeDrawerContent(
 
             },
             modifier = Modifier.fillMaxWidth()
-                .padding(12.dp),
+                .padding(8.dp),
         ) {
             Icon(
                 imageVector = MiuixIcons.Settings,
@@ -468,10 +471,15 @@ private fun PlaceRow(
         }
 
         if (expanded != null) {
+            val rotate by animateFloatAsState(
+                targetValue = if (expanded) 90f else 0f,
+            )
+
             Icon(
-                imageVector = if (expanded) MiuixIcons.ExpandLess else MiuixIcons.ExpandMore,
+                imageVector = MiuixIcons.ChevronForward,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(18.dp)
+                    .rotate(rotate),
                 tint = contentColor,
             )
         }

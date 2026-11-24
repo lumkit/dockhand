@@ -11,6 +11,7 @@ import io.github.dockhand.data.file.LocalFileSystemProvider
 import io.github.dockhand.data.file.MtpFileSystemProvider
 import io.github.dockhand.data.repository.NoteRepository
 import io.github.dockhand.domain.repository.DefaultFileBrowserRepository
+import io.github.dockhand.task.MacTaskNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,7 @@ private fun createAppContainer(): AppContainer {
                 MtpFileSystemProvider(),
             )
         ),
+        taskNotifier = MacTaskNotifier(),
         onClose = { database.close() },
     )
 }

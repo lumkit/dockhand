@@ -10,6 +10,7 @@ import io.github.dockhand.domain.model.FileSource
 import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.domain.model.breadcrumbs
 import io.github.dockhand.domain.repository.FileBrowserRepository
+import io.github.dockhand.ui.component.FileContextAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -256,6 +257,35 @@ class HomeViewModelTest {
 
         assertEquals(600, viewModel.state.value.leftPane.entries.size)
         assertTrue(viewModel.state.value.leftPane.hasMore)
+    }
+
+    @Test
+    fun eachViewInfoActionOpensAnIndependentWindow() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        viewModel.onEntryContextAction(
+            paneId = PaneId.Left,
+            entry = fixture.readme,
+            action = FileContextAction.ViewInfo,
+        )
+        viewModel.onEntryContextAction(
+            paneId = PaneId.Left,
+            entry = fixture.documentsEntry,
+            action = FileContextAction.ViewInfo,
+        )
+
+        val dialogs = viewModel.state.value.fileInfoDialogs
+        assertEquals(2, dialogs.size)
+        assertTrue(dialogs[0].id != dialogs[1].id)
+
+        viewModel.onDismissFileInfo(dialogs[0].id)
+        assertEquals(1, viewModel.state.value.fileInfoDialogs.size)
+        assertEquals(dialogs[1].id, viewModel.state.value.fileInfoDialogs.single().id)
     }
 
     @Test

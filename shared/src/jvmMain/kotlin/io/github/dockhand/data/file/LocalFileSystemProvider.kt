@@ -2,7 +2,9 @@ package io.github.dockhand.data.file
 
 import io.github.dockhand.domain.model.FileBrowserException
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileInfo
 import io.github.dockhand.domain.model.FileLocation
+import io.github.dockhand.domain.model.FileUsage
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
@@ -28,10 +30,13 @@ import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardWatchEventKinds
 import java.nio.file.WatchService
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFileAttributes
+import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.TimeUnit
 
 /**
@@ -101,6 +106,105 @@ class LocalFileSystemProvider(
         }
 
         entries.sortedWith(ENTRY_ORDER)
+    }
+
+    override suspend fun info(entry: FileEntry): FileInfo = withContext(Dispatchers.IO) {
+        ensureLocal(entry.location)
+        val path = entry.location.toLocalPath()
+        if (!Files.exists(path)) {
+            throw FileBrowserException("路径不存在：${entry.location.path}")
+        }
+
+        val attributes = Files.readAttributes(path, BasicFileAttributes::class.java)
+        val isDirectory = attributes.isDirectory
+        val posix = runCatching {
+            Files.readAttributes(path, PosixFileAttributes::class.java)
+        }.getOrNull()
+        val permissionSymbol = posix?.let {
+            permissionSymbol(it.isDirectory, it.permissions())
+        }
+        val permissionCode = posix?.let { permissionCode(it.permissions()) }
+
+        FileInfo(
+            name = entry.name,
+            parentPath = path.parent?.toString() ?: "/",
+            isDirectory = isDirectory,
+            sizeBytes = if (isDirectory) null else attributes.size(),
+            itemCount = null,
+            createdAt = attributes.creationTime().toMillis(),
+            modifiedAt = attributes.lastModifiedTime().toMillis(),
+            permissionSymbol = permissionSymbol,
+            permissionCode = permissionCode,
+            owner = posix?.owner()?.name,
+            group = posix?.group()?.name,
+        )
+    }
+
+    override suspend fun exportToLocal(
+        source: FileLocation,
+        localPath: String,
+    ): Unit = withContext(Dispatchers.IO) {
+        ensureLocal(source)
+        Files.copy(
+            source.toLocalPath(),
+            Path.of(localPath),
+            StandardCopyOption.REPLACE_EXISTING,
+        )
+    }
+
+    override suspend fun importFromLocal(
+        localPath: String,
+        destination: FileLocation,
+        overwrite: Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        ensureLocal(destination)
+        val target = destination.toLocalPath()
+        if (Files.exists(target) && !overwrite) {
+            throw FileBrowserException("目标已存在：${destination.path}")
+        }
+        target.parent?.let { Files.createDirectories(it) }
+        Files.copy(
+            Path.of(localPath),
+            target,
+            if (overwrite) StandardCopyOption.REPLACE_EXISTING else StandardCopyOption.COPY_ATTRIBUTES,
+        )
+    }
+
+    override suspend fun exists(location: FileLocation): Boolean = withContext(Dispatchers.IO) {
+        ensureLocal(location)
+        Files.exists(location.toLocalPath())
+    }
+
+    override suspend fun delete(
+        location: FileLocation,
+        recursive: Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        ensureLocal(location)
+        val target = location.toLocalPath()
+        if (!Files.exists(target)) return@withContext
+        if (Files.isDirectory(target)) {
+            if (!recursive) {
+                Files.delete(target)
+            } else {
+                Files.walk(target).use { paths ->
+                    paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                }
+            }
+        } else {
+            Files.deleteIfExists(target)
+        }
+    }
+
+    override suspend fun usage(entry: FileEntry): FileUsage? = withContext(Dispatchers.IO) {
+        ensureLocal(entry.location)
+        val path = entry.location.toLocalPath()
+        if (!Files.isDirectory(path)) {
+            val size = runCatching { Files.size(path) }.getOrNull() ?: return@withContext null
+            FileUsage(size)
+        } else {
+            val usage = directoryUsage(path)
+            FileUsage(usage.first, usage.second)
+        }
     }
 
     override suspend fun createDirectory(
@@ -403,6 +507,77 @@ class LocalFileSystemProvider(
                 Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES)
             }
         }
+    }
+
+    private fun directoryUsage(directory: Path): Pair<Long, Int> {
+        var bytes = 0L
+        var count = 0
+        Files.walkFileTree(
+            directory,
+            object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(
+                    dir: Path,
+                    attrs: BasicFileAttributes,
+                ): java.nio.file.FileVisitResult {
+                    if (dir != directory) count++
+                    return java.nio.file.FileVisitResult.CONTINUE
+                }
+
+                override fun visitFile(
+                    file: Path,
+                    attrs: BasicFileAttributes,
+                ): java.nio.file.FileVisitResult {
+                    if (attrs.isRegularFile) bytes += attrs.size()
+                    count++
+                    return java.nio.file.FileVisitResult.CONTINUE
+                }
+
+                override fun visitFileFailed(
+                    file: Path,
+                    exc: IOException,
+                ): java.nio.file.FileVisitResult = java.nio.file.FileVisitResult.CONTINUE
+            }
+        )
+        return bytes to count
+    }
+
+    private fun permissionSymbol(
+        isDirectory: Boolean,
+        permissions: Set<PosixFilePermission>,
+    ): String = buildString {
+        append(if (isDirectory) 'd' else '-')
+        val bits = listOf(
+            PosixFilePermission.OWNER_READ to 'r',
+            PosixFilePermission.OWNER_WRITE to 'w',
+            PosixFilePermission.OWNER_EXECUTE to 'x',
+            PosixFilePermission.GROUP_READ to 'r',
+            PosixFilePermission.GROUP_WRITE to 'w',
+            PosixFilePermission.GROUP_EXECUTE to 'x',
+            PosixFilePermission.OTHERS_READ to 'r',
+            PosixFilePermission.OTHERS_WRITE to 'w',
+            PosixFilePermission.OTHERS_EXECUTE to 'x',
+        )
+        bits.forEach { (permission, symbol) ->
+            append(if (permission in permissions) symbol else '-')
+        }
+    }
+
+    private fun permissionCode(permissions: Set<PosixFilePermission>): String {
+        val bits = listOf(
+            PosixFilePermission.OWNER_READ to 0b100_000_000,
+            PosixFilePermission.OWNER_WRITE to 0b010_000_000,
+            PosixFilePermission.OWNER_EXECUTE to 0b001_000_000,
+            PosixFilePermission.GROUP_READ to 0b000_100_000,
+            PosixFilePermission.GROUP_WRITE to 0b000_010_000,
+            PosixFilePermission.GROUP_EXECUTE to 0b000_001_000,
+            PosixFilePermission.OTHERS_READ to 0b000_000_100,
+            PosixFilePermission.OTHERS_WRITE to 0b000_000_010,
+            PosixFilePermission.OTHERS_EXECUTE to 0b000_000_001,
+        )
+        val value = bits.fold(0) { result, (permission, bit) ->
+            if (permission in permissions) result or bit else result
+        }
+        return value.toString(8).padStart(3, '0')
     }
 
     private fun ensureLocal(location: FileLocation) {

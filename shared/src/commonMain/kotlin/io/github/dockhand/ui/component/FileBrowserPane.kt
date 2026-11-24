@@ -20,7 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,28 +39,52 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
-import kotlinx.coroutines.flow.distinctUntilChanged
+import dockhand.shared.generated.resources.action_compress
+import dockhand.shared.generated.resources.action_copy_to_left
+import dockhand.shared.generated.resources.action_copy_to_right
+import dockhand.shared.generated.resources.action_delete
+import dockhand.shared.generated.resources.action_move_to_left
+import dockhand.shared.generated.resources.action_move_to_right
+import dockhand.shared.generated.resources.action_move_to_trash
+import dockhand.shared.generated.resources.action_rename
+import dockhand.shared.generated.resources.action_services
+import dockhand.shared.generated.resources.action_terminal_tab_file
+import dockhand.shared.generated.resources.action_terminal_tab_folder
+import dockhand.shared.generated.resources.action_terminal_window_file
+import dockhand.shared.generated.resources.action_terminal_window_folder
+import dockhand.shared.generated.resources.action_view_info
 import dockhand.shared.generated.resources.text_empty_folder
 import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.domain.model.FileSourceKind
 import io.github.dockhand.ui.screen.home.FilePaneState
 import io.github.dockhand.ui.screen.home.FileRowUi
+import io.github.dockhand.ui.screen.home.PaneId
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TooltipBox
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.File
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
+import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.window.MiuixDialogWindow
 
 private const val INACTIVE_PANE_ALPHA = 0.55f
 
@@ -82,10 +109,17 @@ fun FileBrowserPane(
     onEntrySecondaryClick: (FileEntry) -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
+    canTransferToOtherPane: Boolean = false,
+    onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
 ) {
     val currentOnFocus by rememberUpdatedState(onFocus)
+    var contextMenuEntryId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(pane.location) {
+        contextMenuEntryId = null
+    }
 
     Box(
         modifier = modifier
@@ -161,6 +195,14 @@ fun FileBrowserPane(
                             listState.scrollToItem(0)
                         }
 
+                        LaunchedEffect(listState) {
+                            snapshotFlow { listState.isScrollInProgress }
+                                .distinctUntilChanged()
+                                .collect { scrolling ->
+                                    if (scrolling) contextMenuEntryId = null
+                                }
+                        }
+
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
@@ -171,10 +213,20 @@ fun FileBrowserPane(
                             items(pane.entries, key = { it.id }) { row ->
                                 FileEntryRow(
                                     row = row,
+                                    paneId = pane.id,
                                     selected = row.id in pane.selectedIds,
+                                    canTransferToOtherPane = canTransferToOtherPane,
+                                    showContextMenu = contextMenuEntryId == row.id,
                                     onClick = { onEntryClick(row.entry) },
                                     onDoubleClick = { onEntryDoubleClick(row.entry) },
-                                    onSecondaryClick = { onEntrySecondaryClick(row.entry) },
+                                    onSecondaryClick = {
+                                        onEntrySecondaryClick(row.entry)
+                                        contextMenuEntryId = row.id
+                                    },
+                                    onDismissContextMenu = { contextMenuEntryId = null },
+                                    onContextAction = { action ->
+                                        onContextAction(row.entry, action)
+                                    },
                                 )
                             }
 
@@ -219,14 +271,18 @@ fun FileBrowserPane(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileEntryRow(
     row: FileRowUi,
+    paneId: PaneId,
     selected: Boolean,
+    canTransferToOtherPane: Boolean,
+    showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onSecondaryClick: () -> Unit,
+    onDismissContextMenu: () -> Unit,
+    onContextAction: (FileContextAction) -> Unit,
 ) {
     val rowColor = if (selected) {
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
@@ -234,48 +290,156 @@ private fun FileEntryRow(
         Color.Transparent
     }
 
-    BasicComponent(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 1.dp)
-            .squircleClip(10.dp)
-            .background(rowColor)
-            .combinedClickable(
-                onClick = onClick,
-                onDoubleClick = onDoubleClick,
+    val isLocal = row.entry.location.source.kind == FileSourceKind.Local
+    val infoLabel = stringResource(Res.string.action_view_info)
+    val copyLabel = stringResource(
+        if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
+    )
+    val moveLabel = stringResource(
+        if (paneId == PaneId.Left) Res.string.action_move_to_right else Res.string.action_move_to_left
+    )
+    val trashLabel = stringResource(Res.string.action_move_to_trash)
+    val deleteLabel = stringResource(Res.string.action_delete)
+    val renameLabel = stringResource(Res.string.action_rename)
+    val compressLabel = stringResource(Res.string.action_compress)
+    val servicesLabel = stringResource(Res.string.action_services)
+    val terminalTabLabel = stringResource(
+        if (row.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
+    )
+    val terminalWindowLabel = stringResource(
+        if (row.isDirectory) Res.string.action_terminal_window_folder else Res.string.action_terminal_window_file
+    )
+
+    fun dispatch(action: FileContextAction) {
+        onContextAction(action)
+        onDismissContextMenu()
+    }
+
+    val entries = buildList {
+        add(
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = infoLabel,
+                        onClick = { dispatch(FileContextAction.ViewInfo) },
+                    )
+                )
             )
-            .pointerInput(onSecondaryClick) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (
-                            event.type == PointerEventType.Press &&
-                            event.buttons.isSecondaryPressed
-                        ) {
-                            event.changes.forEach { it.consume() }
-                            onSecondaryClick()
+        )
+
+        if (isLocal) {
+            val fileActions = buildList {
+                if (canTransferToOtherPane) {
+                    add(
+                        DropdownItem(
+                            text = copyLabel,
+                            onClick = { dispatch(FileContextAction.Copy) },
+                        )
+                    )
+                    add(
+                        DropdownItem(
+                            text = moveLabel,
+                            onClick = { dispatch(FileContextAction.Move) },
+                        )
+                    )
+                }
+                add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
+                add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
+                add(DropdownItem(text = renameLabel, onClick = { dispatch(FileContextAction.Rename) }))
+                add(DropdownItem(text = compressLabel, onClick = { dispatch(FileContextAction.Compress) }))
+            }
+            add(DropdownEntry(items = fileActions))
+            add(
+                DropdownEntry(
+                    items = listOf(
+                        DropdownItem(
+                            text = servicesLabel,
+                            children = listOf(
+                                DropdownItem(
+                                    text = terminalTabLabel,
+                                    onClick = { dispatch(FileContextAction.TerminalTab) },
+                                ),
+                                DropdownItem(
+                                    text = terminalWindowLabel,
+                                    onClick = { dispatch(FileContextAction.TerminalWindow) },
+                                ),
+                            ),
+                        )
+                    )
+                )
+            )
+        } else if (canTransferToOtherPane) {
+            add(
+                DropdownEntry(
+                    items = listOf(
+                        DropdownItem(
+                            text = copyLabel,
+                            onClick = { dispatch(FileContextAction.Copy) },
+                        ),
+                        DropdownItem(
+                            text = moveLabel,
+                            onClick = { dispatch(FileContextAction.Move) },
+                        ),
+                    )
+                )
+            )
+        }
+    }
+
+    Box {
+        BasicComponent(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 1.dp)
+                .squircleClip(10.dp)
+                .background(rowColor)
+                .combinedClickable(
+                    onClick = onClick,
+                    onDoubleClick = onDoubleClick,
+                )
+                .pointerInput(onSecondaryClick) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (
+                                event.type == PointerEventType.Press &&
+                                event.buttons.isSecondaryPressed
+                            ) {
+                                event.changes.forEach { it.consume() }
+                                onSecondaryClick()
+                            }
                         }
                     }
-                }
-            },
-        startAction = {
-            Icon(
-                imageVector = if (row.isDirectory) MiuixIcons.Folder else MiuixIcons.File,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = if (row.isDirectory) {
-                    MiuixTheme.colorScheme.primary
-                } else {
-                    MiuixTheme.colorScheme.onSurfaceVariantSummary
                 },
-            )
-        },
-        title = row.name,
-        // summary 在列表加载时已经格式化好，LazyColumn 里只读字符串。
-        summary = row.summary,
-        // 单击/双击/右键都由上面的 modifier 处理。
-        onClick = null,
-    )
+            startAction = {
+                Icon(
+                    imageVector = if (row.isDirectory) MiuixIcons.Folder else MiuixIcons.File,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = if (row.isDirectory) {
+                        MiuixTheme.colorScheme.primary
+                    } else {
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    },
+                )
+            },
+            title = row.name,
+            // summary 在列表加载时已经格式化好，LazyColumn 里只读字符串。
+            summary = row.summary,
+            // 单击/双击/右键都由上面的 modifier 处理。
+            onClick = null,
+        )
+
+        OverlayCascadingListPopup(
+            show = showContextMenu,
+            entries = entries,
+            onDismissRequest = onDismissContextMenu,
+            alignment = when (paneId) {
+                PaneId.Left -> PopupPositionProvider.Align.End
+                PaneId.Right -> PopupPositionProvider.Align.Start
+            },
+        )
+    }
 }
 
 @Composable
@@ -330,9 +494,18 @@ private fun ErrorState(
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             textAlign = TextAlign.Center,
         )
-        TextButton(
-            text = stringResource(Res.string.text_retry),
-            onClick = onRetry,
-        )
+        TooltipBox(
+            text = stringResource(Res.string.text_retry)
+        ) {
+            IconButton(
+                onClick = onRetry,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Refresh,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+            }
+        }
     }
 }

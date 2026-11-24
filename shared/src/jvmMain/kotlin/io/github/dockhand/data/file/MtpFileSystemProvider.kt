@@ -184,6 +184,72 @@ class MtpFileSystemProvider(
         }
     }
 
+    override suspend fun exists(location: FileLocation): Boolean = withContext(Dispatchers.IO) {
+        val parentPath = location.path.substringBeforeLast('/', missingDelimiterValue = "").ifBlank { "/" }
+        val name = location.path.substringAfterLast('/')
+        list(FileLocation(location.source, parentPath)).any { it.name == name }
+    }
+
+    override suspend fun exportToLocal(
+        source: FileLocation,
+        localPath: String,
+    ): Unit = withContext(Dispatchers.IO) {
+        val target = targetOf(source.source)
+        when (val result = MtpNativeBridge.download(
+            deviceKey = target.deviceKey,
+            storageId = target.storageId,
+            remotePath = source.path,
+            localPath = localPath,
+        )) {
+            is BridgeResult.Failure -> throw FileBrowserException("MTP 下载失败：${result.message}")
+            is BridgeResult.Success -> Unit
+        }
+    }
+
+    override suspend fun importFromLocal(
+        localPath: String,
+        destination: FileLocation,
+        overwrite: Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        val target = targetOf(destination.source)
+        if (overwrite) {
+            delete(destination, recursive = true)
+        }
+        when (val result = invokeUpload(
+            deviceKey = target.deviceKey,
+            storageId = target.storageId,
+            localPath = localPath,
+            remotePath = destination.path,
+        )) {
+            is BridgeResult.Failure -> throw FileBrowserException("MTP 上传失败：${result.message}")
+            is BridgeResult.Success -> Unit
+        }
+    }
+
+    override suspend fun delete(
+        location: FileLocation,
+        recursive: Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        val target = targetOf(location.source)
+        val parentPath = location.path.substringBeforeLast('/', missingDelimiterValue = "").ifBlank { "/" }
+        val name = location.path.substringAfterLast('/')
+        val parent = FileLocation(location.source, parentPath)
+        val entry = runCatching { list(parent).firstOrNull { it.name == name } }.getOrNull()
+        if (recursive && entry?.isDirectory == true) {
+            list(location).forEach { child ->
+                delete(child.location, recursive = true)
+            }
+        }
+        when (val result = MtpNativeBridge.delete(
+            deviceKey = target.deviceKey,
+            storageId = target.storageId,
+            remotePath = location.path,
+        )) {
+            is BridgeResult.Failure -> throw FileBrowserException("MTP 删除失败：${result.message}")
+            is BridgeResult.Success -> Unit
+        }
+    }
+
     override suspend fun createDirectory(parent: FileLocation, name: String) = withContext(Dispatchers.IO) {
         val mtpTarget = targetOf(parent.source)
         val validName = validateNewName(name)
@@ -282,23 +348,23 @@ class MtpFileSystemProvider(
         BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
     }
 
-    private fun invokeMkdir(
-        deviceKey: Long,
-        storageId: Long,
-        path: String,
-    ): BridgeResult<Long> = try {
-        MtpNativeBridge.mkdir(deviceKey, storageId, path)
-    } catch (error: Throwable) {
-        BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
-    }
-
-    private fun invokeUpload(
+    private suspend fun invokeUpload(
         deviceKey: Long,
         storageId: Long,
         localPath: String,
         remotePath: String,
     ): BridgeResult<Long> = try {
         MtpNativeBridge.upload(deviceKey, storageId, localPath, remotePath)
+    } catch (error: Throwable) {
+        BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
+    }
+
+    private fun invokeMkdir(
+        deviceKey: Long,
+        storageId: Long,
+        path: String,
+    ): BridgeResult<Long> = try {
+        MtpNativeBridge.mkdir(deviceKey, storageId, path)
     } catch (error: Throwable) {
         BridgeResult.Failure("MTP 原生桥不可用：${error.message ?: error.javaClass.simpleName}")
     }

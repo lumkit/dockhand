@@ -1,5 +1,7 @@
 package io.github.dockhand.ui.screen.home
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -10,31 +12,85 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dockhand.LocalAppContainer
 import io.github.dockhand.domain.model.FileBreadcrumb
 import io.github.dockhand.domain.model.FileEntry
+import io.github.dockhand.ui.component.FileContextAction
 import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.ui.component.DualPaneBrowser
+import io.github.dockhand.task.AppTask
+import io.github.dockhand.task.TaskState
+import io.github.dockhand.ui.component.CopyRequestDialog
+import io.github.dockhand.ui.component.FileInfoDialogContent
+import io.github.dockhand.ui.component.FileInfoDialogWindow
+import dockhand.shared.generated.resources.Res
+import dockhand.shared.generated.resources.action_cancel
+import dockhand.shared.generated.resources.action_confirm
+import dockhand.shared.generated.resources.file_info_title
+import dockhand.shared.generated.resources.ic_backend_task
+import dockhand.shared.generated.resources.ic_home
+import dockhand.shared.generated.resources.task_cancel_message
+import dockhand.shared.generated.resources.task_cancel_title
+import dockhand.shared.generated.resources.task_cancelled
+import dockhand.shared.generated.resources.task_completed
+import dockhand.shared.generated.resources.task_failed
+import dockhand.shared.generated.resources.task_progress_unknown
+import dockhand.shared.generated.resources.task_running
+import dockhand.shared.generated.resources.tasks_badge_overflow
+import dockhand.shared.generated.resources.tasks_empty
+import dockhand.shared.generated.resources.tasks_tooltip_title
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Badge
+import top.yukonga.miuix.kmp.basic.BadgedBox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
+import top.yukonga.miuix.kmp.basic.RichTooltip
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TooltipAnchorPosition
+import top.yukonga.miuix.kmp.basic.TooltipBox
+import top.yukonga.miuix.kmp.basic.TooltipDefaults
+import top.yukonga.miuix.kmp.basic.TooltipState
+import top.yukonga.miuix.kmp.basic.rememberTooltipState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Tasks
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.LocalWindowState
@@ -47,14 +103,24 @@ fun HomeScreen() {
         HomeViewModel(files = container.files, settings = container.settings)
     }
     val uiState by homeViewModel.state.collectAsState()
+    val tasks by homeViewModel.tasks.collectAsState()
 
     HomeScreenContent(
         uiState = uiState,
+        tasks = tasks,
+        onCancelTask = homeViewModel::onCancelTask,
+        onDismissTask = homeViewModel::onDismissTask,
+        onSnackbarShown = homeViewModel::onSnackbarShown,
         onPlaceClick = homeViewModel::onPlaceClick,
         onPaneFocus = homeViewModel::onPaneFocus,
         onEntryClick = homeViewModel::onEntryClick,
         onEntryDoubleClick = homeViewModel::onEntryDoubleClick,
         onEntrySecondaryClick = homeViewModel::onEntrySecondaryClick,
+        onEntryContextAction = homeViewModel::onEntryContextAction,
+        onDismissFileInfo = homeViewModel::onDismissFileInfo,
+        onCopyRequestBackgroundChange = homeViewModel::onCopyRequestBackgroundChange,
+        onCopyRequestDismiss = homeViewModel::onCopyRequestDismiss,
+        onCopyRequestConfirm = homeViewModel::onCopyRequestConfirm,
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
@@ -73,11 +139,20 @@ fun HomeScreen() {
 @Composable
 private fun HomeScreenContent(
     uiState: HomeUiState,
+    tasks: List<AppTask>,
+    onCancelTask: (Long) -> Unit,
+    onDismissTask: (Long) -> Unit,
+    onSnackbarShown: () -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     onPaneFocus: (PaneId) -> Unit,
     onEntryClick: (PaneId, FileEntry) -> Unit,
     onEntryDoubleClick: (PaneId, FileEntry) -> Unit,
     onEntrySecondaryClick: (PaneId, FileEntry) -> Unit,
+    onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
+    onDismissFileInfo: (Long) -> Unit,
+    onCopyRequestBackgroundChange: (Boolean) -> Unit,
+    onCopyRequestDismiss: () -> Unit,
+    onCopyRequestConfirm: () -> Unit,
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
@@ -95,9 +170,17 @@ private fun HomeScreenContent(
     val windowState = LocalWindowState.current
     val windowPlacement = windowState.placement
     val direction = LocalLayoutDirection.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.snackbarMessage) {
+        val message = uiState.snackbarMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        onSnackbarShown()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             MiuixCaptionBar {
                 if (windowPlacement != WindowPlacement.Fullscreen) {
@@ -106,7 +189,11 @@ private fun HomeScreenContent(
                         onBreadcrumbClick = onBreadcrumbClick,
                         onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
                     ) {
-                        TopBarActions()
+                        TopBarActions(
+                            tasks = tasks,
+                            onCancelTask = onCancelTask,
+                            onDismissTask = onDismissTask,
+                        )
                     }
                 }
             }
@@ -157,7 +244,11 @@ private fun HomeScreenContent(
                             onBreadcrumbClick = onBreadcrumbClick,
                             onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
                         ) {
-                            TopBarActions()
+                            TopBarActions(
+                                tasks = tasks,
+                                onCancelTask = onCancelTask,
+                                onDismissTask = onDismissTask,
+                            )
                         }
                     }
                 }
@@ -196,6 +287,7 @@ private fun HomeScreenContent(
                             onEntryClick = onEntryClick,
                             onEntryDoubleClick = onEntryDoubleClick,
                             onEntrySecondaryClick = onEntrySecondaryClick,
+                            onEntryContextAction = onEntryContextAction,
                             onRetry = onRetry,
                             onLoadMore = onLoadMore,
                             onBack = onBack,
@@ -208,13 +300,125 @@ private fun HomeScreenContent(
                     }
                 }
             }
+
+            CopyRequestDialog(
+                request = uiState.copyRequest,
+                onBackgroundChange = onCopyRequestBackgroundChange,
+                onDismiss = onCopyRequestDismiss,
+                onConfirm = onCopyRequestConfirm,
+            )
+        }
+    }
+
+    uiState.fileInfoDialogs.forEachIndexed { index, dialog ->
+        key(dialog.id) {
+            FileInfoDialogWindow(
+                title = stringResource(Res.string.file_info_title),
+                width = 300.dp,
+                height = 800.dp,
+                order = index,
+                onCloseRequest = { onDismissFileInfo(dialog.id) },
+            ) {
+                FileInfoDialogContent(
+                    state = dialog,
+                    onClose = { onDismissFileInfo(dialog.id) },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TopBarActions() {
-    // 更多菜单的内容（新建、排序、显示隐藏文件……）在后续迭代接入。
+private fun TopBarActions(
+    tasks: List<AppTask>,
+    onCancelTask: (Long) -> Unit,
+    onDismissTask: (Long) -> Unit,
+) {
+    var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
+    var popupShow by remember { mutableStateOf(false) }
+    val runningBackgroundTasks = tasks.count {
+        it.isBackground && it.state == TaskState.Running
+    }
+
+    Box {
+        TooltipBox(
+            text = stringResource(Res.string.tasks_tooltip_title)
+        ) {
+            BadgedBox(
+                badge = {
+                    if (runningBackgroundTasks > 0) {
+                        Badge {
+                            Text(
+                                text = if (runningBackgroundTasks > 99) {
+                                    stringResource(Res.string.tasks_badge_overflow)
+                                } else {
+                                    runningBackgroundTasks.toString()
+                                },
+                                style = MiuixTheme.textStyles.footnote2,
+                            )
+                        }
+                    }
+                },
+            ) {
+                IconButton(
+                    onClick = { popupShow = true },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_backend_task),
+                        contentDescription = stringResource(Res.string.tasks_tooltip_title),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+
+        OverlayListPopup(
+            show = popupShow,
+            alignment = PopupPositionProvider.Align.Start,
+            onDismissRequest = { popupShow = false } // 关闭弹窗菜单
+        ) {
+            Card(
+                modifier = Modifier.width(300.dp)
+            ) {
+                if (tasks.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
+                            .height(56.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.tasks_empty),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .width(300.dp)
+                            .heightIn(max = 320.dp),
+                    ) {
+                        items(tasks, key = { it.id }) { task ->
+                            TaskRow(
+                                task = task,
+                                onClose = {
+                                    if (task.state == TaskState.Running) {
+                                        pendingCancel = task
+                                    } else {
+                                        onDismissTask(task.id)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+
     IconButton(
         onClick = { },
         modifier = Modifier.size(32.dp),
@@ -222,7 +426,88 @@ private fun TopBarActions() {
         Icon(
             imageVector = MiuixIcons.More,
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(20.dp),
         )
+    }
+
+    val taskToCancel = pendingCancel
+    OverlayDialog(
+        show = taskToCancel != null,
+        title = stringResource(Res.string.task_cancel_title),
+        summary = taskToCancel?.let {
+            stringResource(Res.string.task_cancel_message, it.title)
+        },
+        onDismissRequest = { pendingCancel = null },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(
+                text = stringResource(Res.string.action_cancel),
+                onClick = { pendingCancel = null },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                text = stringResource(Res.string.action_confirm),
+                onClick = {
+                    taskToCancel?.let { onCancelTask(it.id) }
+                    pendingCancel = null
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskRow(
+    task: AppTask,
+    onClose: () -> Unit,
+) {
+    val status = when (task.state) {
+        TaskState.Running -> stringResource(Res.string.task_running)
+        TaskState.Completed -> stringResource(Res.string.task_completed)
+        TaskState.Failed -> stringResource(Res.string.task_failed)
+        TaskState.Cancelled -> stringResource(Res.string.task_cancelled)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {}
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = task.title,
+                style = MiuixTheme.textStyles.body2,
+            )
+            Text(
+                text = task.error ?: task.detail ?: status,
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            if (task.state == TaskState.Running) {
+                val fraction = task.progress.fraction
+                LinearProgressIndicator(
+                    progress = fraction,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(28.dp),
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Close,
+                contentDescription = stringResource(Res.string.task_cancel_title),
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }

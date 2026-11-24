@@ -40,3 +40,11 @@ data class FileLocation(
         require(path.isNotBlank()) { "FileLocation.path 不能为空" }
     }
 }
+
+/** UI 展示用路径：MTP 显示“设备/存储名 + 逻辑路径”。 */
+fun FileLocation.displayPath(): String =
+    if (source.kind == FileSourceKind.Mtp) {
+        source.name + if (path == "/") "" else path
+    } else {
+        path
+    }

@@ -391,6 +391,29 @@ pub extern "C" fn dockhand_mtp_mkdir(
     })
 }
 
+async fn delete_entry(
+    device_key: u64,
+    storage_id: u64,
+    path: String,
+) -> Result<Value, String> {
+    let (_device, storage) = open_storage(device_key, storage_id, false).await?;
+    let (parent_path, name) = split_parent(&path)?;
+    let parent = resolve_folder(&storage, &parent_path).await?;
+    let objects = storage
+        .list_objects(parent)
+        .await
+        .map_err(|error| error_message(&error))?;
+    let object = objects
+        .into_iter()
+        .find(|item| item.filename == name)
+        .ok_or_else(|| format!("文件不存在：{path}"))?;
+    storage
+        .delete(object.handle)
+        .await
+        .map_err(|error| error_message(&error))?;
+    Ok(json!({ "deleted": true }))
+}
+
 #[no_mangle]
 pub extern "C" fn dockhand_mtp_upload(
     device_key: u64,
@@ -416,6 +439,19 @@ pub extern "C" fn dockhand_mtp_download(
     let local_path = read_c_string(local_path);
     run_operation(async move {
         download_file(device_key, storage_id, remote_path?, local_path?).await
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn dockhand_mtp_delete(
+    device_key: u64,
+    storage_id: u64,
+    path: *const c_char,
+) -> *mut c_char {
+    let path = read_c_string(path);
+    run_operation(async move {
+        let path = path?;
+        delete_entry(device_key, storage_id, path).await
     })
 }
 

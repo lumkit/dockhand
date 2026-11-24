@@ -118,6 +118,25 @@ internal object MtpNativeBridge {
             ValueLayout.ADDRESS,
         ),
     )
+    private val downloadHandle: MethodHandle = downcall(
+        "dockhand_mtp_download",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+            ValueLayout.ADDRESS,
+        ),
+    )
+    private val deleteHandle: MethodHandle = downcall(
+        "dockhand_mtp_delete",
+        FunctionDescriptor.of(
+            ValueLayout.ADDRESS,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.JAVA_LONG,
+            ValueLayout.ADDRESS,
+        ),
+    )
     private val freeHandle: MethodHandle = downcall(
         "dockhand_mtp_free",
         FunctionDescriptor.ofVoid(ValueLayout.ADDRESS),
@@ -253,6 +272,40 @@ internal object MtpNativeBridge {
             BridgeResult.Failure("MTP 上传失败：${error.message ?: error.javaClass.simpleName}")
         } finally {
             arena.close()
+        }
+    }
+
+    fun download(
+        deviceKey: Long,
+        storageId: Long,
+        remotePath: String,
+        localPath: String,
+    ): BridgeResult<Long> {
+        val arena = Arena.ofConfined()
+        return try {
+            val remote = arena.allocateFrom(remotePath)
+            val local = arena.allocateFrom(localPath)
+            val data = callJson(downloadHandle, deviceKey, storageId, remote, local)
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(
+                    result.value.jsonObject["bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+                )
+            }
+        } catch (error: Throwable) {
+            BridgeResult.Failure("MTP 下载失败：${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            arena.close()
+        }
+    }
+
+    fun delete(deviceKey: Long, storageId: Long, remotePath: String): BridgeResult<Unit> {
+        return withStringArg(remotePath) { pathSegment ->
+            val data = callJson(deleteHandle, deviceKey, storageId, pathSegment)
+            when (val result = parse(data)) {
+                is BridgeResult.Failure -> result
+                is BridgeResult.Success -> BridgeResult.Success(Unit)
+            }
         }
     }
 
