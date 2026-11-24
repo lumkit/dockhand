@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,6 +65,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -162,6 +165,49 @@ fun FileBrowserPane(
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
+    var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
+    var dragAnchorIndex by remember { mutableStateOf<Int?>(null) }
+
+    fun rowIndexAt(point: Offset): Int? {
+        if (pane.entries.isEmpty() || rowBounds.isEmpty()) return null
+        val indexById = pane.entries.withIndex().associate { it.value.id to it.index }
+        var hit: Int? = null
+        var nearestIndex = 0
+        var nearestDistance = Float.MAX_VALUE
+        rowBounds.forEach { (id, rect) ->
+            val index = indexById[id] ?: return@forEach
+            if (rect.contains(point)) {
+                hit = index
+                return@forEach
+            }
+            val distance = kotlin.math.abs(point.y - rect.center.y)
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearestIndex = index
+            }
+        }
+        return hit ?: nearestIndex
+    }
+
+    fun updateMarqueeSelection() {
+        val end = dragEnd ?: return
+        val anchor = dragAnchorIndex ?: return
+        val current = rowIndexAt(end) ?: return
+        val from = min(anchor, current)
+        val to = max(anchor, current)
+        currentOnSelectionChange(
+            pane.entries.subList(from, to + 1).map { it.id }.toSet()
+        )
+    }
+
+    val isDragging = dragStart != null && dragEnd != null
+    LaunchedEffect(isDragging) {
+        if (!isDragging) return@LaunchedEffect
+        while (true) {
+            updateMarqueeSelection()
+            withFrameNanos { }
+        }
+    }
 
     LaunchedEffect(pane.location) {
         contextMenuEntryId = null
@@ -221,31 +267,30 @@ fun FileBrowserPane(
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
                                     val change = event.changes.firstOrNull() ?: break
+                                    if (event.type == PointerEventType.Scroll) {
+                                        updateMarqueeSelection()
+                                        continue
+                                    }
                                     val point = coordinates?.localToRoot(change.position) ?: change.position
                                     if (!dragging && (point - start).getDistance() > touchSlop) {
                                         dragging = true
+                                        dragAnchorIndex = rowIndexAt(start) ?: 0
                                         dragStart = start
                                     }
                                     if (dragging) {
                                         dragEnd = point
-                                        val selection = Rect(
-                                            left = min(start.x, point.x),
-                                            top = min(start.y, point.y),
-                                            right = max(start.x, point.x),
-                                            bottom = max(start.y, point.y),
-                                        )
-                                        currentOnSelectionChange(
-                                            rowBounds
-                                                .filterValues { it.overlaps(selection) }
-                                                .keys
-                                                .toSet()
-                                        )
-                                        event.changes.forEach { it.consume() }
+                                        dragPointerLocal = change.position
+                                        updateMarqueeSelection()
+                                        if (event.type != PointerEventType.Scroll) {
+                                            event.changes.forEach { it.consume() }
+                                        }
                                     }
                                     if (!change.pressed) break
                                 }
                                 dragStart = null
                                 dragEnd = null
+                                dragPointerLocal = null
+                                dragAnchorIndex = null
                             }
                         }
                     }
@@ -274,6 +319,37 @@ fun FileBrowserPane(
 
                     else -> {
                         val listState = rememberLazyListState()
+                        val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
+                        val edgeScrollMaxStep = with(LocalDensity.current) { 28.dp.toPx() }
+                        LaunchedEffect(isDragging) {
+                            if (!isDragging) return@LaunchedEffect
+                            while (true) {
+                                val pointer = dragPointerLocal
+                                val viewportHeight = listCoordinates?.size?.height
+                                if (pointer != null && viewportHeight != null) {
+                                    val y = pointer.y
+                                    val delta = when {
+                                        y < edgeScrollThreshold -> {
+                                            val intensity = ((edgeScrollThreshold - y) / edgeScrollThreshold)
+                                                .coerceIn(0f, 1f)
+                                            -edgeScrollMaxStep * intensity
+                                        }
+                                        y > viewportHeight - edgeScrollThreshold -> {
+                                            val intensity = (
+                                                (y - (viewportHeight - edgeScrollThreshold)) /
+                                                    edgeScrollThreshold
+                                                ).coerceIn(0f, 1f)
+                                            edgeScrollMaxStep * intensity
+                                        }
+                                        else -> 0f
+                                    }
+                                    if (delta != 0f) {
+                                        listState.scrollBy(delta)
+                                    }
+                                }
+                                withFrameNanos { }
+                            }
+                        }
                         val currentHasMore by rememberUpdatedState(pane.hasMore)
                         val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
                         val currentLoadMore by rememberUpdatedState(onLoadMore)
@@ -654,7 +730,6 @@ private fun FileEntryRow(
                 BasicTextField(
                     state = editState,
                     modifier = Modifier
-                        .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onGloballyPositioned { coordinates ->
                             if (editing) {
@@ -693,9 +768,7 @@ private fun FileEntryRow(
                 Text(
                     text = row.name,
                     modifier = if (selected) {
-                        Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
+                        Modifier.combinedClickable(
                                 indication = null,
                                 interactionSource = null,
                                 onDoubleClick = onDoubleClick,
@@ -703,7 +776,7 @@ private fun FileEntryRow(
                                 editing = true
                             }
                     } else {
-                        Modifier.fillMaxWidth()
+                        Modifier
                     },
                     fontSize = MiuixTheme.textStyles.body1.fontSize,
                     fontWeight = FontWeight.Medium,
