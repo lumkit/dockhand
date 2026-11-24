@@ -42,8 +42,8 @@ class HomeViewModelTest {
         )
 
         assertEquals(PaneId.Left, viewModel.state.value.focusedPane)
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
-        assertEquals(fixture.root.path, viewModel.state.value.rightPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.rightPane.location?.path)
         assertEquals(listOf("Documents", "readme.txt"), viewModel.state.value.leftPane.entries.map { it.name })
     }
 
@@ -72,14 +72,14 @@ class HomeViewModelTest {
             computeDispatcher = Dispatchers.Unconfined,
             externalScope = scope,
         )
-        val usersFolder = viewModel.state.value.rightPane.entries.first { it.name == "Users" }
+        val documents = viewModel.state.value.rightPane.entries.first { it.name == "Documents" }
 
-        viewModel.onEntryDoubleClick(PaneId.Right, usersFolder.entry)
+        viewModel.onEntryDoubleClick(PaneId.Right, documents.entry)
 
         assertEquals(PaneId.Right, viewModel.state.value.focusedPane)
-        assertEquals(fixture.users.path, viewModel.state.value.focusedLocation?.path)
+        assertEquals(fixture.documents.path, viewModel.state.value.focusedLocation?.path)
         // 左面板保持原路径
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
     }
 
     @Test
@@ -94,7 +94,7 @@ class HomeViewModelTest {
 
         viewModel.onEntryClick(PaneId.Left, file.entry)
 
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
         assertEquals(setOf(file.id), viewModel.state.value.leftPane.selectedIds)
     }
 
@@ -111,7 +111,7 @@ class HomeViewModelTest {
         viewModel.onEntryClick(PaneId.Left, documents.entry)
 
         assertEquals(PaneId.Left, viewModel.state.value.focusedPane)
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
         assertEquals(setOf(documents.id), viewModel.state.value.leftPane.selectedIds)
     }
 
@@ -123,14 +123,14 @@ class HomeViewModelTest {
             computeDispatcher = Dispatchers.Unconfined,
             externalScope = scope,
         )
-        val usersFolder = viewModel.state.value.rightPane.entries.first { it.name == "Users" }
+        val documents = viewModel.state.value.rightPane.entries.first { it.name == "Documents" }
 
-        viewModel.onEntrySecondaryClick(PaneId.Right, usersFolder.entry)
+        viewModel.onEntrySecondaryClick(PaneId.Right, documents.entry)
 
         assertEquals(PaneId.Right, viewModel.state.value.focusedPane)
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
-        assertEquals(fixture.root.path, viewModel.state.value.rightPane.location?.path)
-        assertEquals(setOf(usersFolder.id), viewModel.state.value.rightPane.selectedIds)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.rightPane.location?.path)
+        assertEquals(setOf(documents.id), viewModel.state.value.rightPane.selectedIds)
     }
 
     @Test
@@ -143,18 +143,17 @@ class HomeViewModelTest {
         )
         val documents = fixture.places.first { it.kind == FilePlaceKind.Documents }
         val home = fixture.places.first { it.kind == FilePlaceKind.Home }
+        val desktop = fixture.places.first { it.kind == FilePlaceKind.Desktop }
 
         viewModel.onMovePlace(documents, -1)
-
         assertEquals(
-            listOf(documents.id, home.id),
+            listOf(home.id, documents.id, desktop.id),
             viewModel.state.value.drawerPlaceOrder[FilePlaceGroup.Local],
         )
 
-        // 已经在顶部，继续上移不应改变顺序。
         viewModel.onMovePlace(documents, -1)
         assertEquals(
-            listOf(documents.id, home.id),
+            listOf(documents.id, home.id, desktop.id),
             viewModel.state.value.drawerPlaceOrder[FilePlaceGroup.Local],
         )
     }
@@ -363,7 +362,7 @@ class HomeViewModelTest {
             viewModel.state.value.leftPane.entries.first { it.name == "Documents" }.entry
         )
         viewModel.onBack(PaneId.Left)
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
 
         viewModel.onForward(PaneId.Left)
         assertEquals(fixture.documents.path, viewModel.state.value.leftPane.location?.path)
@@ -380,7 +379,7 @@ class HomeViewModelTest {
 
         viewModel.onCreate(PaneId.Left, "NewFolder", createFile = false)
 
-        assertEquals(listOf(fixture.home to "NewFolder"), fixture.createdDirectories)
+        assertEquals(listOf(fixture.desktop to "NewFolder"), fixture.createdDirectories)
         assertEquals(null, viewModel.state.value.operationError)
     }
 
@@ -395,7 +394,7 @@ class HomeViewModelTest {
 
         viewModel.onCreate(PaneId.Left, "notes.txt", createFile = true)
 
-        assertEquals(listOf(fixture.home to "notes.txt"), fixture.createdFiles)
+        assertEquals(listOf(fixture.desktop to "notes.txt"), fixture.createdFiles)
         assertEquals(emptyList(), fixture.createdDirectories)
     }
 
@@ -411,8 +410,8 @@ class HomeViewModelTest {
         viewModel.onSyncOtherPane(PaneId.Left)
 
         assertEquals(PaneId.Left, viewModel.state.value.focusedPane)
-        assertEquals(fixture.home.path, viewModel.state.value.leftPane.location?.path)
-        assertEquals(fixture.home.path, viewModel.state.value.rightPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
+        assertEquals(fixture.desktop.path, viewModel.state.value.rightPane.location?.path)
     }
 
     @Test
@@ -423,13 +422,11 @@ class HomeViewModelTest {
             computeDispatcher = Dispatchers.Unconfined,
             externalScope = scope,
         )
-        val homeCallsBefore = fixture.listCalls[fixture.home.path] ?: 0
-        val rootCallsBefore = fixture.listCalls[fixture.root.path] ?: 0
+        val desktopCallsBefore = fixture.listCalls[fixture.desktop.path] ?: 0
 
         fixture.changes.emit(Unit)
 
-        assertTrue((fixture.listCalls[fixture.home.path] ?: 0) > homeCallsBefore)
-        assertTrue((fixture.listCalls[fixture.root.path] ?: 0) > rootCallsBefore)
+        assertTrue((fixture.listCalls[fixture.desktop.path] ?: 0) > desktopCallsBefore)
     }
 
     @Test
@@ -456,6 +453,7 @@ class HomeViewModelTest {
         val root = FileLocation(source, "/")
         val users = FileLocation(source, "/Users")
         val home = FileLocation(source, "/Users/lumkit")
+        val desktop = FileLocation(source, "/Users/lumkit/Desktop")
         val documents = FileLocation(source, "/Users/lumkit/Documents")
         var failOnPath: String? = null
         val createdDirectories = mutableListOf<Pair<FileLocation, String>>()
@@ -469,12 +467,14 @@ class HomeViewModelTest {
 
         val places = listOf(
             FilePlace("local:home", "lumkit", home, FilePlaceKind.Home, FilePlaceGroup.Local),
+            FilePlace("local:desktop", "Desktop", desktop, FilePlaceKind.Desktop, FilePlaceGroup.Local),
             FilePlace("local:documents", "Documents", documents, FilePlaceKind.Documents, FilePlaceGroup.Local),
         )
         val documentsPlace = places.first { it.kind == FilePlaceKind.Documents }
 
         private val contents = mapOf(
             home.path to listOf(documentsEntry, readme),
+            desktop.path to listOf(documentsEntry, readme),
             root.path to listOf(usersEntry),
             users.path to emptyList(),
             documents.path to emptyList(),

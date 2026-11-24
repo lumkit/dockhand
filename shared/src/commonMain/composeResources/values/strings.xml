@@ -6,6 +6,13 @@
     <string name="text_no_mounted_disks">未连接挂载磁盘</string>
     <string name="text_mtp_devices">MTP设备</string>
     <string name="text_settings">设置</string>
+    <string name="settings_empty">暂无设置项</string>
+    <string name="startup_section">启动</string>
+    <string name="startup_left_path">启动路径 - 左窗口</string>
+    <string name="startup_right_path">启动路径 - 右窗口</string>
+    <string name="startup_last_path">上次路径</string>
+    <string name="settings_restore_window_size">恢复窗口大小</string>
+    <string name="settings_restore_window_size_summary">Floating 模式关闭时保存并在下次启动恢复</string>
 
     <!-- 侧边栏固定入口 -->
     <string name="text_desktop">桌面</string>

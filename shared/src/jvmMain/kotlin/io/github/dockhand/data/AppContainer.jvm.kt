@@ -27,7 +27,7 @@ actual fun rememberAppContainer(): AppContainer {
     return container
 }
 
-private fun createAppContainer(): AppContainer {
+fun createAppContainer(): AppContainer {
     cleanupTaskTempDirectories()
     val dataDir = defaultAppDataDirectory().apply { mkdirs() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

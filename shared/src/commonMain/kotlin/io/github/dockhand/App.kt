@@ -23,7 +23,11 @@ val LocalAppContainer = staticCompositionLocalOf<AppContainer> { error("not prov
  */
 @Composable
 fun App() {
-    val container = rememberAppContainer()
+    App(rememberAppContainer())
+}
+
+@Composable
+fun App(container: AppContainer) {
     val mode by container.settings.colorSchemeMode.collectAsState(initial = ColorSchemeMode.System)
     // ThemeController 的 colorSchemeMode 是只读状态，切换模式时重建一个即可
     val controller = remember(mode) { ThemeController(colorSchemeMode = mode) }

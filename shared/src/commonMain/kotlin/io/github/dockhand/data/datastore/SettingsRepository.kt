@@ -2,14 +2,17 @@ package io.github.dockhand.data.datastore
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import io.github.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.dockhand.domain.model.FilePlaceGroup
+import io.github.dockhand.domain.model.WindowSize
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.io.IOException
 
@@ -22,6 +25,15 @@ internal object SettingsKeys {
 
     val MtpExpandedSources = stringPreferencesKey("mtp_expanded_sources")
     val MtpShortcutOrder = stringPreferencesKey("mtp_shortcut_order")
+    val RestoreWindowSize = booleanPreferencesKey("restore_window_size")
+    val WindowWidth = intPreferencesKey("window_width_dp")
+    val WindowHeight = intPreferencesKey("window_height_dp")
+
+    fun startupPath(pane: String): Preferences.Key<String> =
+        stringPreferencesKey("startup_path_${pane.lowercase()}")
+
+    fun lastLocation(pane: String): Preferences.Key<String> =
+        stringPreferencesKey("last_location_${pane.lowercase()}")
 }
 
 class SettingsRepository(
@@ -94,7 +106,66 @@ class SettingsRepository(
         }
     }
 
-    private companion object {
-        const val PLACE_ORDER_SEPARATOR = "\u001F"
+    /** 启动路径：STARTUP_LAST 表示恢复上次路径，否则为 FilePlace.id。 */
+    fun startupPath(pane: String): Flow<String> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.startupPath(pane)] ?: STARTUP_DEFAULT }
+
+    suspend fun setStartupPath(pane: String, value: String) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.startupPath(pane)] = value }
+    }
+
+    /** 上次离开时的 location，编码为 sourceId + 分隔符 + path。 */
+    fun lastLocation(pane: String): Flow<SavedLocation?> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            val raw = prefs[SettingsKeys.lastLocation(pane)] ?: return@map null
+            val separator = raw.indexOf(PLACE_ORDER_SEPARATOR)
+            if (separator <= 0) return@map null
+            SavedLocation(
+                sourceId = raw.substring(0, separator),
+                path = raw.substring(separator + 1),
+            )
+        }
+
+    val restoreWindowSize: Flow<Boolean> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.RestoreWindowSize] ?: true }
+
+    suspend fun setRestoreWindowSize(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.RestoreWindowSize] = enabled }
+    }
+
+    val windowSize: Flow<WindowSize?> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            val width = prefs[SettingsKeys.WindowWidth] ?: return@map null
+            val height = prefs[SettingsKeys.WindowHeight] ?: return@map null
+            if (width <= 0 || height <= 0) null else WindowSize(width, height)
+        }
+
+    suspend fun setWindowSize(size: WindowSize) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.WindowWidth] = size.widthDp
+            prefs[SettingsKeys.WindowHeight] = size.heightDp
+        }
+    }
+
+    suspend fun setLastLocation(pane: String, sourceId: String, path: String) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.lastLocation(pane)] =
+                sourceId + PLACE_ORDER_SEPARATOR + path
+        }
+    }
+
+    companion object {
+        const val STARTUP_LAST = "__last__"
+        const val STARTUP_DEFAULT = "local:desktop"
+        private const val PLACE_ORDER_SEPARATOR = "\u001F"
     }
 }
+
+data class SavedLocation(
+    val sourceId: String,
+    val path: String,
+)

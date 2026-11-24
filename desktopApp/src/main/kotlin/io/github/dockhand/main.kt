@@ -1,12 +1,21 @@
 package io.github.dockhand
 
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import io.github.dockhand.data.createAppContainer
+import io.github.dockhand.domain.model.WindowSize
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlin.math.max
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.window.MiuixWindow
 import top.yukonga.miuix.kmp.window.MiuixWindowBackgroundType
 import top.yukonga.miuix.kmp.window.MiuixWindowProperties
@@ -19,14 +28,41 @@ import top.yukonga.miuix.kmp.window.MiuixWindowProperties
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
+    val container = remember { createAppContainer() }
+    DisposableEffect(container) {
+        onDispose { container.close() }
+    }
+    val savedSize = remember(container) {
+        runBlocking {
+            if (!container.settings.restoreWindowSize.first()) {
+                null
+            } else {
+                container.settings.windowSize.first()
+            }
+        }
+    }
     val windowState = rememberWindowState(
         position = WindowPosition(Alignment.Center),
-        width = 1000.dp,
-        height = 600.dp,
+        width = max(1000, savedSize?.widthDp ?: 1000).dp,
+        height = max(600, savedSize?.heightDp ?: 600).dp,
     )
 
     MiuixWindow(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = {
+            if (windowState.placement == WindowPlacement.Floating) {
+                runBlocking {
+                    if (container.settings.restoreWindowSize.first()) {
+                        container.settings.setWindowSize(
+                            WindowSize(
+                                widthDp = windowState.size.width.value.roundToInt(),
+                                heightDp = windowState.size.height.value.roundToInt(),
+                            )
+                        )
+                    }
+                }
+            }
+            exitApplication()
+        },
         title = "Dockhand",
         state = windowState,
         properties = MiuixWindowProperties.default(
@@ -35,6 +71,6 @@ fun main() = application {
             maximizeOrRestoreButtonEnabled = false,
         ),
     ) {
-        App()
+        App(container)
     }
 }

@@ -62,6 +62,7 @@ import io.github.dockhand.domain.model.FilePlace
 import io.github.dockhand.domain.model.FilePlaceGroup
 import io.github.dockhand.domain.model.FilePlaceKind
 import io.github.dockhand.domain.model.orderedByIds
+import io.github.dockhand.ui.component.SettingsBottomSheet
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Button
@@ -88,6 +89,7 @@ import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -107,10 +109,16 @@ fun HomeDrawerContent(
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
+    startupLeftPath: String,
+    startupRightPath: String,
+    onStartupPathChange: (PaneId, String) -> Unit,
+    restoreWindowSize: Boolean,
+    onRestoreWindowSizeChange: (Boolean) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var draggingPlaceId by remember { mutableStateOf<String?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
     val placesByGroup = remember(places, placeOrder) {
         DEFAULT_FILE_PLACE_GROUP_ORDER.associateWith { group ->
             places.filter { it.group == group }
@@ -229,9 +237,7 @@ fun HomeDrawerContent(
         HorizontalDivider()
 
         Button(
-            onClick = {
-
-            },
+            onClick = { showSettings = true },
             modifier = Modifier.fillMaxWidth()
                 .padding(8.dp),
         ) {
@@ -247,6 +253,18 @@ fun HomeDrawerContent(
             )
         }
     }
+
+    SettingsBottomSheet(
+        show = showSettings,
+        onDismissRequest = { showSettings = false },
+        places = places,
+        startupLeftPath = startupLeftPath,
+        startupRightPath = startupRightPath,
+        onStartupLeftPathChange = { onStartupPathChange(PaneId.Left, it) },
+        onStartupRightPathChange = { onStartupPathChange(PaneId.Right, it) },
+        restoreWindowSize = restoreWindowSize,
+        onRestoreWindowSizeChange = onRestoreWindowSizeChange,
+    )
 }
 
 private data class MtpShortcutSpec(

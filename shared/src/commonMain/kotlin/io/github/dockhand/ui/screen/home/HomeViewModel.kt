@@ -36,9 +36,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.getString
 
@@ -107,6 +110,29 @@ class HomeViewModel(
                 }
         }
     }
+    private val startupLeftPathJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.startupPath(PaneId.Left.name)
+                .catch { }
+                .collect { path -> _state.update { it.copy(startupLeftPath = path) } }
+        }
+    }
+    private val restoreWindowSizeJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.restoreWindowSize
+                .catch { }
+                .collect { enabled ->
+                    _state.update { it.copy(restoreWindowSize = enabled) }
+                }
+        }
+    }
+    private val startupRightPathJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.startupPath(PaneId.Right.name)
+                .catch { }
+                .collect { path -> _state.update { it.copy(startupRightPath = path) } }
+        }
+    }
     private val mtpShortcutOrderJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.mtpShortcutOrder
@@ -130,25 +156,102 @@ class HomeViewModel(
                     _state.update { it.copy(places = places, placesError = null) }
                     if (!bootstrapped && places.isNotEmpty()) {
                         bootstrapped = true
-                        bootstrap(places)
+                        val pendingMtp = pendingMtpStartupSources()
+                        if (
+                            pendingMtp.isNotEmpty() &&
+                            !places.containsMtpSources(pendingMtp)
+                        ) {
+                            // MTP 枚举比本地路径慢，等设备出现后再恢复上次的 MTP 路径；
+                            // 超时则按设备不存在处理，回退到桌面。
+                            scope.launch {
+                                withTimeoutOrNull(2_000) {
+                                    while (!_state.value.places.containsMtpSources(pendingMtp)) {
+                                        delay(100)
+                                    }
+                                }
+                                bootstrap(_state.value.places)
+                            }
+                        } else {
+                            bootstrap(places)
+                        }
                     }
                 }
         }
     }
 
-    private fun bootstrap(places: List<FilePlace>) {
+    private suspend fun bootstrap(places: List<FilePlace>) {
         val home = places.firstOrNull { it.kind == FilePlaceKind.Home }?.location
             ?: places.firstOrNull { it.location.source.kind == FileSourceKind.Local }?.location
             ?: places.first().location
-        // 侧边栏不再暴露“根目录”，但右面板仍从本机根目录开始。
-        val root = if (home.source.kind == FileSourceKind.Local) {
-            home.copy(path = "/")
-        } else {
-            home
-        }
+        val desktop = places.firstOrNull { it.kind == FilePlaceKind.Desktop }?.location
+        // 两个窗口默认都从桌面开始；没有桌面入口时再回退。
+        val leftFallback = desktop ?: home
+        val rightFallback = desktop ?: home
 
-        navigate(PaneId.Left, home, recordHistory = false)
-        navigate(PaneId.Right, root, recordHistory = false)
+        navigate(
+            PaneId.Left,
+            resolveStartupLocation(PaneId.Left, places, leftFallback),
+            recordHistory = false,
+        )
+        navigate(
+            PaneId.Right,
+            resolveStartupLocation(PaneId.Right, places, rightFallback),
+            recordHistory = false,
+        )
+    }
+
+    private suspend fun pendingMtpStartupSources(): Set<String> {
+        val repository = settings ?: return emptySet()
+        return PaneId.entries.mapNotNull { paneId ->
+            if (repository.startupPath(paneId.name).first() != STARTUP_PATH_LAST) return@mapNotNull null
+            repository.lastLocation(paneId.name).first()
+                ?.sourceId
+                ?.takeIf { it.startsWith("mtp:") }
+        }.toSet()
+    }
+
+    private fun List<FilePlace>.containsMtpSources(sourceIds: Set<String>): Boolean {
+        val available = map { it.location.source.id }.toSet()
+        return available.containsAll(sourceIds)
+    }
+
+    private suspend fun resolveStartupLocation(
+        paneId: PaneId,
+        places: List<FilePlace>,
+        fallback: FileLocation,
+    ): FileLocation {
+        val configured = settings?.startupPath(paneId.name)?.first()
+        if (configured != null && configured != STARTUP_PATH_LAST) {
+            places.firstOrNull { it.id == configured }?.let { return it.location }
+        }
+        val last = settings?.lastLocation(paneId.name)?.first()
+        if (last != null) {
+            val source = places
+                .map { it.location.source }
+                .firstOrNull { it.id == last.sourceId }
+            if (source != null) return FileLocation(source, last.path)
+        }
+        return fallback
+    }
+
+    fun onRestoreWindowSizeChange(enabled: Boolean) {
+        _state.update { it.copy(restoreWindowSize = enabled) }
+        settings?.let { repository ->
+            scope.launch { repository.setRestoreWindowSize(enabled) }
+        }
+    }
+
+    fun onStartupPathChange(paneId: PaneId, path: String) {
+        _state.update {
+            if (paneId == PaneId.Left) {
+                it.copy(startupLeftPath = path)
+            } else {
+                it.copy(startupRightPath = path)
+            }
+        }
+        settings?.let { repository ->
+            scope.launch { repository.setStartupPath(paneId.name, path) }
+        }
     }
 
     // ---- 面板焦点 ----
@@ -674,6 +777,11 @@ class HomeViewModel(
         }
         watch(paneId, target)
         load(paneId, target)
+        settings?.let { repository ->
+            scope.launch {
+                repository.setLastLocation(paneId.name, target.source.id, target.path)
+            }
+        }
     }
 
     /**

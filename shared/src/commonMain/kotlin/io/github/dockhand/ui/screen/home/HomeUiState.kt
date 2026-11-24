@@ -74,9 +74,17 @@ data class CopyRequestState(
     val background: Boolean = false,
 )
 
+const val STARTUP_PATH_LAST = "__last__"
+const val STARTUP_PATH_DESKTOP = "local:desktop"
+
 @Immutable
 data class HomeUiState(
     val places: List<FilePlace> = emptyList(),
+    /** 左右面板启动路径：STARTUP_PATH_LAST 或 FilePlace.id。 */
+    val startupLeftPath: String = STARTUP_PATH_DESKTOP,
+    val startupRightPath: String = STARTUP_PATH_DESKTOP,
+    /** Floating 模式关闭时是否恢复上次窗口大小。 */
+    val restoreWindowSize: Boolean = true,
     val placesError: String? = null,
     /** 每个侧边栏分组内部的 place id 顺序；由设置持久化。 */
     val drawerPlaceOrder: Map<FilePlaceGroup, List<String>> = emptyMap(),

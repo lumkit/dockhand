@@ -111,7 +111,10 @@ import top.yukonga.miuix.kmp.window.MiuixCaptionBar
 fun HomeScreen() {
     val container = LocalAppContainer.current
     val homeViewModel: HomeViewModel = viewModel {
-        HomeViewModel(files = container.files, settings = container.settings)
+        HomeViewModel(
+            files = container.files,
+            settings = container.settings,
+        )
     }
     val uiState by homeViewModel.state.collectAsState()
     val tasks by homeViewModel.tasks.collectAsState()
@@ -135,6 +138,8 @@ fun HomeScreen() {
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
+        onStartupPathChange = homeViewModel::onStartupPathChange,
+        onRestoreWindowSizeChange = homeViewModel::onRestoreWindowSizeChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onRetry = homeViewModel::onRefresh,
         onLoadMore = homeViewModel::onLoadMore,
@@ -167,6 +172,8 @@ private fun HomeScreenContent(
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
+    onStartupPathChange: (PaneId, String) -> Unit,
+    onRestoreWindowSizeChange: (Boolean) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
     onRetry: (PaneId) -> Unit,
@@ -234,6 +241,11 @@ private fun HomeScreenContent(
                     placeOrder = uiState.drawerPlaceOrder,
                     mtpExpandedSources = uiState.mtpExpandedSources,
                     mtpShortcutOrder = uiState.mtpShortcutOrder,
+                    startupLeftPath = uiState.startupLeftPath,
+                    startupRightPath = uiState.startupRightPath,
+                    onStartupPathChange = onStartupPathChange,
+                    restoreWindowSize = uiState.restoreWindowSize,
+                    onRestoreWindowSizeChange = onRestoreWindowSizeChange,
                     onPlaceMove = onPlaceMove,
                     onMtpStorageClick = onMtpStorageClick,
                     onMtpShortcutMove = onMtpShortcutMove,
