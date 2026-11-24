@@ -29,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -168,43 +167,39 @@ fun FileBrowserPane(
     val focusManager = LocalFocusManager.current
     val windowInfo = LocalWindowInfo.current
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
-    val rowBounds = remember { mutableStateMapOf<String, Rect>() }
+    val currentEntries by rememberUpdatedState(pane.entries)
+    val listState = rememberLazyListState()
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
     var dragAnchorIndex by remember { mutableStateOf<Int?>(null) }
 
-    fun rowIndexAt(point: Offset): Int? {
-        if (pane.entries.isEmpty() || rowBounds.isEmpty()) return null
-        val indexById = pane.entries.withIndex().associate { it.value.id to it.index }
-        var hit: Int? = null
-        var nearestIndex = 0
-        var nearestDistance = Float.MAX_VALUE
-        rowBounds.forEach { (id, rect) ->
-            val index = indexById[id] ?: return@forEach
-            if (rect.contains(point)) {
-                hit = index
-                return@forEach
-            }
-            val distance = kotlin.math.abs(point.y - rect.center.y)
-            if (distance < nearestDistance) {
-                nearestDistance = distance
-                nearestIndex = index
-            }
+    fun rowIndexAt(localPoint: Offset): Int? {
+        if (currentEntries.isEmpty()) return null
+        val visible = listState.layoutInfo.visibleItemsInfo
+            .filter { it.index in currentEntries.indices }
+        if (visible.isEmpty()) return null
+        val hit = visible.firstOrNull { info ->
+            localPoint.y >= info.offset && localPoint.y <= info.offset + info.size
         }
-        return hit ?: nearestIndex
+        if (hit != null) return hit.index
+        return visible.minByOrNull { info ->
+            kotlin.math.abs(localPoint.y - (info.offset + info.size / 2f))
+        }?.index
     }
 
     fun updateMarqueeSelection() {
-        val end = dragEnd ?: return
-        val anchor = dragAnchorIndex ?: return
-        val current = rowIndexAt(end) ?: return
+        val pointer = dragPointerLocal ?: return
+        val anchor = dragAnchorIndex ?: rowIndexAt(pointer)?.also {
+            dragAnchorIndex = it
+        } ?: return
+        val current = rowIndexAt(pointer) ?: return
         val from = min(anchor, current)
         val to = max(anchor, current)
         currentOnSelectionChange(
-            pane.entries.subList(from, to + 1).map { it.id }.toSet(),
-            pane.entries.getOrNull(anchor)?.id,
+            currentEntries.subList(from, to + 1).map { it.id }.toSet(),
+            currentEntries.getOrNull(anchor)?.id,
         )
     }
 
@@ -282,7 +277,7 @@ fun FileBrowserPane(
                                     val point = coordinates?.localToRoot(change.position) ?: change.position
                                     if (!dragging && (point - start).getDistance() > touchSlop) {
                                         dragging = true
-                                        dragAnchorIndex = rowIndexAt(start) ?: 0
+                                        dragAnchorIndex = rowIndexAt(down.position)
                                         dragStart = start
                                     }
                                     if (dragging) {
@@ -326,7 +321,6 @@ fun FileBrowserPane(
                     }
 
                     else -> {
-                        val listState = rememberLazyListState()
                         val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
                         val edgeScrollMaxStep = with(LocalDensity.current) { 28.dp.toPx() }
                         LaunchedEffect(isDragging) {
@@ -411,10 +405,6 @@ fun FileBrowserPane(
                                     row = row,
                                     paneId = pane.id,
                                     selected = row.id in pane.selectedIds,
-                                    onBoundsChanged = { rect ->
-                                        if (rect == null) rowBounds.remove(row.id)
-                                        else rowBounds[row.id] = rect
-                                    },
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
                                     canTrash = canTrash,
@@ -515,7 +505,6 @@ private fun FileEntryRow(
     row: FileRowUi,
     paneId: PaneId,
     selected: Boolean,
-    onBoundsChanged: (Rect?) -> Unit,
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
     canTrash: Boolean,
@@ -534,10 +523,6 @@ private fun FileEntryRow(
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     } else {
         Color.Transparent
-    }
-
-    DisposableEffect(row.id) {
-        onDispose { onBoundsChanged(null) }
     }
 
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
@@ -715,7 +700,6 @@ private fun FileEntryRow(
                 .squircleClip(10.dp)
                 .background(rowColor)
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
-                .onGloballyPositioned { onBoundsChanged(it.boundsInRoot()) }
                 .combinedClickable(
                     onClick = {
                         if (editing) {
