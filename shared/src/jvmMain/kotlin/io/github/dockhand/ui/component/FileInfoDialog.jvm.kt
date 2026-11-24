@@ -4,9 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
@@ -23,6 +27,7 @@ actual fun FileInfoDialogWindow(
     width: Dp,
     height: Dp,
     order: Int,
+    scale: Float,
     onCloseRequest: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -41,12 +46,21 @@ actual fun FileInfoDialogWindow(
         state = windowState,
         resizable = false,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MiuixTheme.colorScheme.surface)
-        ) {
-            content()
+        val baseDensity = LocalDensity.current
+        val scaledDensity = remember(baseDensity, scale) {
+            Density(
+                density = baseDensity.density * scale,
+                fontScale = baseDensity.fontScale,
+            )
+        }
+        CompositionLocalProvider(LocalDensity provides scaledDensity) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MiuixTheme.colorScheme.surface)
+            ) {
+                content()
+            }
         }
     }
 }

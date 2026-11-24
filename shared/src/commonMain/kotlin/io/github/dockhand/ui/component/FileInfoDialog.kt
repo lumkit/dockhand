@@ -54,9 +54,12 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.MiuixCaptionBar
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun FileInfoDialogContent(
     state: FileInfoDialogState,
@@ -64,6 +67,7 @@ fun FileInfoDialogContent(
 ) {
     val timeZone = TimeZone.currentSystemDefault()
     val unknown = stringResource(Res.string.file_info_unknown)
+    val scrollState = rememberScrollState()
 
     Scaffold(
         topBar = {
@@ -82,7 +86,8 @@ fun FileInfoDialogContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
+                    .verticalScrollBar(scrollState)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -247,6 +252,7 @@ expect fun FileInfoDialogWindow(
     width: Dp = 400.dp,
     height: Dp = 300.dp,
     order: Int = 0,
+    scale: Float = 1f,
     onCloseRequest: () -> Unit,
     content: @Composable () -> Unit,
 )

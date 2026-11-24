@@ -354,6 +354,7 @@ private fun HomeScreenContent(
                 width = 300.dp,
                 height = 800.dp,
                 order = index,
+                scale = uiState.interfaceScale / 100f,
                 onCloseRequest = { onDismissFileInfo(dialog.id) },
             ) {
                 FileInfoDialogContent(
