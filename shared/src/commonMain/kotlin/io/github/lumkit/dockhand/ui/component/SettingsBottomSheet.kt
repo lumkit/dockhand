@@ -420,7 +420,6 @@ private fun FilePlace.settingsLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
-    FilePlaceKind.Trash -> stringResource(Res.string.text_trash)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,

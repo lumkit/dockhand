@@ -6,7 +6,6 @@ enum class FileContextAction {
     Copy,
     Move,
     Trash,
-    Restore,
     Delete,
     Rename,
     Compress,

@@ -118,17 +118,6 @@ data class TrashRequestState(
     val entries: List<FileEntry> = listOf(entry),
 )
 
-@Immutable
-data class RestoreRequestState(
-    val entry: FileEntry,
-    val background: Boolean = false,
-)
-
-@Immutable
-data class EmptyTrashRequestState(
-    val background: Boolean = false,
-)
-
 const val STARTUP_PATH_LAST = "__last__"
 const val STARTUP_PATH_DESKTOP = "local:desktop"
 val DEFAULT_KEY_COLOR = Color(0xFF6750A4)
@@ -147,7 +136,6 @@ data class HomeUiState(
     val showHiddenItems: Boolean = false,
     val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
         DefaultShortcutBindings.mapValues { listOf(it.value) },
-    val restorableTrashPaths: Set<String> = emptySet(),
     /** 当前显示进度弹窗的前台任务。 */
     val activeTaskId: Long? = null,
     /** 界面缩放百分比，范围 80..110。 */
@@ -171,8 +159,6 @@ data class HomeUiState(
     val deleteRequest: DeleteRequestState? = null,
     val renameRequest: RenameRequestState? = null,
     val trashRequest: TrashRequestState? = null,
-    val restoreRequest: RestoreRequestState? = null,
-    val emptyTrashRequest: EmptyTrashRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,

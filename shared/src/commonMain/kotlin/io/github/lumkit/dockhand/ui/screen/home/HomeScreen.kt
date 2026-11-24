@@ -66,11 +66,9 @@ import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
-import io.github.lumkit.dockhand.ui.component.EmptyTrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
 import io.github.lumkit.dockhand.ui.component.SelectionMode
 import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
-import io.github.lumkit.dockhand.ui.component.RestoreRequestDialog
 import io.github.lumkit.dockhand.ui.component.TaskProgressDialog
 import io.github.lumkit.dockhand.ui.component.TrashRequestDialog
 import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
@@ -147,7 +145,6 @@ fun HomeScreen() {
         HomeViewModel(
             files = container.files,
             settings = container.settings,
-            trashHistory = container.trashHistory,
             terminalLauncher = container.terminalLauncher,
         )
     }
@@ -206,13 +203,6 @@ fun HomeScreen() {
         onTrashRequestBackgroundChange = homeViewModel::onTrashRequestBackgroundChange,
         onTrashRequestDismiss = homeViewModel::onTrashRequestDismiss,
         onTrashRequestConfirm = homeViewModel::onTrashRequestConfirm,
-        onRestoreRequestBackgroundChange = homeViewModel::onRestoreRequestBackgroundChange,
-        onRestoreRequestDismiss = homeViewModel::onRestoreRequestDismiss,
-        onRestoreRequestConfirm = homeViewModel::onRestoreRequestConfirm,
-        onEmptyTrashRequest = homeViewModel::onEmptyTrashRequest,
-        onEmptyTrashRequestBackgroundChange = homeViewModel::onEmptyTrashRequestBackgroundChange,
-        onEmptyTrashRequestDismiss = homeViewModel::onEmptyTrashRequestDismiss,
-        onEmptyTrashRequestConfirm = homeViewModel::onEmptyTrashRequestConfirm,
         onPlaceMove = homeViewModel::onMovePlace,
         onMtpStorageClick = homeViewModel::onMtpStorageClick,
         onMtpShortcutMove = homeViewModel::onMoveMtpShortcut,
@@ -295,13 +285,6 @@ private fun HomeScreenContent(
     onTrashRequestBackgroundChange: (Boolean) -> Unit,
     onTrashRequestDismiss: () -> Unit,
     onTrashRequestConfirm: () -> Unit,
-    onRestoreRequestBackgroundChange: (Boolean) -> Unit,
-    onRestoreRequestDismiss: () -> Unit,
-    onRestoreRequestConfirm: () -> Unit,
-    onEmptyTrashRequest: () -> Unit,
-    onEmptyTrashRequestBackgroundChange: (Boolean) -> Unit,
-    onEmptyTrashRequestDismiss: () -> Unit,
-    onEmptyTrashRequestConfirm: () -> Unit,
     onPlaceMove: (FilePlace, Int) -> Boolean,
     onMtpStorageClick: (FilePlace, Boolean) -> Unit,
     onMtpShortcutMove: (String, Int) -> Boolean,
@@ -352,9 +335,7 @@ private fun HomeScreenContent(
                 currentUiState.moveRequest != null ||
                 currentUiState.deleteRequest != null ||
                 currentUiState.renameRequest != null ||
-                currentUiState.trashRequest != null ||
-                currentUiState.restoreRequest != null ||
-                currentUiState.emptyTrashRequest != null
+                currentUiState.trashRequest != null
             if (modalOpen) {
                 false
             } else {
@@ -556,7 +537,6 @@ private fun HomeScreenContent(
                             onGoUp = onGoUp,
                             onCreate = onCreate,
                             onSync = onSync,
-                            onEmptyTrash = onEmptyTrashRequest,
                             onDismissOperationError = onDismissOperationError,
                         )
                     }
@@ -597,20 +577,6 @@ private fun HomeScreenContent(
                 onBackgroundChange = onTrashRequestBackgroundChange,
                 onDismiss = onTrashRequestDismiss,
                 onConfirm = onTrashRequestConfirm,
-            )
-
-            RestoreRequestDialog(
-                request = uiState.restoreRequest,
-                onBackgroundChange = onRestoreRequestBackgroundChange,
-                onDismiss = onRestoreRequestDismiss,
-                onConfirm = onRestoreRequestConfirm,
-            )
-
-            EmptyTrashRequestDialog(
-                request = uiState.emptyTrashRequest,
-                onBackgroundChange = onEmptyTrashRequestBackgroundChange,
-                onDismiss = onEmptyTrashRequestDismiss,
-                onConfirm = onEmptyTrashRequestConfirm,
             )
 
             TaskProgressDialog(

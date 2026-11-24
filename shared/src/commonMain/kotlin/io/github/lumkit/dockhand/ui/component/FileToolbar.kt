@@ -34,8 +34,6 @@ fun FileToolbar(
     canGoUp: Boolean,
     canCreate: Boolean,
     canSync: Boolean,
-    showEmptyTrash: Boolean,
-    canEmptyTrash: Boolean,
     operationError: String?,
     onBack: () -> Unit,
     onForward: () -> Unit,
@@ -43,7 +41,6 @@ fun FileToolbar(
     onCreate: (String, Boolean) -> Unit,
     onSync: () -> Unit,
     onRefresh: () -> Unit,
-    onEmptyTrash: () -> Unit,
     onDismissOperationError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -106,15 +103,7 @@ fun FileToolbar(
                 iconRotate = 90f,
                 onClick = onRefresh,
             )
-            if (showEmptyTrash) {
-                ToolbarAction(
-                    icon = MiuixIcons.Clear,
-                    tooltip = stringResource(Res.string.tooltip_empty_trash),
-                    enabled = canEmptyTrash,
-                    modifier = Modifier.weight(1f),
-                    onClick = onEmptyTrash,
-                )
-            }
+
         }
 
     }

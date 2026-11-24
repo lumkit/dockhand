@@ -6,8 +6,11 @@ import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.repository.DefaultFileBrowserRepository
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class LocalCopyEngineTest {
     @Test
@@ -40,6 +43,38 @@ class LocalCopyEngineTest {
             provider.trash(location)
             provider.emptyTrash()
             assertEquals(0, Files.list(home.resolve(".Trash")).use { it.count() })
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Test
+    fun trashUsesExternalVolumeTrashesDirectory() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-external-trash")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val volumes = Files.createDirectories(root.resolve("Volumes"))
+            val external = Files.createDirectories(volumes.resolve("External"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = volumes,
+            )
+            val source = external.resolve("external.txt")
+            Files.writeString(source, "external")
+            val location = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                source.toString(),
+            )
+
+            val trashed = provider.trash(location)
+
+            assertFalse(Files.exists(source))
+            assertTrue(trashed.path.contains("/.Trashes/"))
+            assertTrue(trashed.path.endsWith("/external.txt"))
+            assertEquals("external", Files.readString(Path.of(trashed.path)))
+            assertFalse(Files.exists(home.resolve(".Trash/external.txt")))
         } finally {
             Files.walk(root).use { paths ->
                 paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }

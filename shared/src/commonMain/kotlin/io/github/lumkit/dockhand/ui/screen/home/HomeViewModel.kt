@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
-import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
@@ -36,16 +35,12 @@ import dockhand.shared.generated.resources.task_copy_title_multiple
 import dockhand.shared.generated.resources.task_delete_detail
 import dockhand.shared.generated.resources.task_delete_title
 import dockhand.shared.generated.resources.task_delete_title_multiple
-import dockhand.shared.generated.resources.task_empty_trash_detail
-import dockhand.shared.generated.resources.task_empty_trash_title
 import dockhand.shared.generated.resources.task_move_title
 import dockhand.shared.generated.resources.task_move_title_multiple
 import dockhand.shared.generated.resources.task_rename_detail
 import dockhand.shared.generated.resources.task_rename_detail_multiple
 import dockhand.shared.generated.resources.task_rename_title
 import dockhand.shared.generated.resources.task_rename_title_multiple
-import dockhand.shared.generated.resources.task_restore_detail
-import dockhand.shared.generated.resources.task_restore_title
 import dockhand.shared.generated.resources.task_trash_detail
 import dockhand.shared.generated.resources.task_trash_title
 import dockhand.shared.generated.resources.task_trash_title_multiple
@@ -86,7 +81,6 @@ class HomeViewModel(
     private val files: FileBrowserRepository,
     /** 侧边栏顺序等 UI 设置；测试可省略。 */
     private val settings: SettingsRepository? = null,
-    private val trashHistory: TrashHistoryRepository? = null,
     private val terminalLauncher: TerminalLauncher? = null,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
@@ -239,19 +233,6 @@ class HomeViewModel(
         }
     }
     private var appliedShowHiddenItems: Boolean? = null
-    private val trashHistoryJob: Job? = trashHistory?.let { repository ->
-        scope.launch {
-            repository.observeAll()
-                .catch { }
-                .collect { records ->
-                    _state.update { state ->
-                        state.copy(
-                            restorableTrashPaths = records.map { it.trashedPath }.toSet()
-                        )
-                    }
-                }
-        }
-    }
     private val shortcutsJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.shortcuts
@@ -954,11 +935,6 @@ class HomeViewModel(
                     it.copy(trashRequest = TrashRequestState(entry = entry, entries = targets))
                 }
             }
-            FileContextAction.Restore -> {
-                _state.update {
-                    it.copy(restoreRequest = RestoreRequestState(entry = entry))
-                }
-            }
             FileContextAction.TerminalTab -> openTerminal(entry, newWindow = false)
             FileContextAction.TerminalWindow -> openTerminal(entry, newWindow = true)
             else -> Unit
@@ -997,75 +973,6 @@ class HomeViewModel(
                         openTerminalDirectory(directory, newWindow)
                     }
                 }
-        }
-    }
-
-    fun onEmptyTrashRequest() {
-        _state.update { it.copy(emptyTrashRequest = EmptyTrashRequestState()) }
-    }
-
-    fun onEmptyTrashRequestBackgroundChange(background: Boolean) {
-        _state.update { state ->
-            state.copy(emptyTrashRequest = state.emptyTrashRequest?.copy(background = background))
-        }
-    }
-
-    fun onEmptyTrashRequestDismiss() {
-        _state.update { it.copy(emptyTrashRequest = null) }
-    }
-
-    fun onEmptyTrashRequestConfirm() {
-        val request = _state.value.emptyTrashRequest ?: return
-        _state.update { it.copy(emptyTrashRequest = null) }
-        scope.launch {
-            val title = getString(Res.string.task_empty_trash_title)
-            val detail = getString(Res.string.task_empty_trash_detail)
-            startForegroundTask(
-                title = title,
-                detail = detail,
-            ) {
-                files.emptyTrash(
-                    onProgress = { completed, total -> report(completed, total) },
-                    isCancelled = { isCancelled },
-                )
-            }
-        }
-    }
-
-    fun onRestoreRequestBackgroundChange(background: Boolean) {
-        _state.update { state ->
-            state.copy(restoreRequest = state.restoreRequest?.copy(background = background))
-        }
-    }
-
-    fun onRestoreRequestDismiss() {
-        _state.update { it.copy(restoreRequest = null) }
-    }
-
-    fun onRestoreRequestConfirm() {
-        val request = _state.value.restoreRequest ?: return
-        _state.update { it.copy(restoreRequest = null) }
-        scope.launch {
-            val title = getString(Res.string.task_restore_title, request.entry.name)
-            val detail = getString(Res.string.task_restore_detail)
-            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            startForegroundTask(
-                title = title,
-                detail = detail,
-            ) {
-                files.restoreFromTrash(
-                    entry = request.entry,
-                    onProgress = { completed, total -> report(completed, total) },
-                    onWaiting = { deviceName ->
-                        if (deviceName == null) {
-                            running()
-                        } else {
-                            waiting(waitingTemplate.replace("%s", deviceName))
-                        }
-                    },
-                    isCancelled = { isCancelled },
-                )
-            }
         }
     }
 

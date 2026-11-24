@@ -161,7 +161,6 @@ fun FileBrowserPane(
     canTransferToOtherPane: Boolean = false,
     canMoveToOtherPane: Boolean = false,
     canTrash: Boolean = true,
-    restorableTrashPaths: Set<String> = emptySet(),
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -421,7 +420,6 @@ fun FileBrowserPane(
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
                                     canTrash = canTrash,
-                                    canRestore = row.entry.location.path in restorableTrashPaths,
                                     onInlineRename = { name -> onInlineRename(row.entry, name) },
                                     startInlineRename = pane.inlineRenameEntryId == row.id,
                                     onInlineRenameStarted = onInlineRenameStarted,
@@ -521,7 +519,6 @@ private fun FileEntryRow(
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
     canTrash: Boolean,
-    canRestore: Boolean,
     onInlineRename: (String) -> Unit,
     startInlineRename: Boolean,
     onInlineRenameStarted: () -> Unit,
@@ -548,7 +545,6 @@ private fun FileEntryRow(
         if (paneId == PaneId.Left) Res.string.action_move_to_right else Res.string.action_move_to_left
     )
     val trashLabel = stringResource(Res.string.action_move_to_trash)
-    val restoreLabel = stringResource(Res.string.action_restore)
     val deleteLabel = stringResource(Res.string.action_delete)
     val renameLabel = stringResource(Res.string.action_rename)
     val compressLabel = stringResource(Res.string.action_compress)
@@ -641,9 +637,6 @@ private fun FileEntryRow(
                 }
                 if (canTrash) {
                     add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
-                }
-                if (canRestore) {
-                    add(DropdownItem(text = restoreLabel, onClick = { dispatch(FileContextAction.Restore) }))
                 }
                 add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
                 add(DropdownItem(text = renameLabel, onClick = { dispatch(FileContextAction.Rename) }))

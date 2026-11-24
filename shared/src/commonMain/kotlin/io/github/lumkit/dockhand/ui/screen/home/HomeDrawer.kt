@@ -552,7 +552,6 @@ private fun FilePlace.displayLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
-    FilePlaceKind.Trash -> stringResource(Res.string.text_trash)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,
@@ -573,7 +572,6 @@ private fun FilePlace.icon(): Any = when (kind) {
     FilePlaceKind.Pictures -> MiuixIcons.Image
     FilePlaceKind.Music -> MiuixIcons.Music
     FilePlaceKind.Movies -> MiuixIcons.Play
-    FilePlaceKind.Trash -> MiuixIcons.Delete
     FilePlaceKind.Volume -> painterResource(Res.drawable.ic_storage)
     FilePlaceKind.MtpDevice,
     FilePlaceKind.MtpStorage -> painterResource(Res.drawable.ic_mtp)

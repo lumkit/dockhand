@@ -9,7 +9,6 @@ enum class FilePlaceKind {
     Pictures,
     Music,
     Movies,
-    Trash,
     Volume,
     MtpDevice,
     MtpStorage,

@@ -27,6 +27,7 @@ import java.nio.file.AccessDeniedException
 import java.nio.file.ClosedWatchServiceException
 import java.nio.file.DirectoryStream
 import java.nio.file.FileSystems
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -75,7 +76,6 @@ class LocalFileSystemProvider(
         FilePlaceKind.Pictures to "Pictures",
         FilePlaceKind.Music to "Music",
         FilePlaceKind.Movies to "Movies",
-        FilePlaceKind.Trash to ".Trash",
     )
 
     override fun observePlaces(): Flow<List<FilePlace>> = combine(
@@ -239,6 +239,116 @@ class LocalFileSystemProvider(
         Files.move(source, target)
     }
 
+    private val trashUid: String by lazy {
+        runCatching { Files.getAttribute(homeDirectory, "unix:uid") }
+            .getOrNull()
+            ?.toString()
+            ?: "501"
+    }
+
+    /**
+     * 根据源文件所在卷选择废纸篓：
+     * - 启动卷：~/.Trash
+     * - 外接卷：<Volume>/.Trashes/<uid>
+     */
+    private fun trashDirectoryFor(source: Path): Path {
+        val absolute = source.toAbsolutePath().normalize()
+        val volumesRoot = volumesDirectory.toAbsolutePath().normalize()
+        if (
+            absolute.startsWith(volumesRoot) &&
+            absolute.nameCount > volumesRoot.nameCount
+        ) {
+            // 外接卷：/Volumes/<name>/.Trashes/<uid>
+            val volumeRoot = volumesRoot.resolve(absolute.getName(volumesRoot.nameCount))
+            return volumeRoot.resolve(".Trashes").resolve(trashUid)
+        }
+        // 启动卷：~/.Trash
+        return homeDirectory.resolve(".Trash")
+    }
+
+    private fun sameFileStore(source: Path, targetParent: Path): Boolean = runCatching {
+        val a = Files.getFileStore(source)
+        val b = Files.getFileStore(targetParent)
+        a.name() == b.name() && a.type() == b.type()
+    }.getOrDefault(false)
+
+    private fun moveIntoTrash(
+        source: Path,
+        target: Path,
+        isCancelled: () -> Boolean,
+    ) {
+        if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+        if (sameFileStore(source, target.parent)) {
+            Files.move(source, target)
+            return
+        }
+
+        // 跨卷无法直接 move 时退化为复制 + 删除源；逐项检查取消。
+        try {
+            copyTree(target, source, isCancelled)
+            deleteTree(source, isCancelled)
+        } catch (error: Throwable) {
+            runCatching { deleteTree(target) { false } }
+            throw error
+        }
+    }
+
+    private fun copyTree(
+        targetRoot: Path,
+        sourceRoot: Path,
+        isCancelled: () -> Boolean,
+    ) {
+        Files.walkFileTree(sourceRoot, object : SimpleFileVisitor<Path>() {
+            override fun preVisitDirectory(
+                dir: Path,
+                attrs: BasicFileAttributes,
+            ): FileVisitResult {
+                if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+                Files.createDirectories(targetRoot.resolve(sourceRoot.relativize(dir)))
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun visitFile(
+                file: Path,
+                attrs: BasicFileAttributes,
+            ): FileVisitResult {
+                if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+                Files.copy(
+                    file,
+                    targetRoot.resolve(sourceRoot.relativize(file)),
+                    StandardCopyOption.COPY_ATTRIBUTES,
+                )
+                return FileVisitResult.CONTINUE
+            }
+        })
+    }
+
+    private fun deleteTree(
+        root: Path,
+        isCancelled: () -> Boolean,
+    ) {
+        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(
+                file: Path,
+                attrs: BasicFileAttributes,
+            ): FileVisitResult {
+                if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+                Files.deleteIfExists(file)
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(
+                dir: Path,
+                exc: IOException?,
+            ): FileVisitResult {
+                if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
+                if (exc != null) throw exc
+                Files.deleteIfExists(dir)
+                return FileVisitResult.CONTINUE
+            }
+        })
+    }
+
     override suspend fun trash(
         location: FileLocation,
         isCancelled: () -> Boolean,
@@ -246,9 +356,9 @@ class LocalFileSystemProvider(
     ): FileLocation = withContext(Dispatchers.IO) {
         ensureLocal(location)
         if (isCancelled()) throw kotlinx.coroutines.CancellationException("移到废纸篓已取消")
-        val trashDirectory = homeDirectory.resolve(".Trash")
-        Files.createDirectories(trashDirectory)
         val source = location.toLocalPath()
+        val trashDirectory = trashDirectoryFor(source)
+        Files.createDirectories(trashDirectory)
         val name = source.fileName?.toString() ?: throw FileBrowserException("路径无效：${location.path}")
         val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
         val base = name.substring(0, dot)
@@ -259,7 +369,7 @@ class LocalFileSystemProvider(
             index++
             target = trashDirectory.resolve("$base $index$extension")
         }
-        Files.move(source, target)
+        moveIntoTrash(source, target, isCancelled)
         FileLocation(location.source, target.toAbsolutePath().normalize().toString())
     }
 
@@ -496,9 +606,6 @@ class LocalFileSystemProvider(
         label: String,
     ) {
         val normalized = path.toAbsolutePath().normalize()
-        if (kind == FilePlaceKind.Trash) {
-            runCatching { Files.createDirectories(normalized) }
-        }
         if (!Files.isDirectory(normalized)) return
         places += FilePlace(
             id = "local:${kind.name.lowercase()}",
