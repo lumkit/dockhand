@@ -1,6 +1,8 @@
 package io.github.lumkit.dockhand.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -38,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -182,6 +185,7 @@ fun FileBrowserPane(
     val windowInfo = LocalWindowInfo.current
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     val currentEntries by rememberUpdatedState(pane.entries)
+    val currentLayoutMode by rememberUpdatedState(layoutMode)
     val listState = rememberLazyListState()
     val inlineRenameBounds = LocalInlineRenameBounds.current
     val scrollBarTouchWidth = with(LocalDensity.current) { 28.dp.toPx() }
@@ -279,6 +283,7 @@ fun FileBrowserPane(
                                 ) {
                                     continue
                                 }
+                                if (currentLayoutMode == FileLayoutMode.Grid) continue
                                 val down = downEvent.changes.firstOrNull() ?: continue
                                 val coordinates = listCoordinates
                                 val width = coordinates?.size?.width
@@ -349,7 +354,12 @@ fun FileBrowserPane(
                     }
 
                     else -> {
-                        if (layoutMode == FileLayoutMode.Grid) {
+                        Crossfade(
+                            targetState = layoutMode,
+                            animationSpec = tween(durationMillis = 180),
+                            label = "file-layout",
+                        ) { mode ->
+                        if (mode == FileLayoutMode.Grid) {
                             FileGridContent(
                                 pane = pane,
                                 canTransferToOtherPane = canTransferToOtherPane,
@@ -362,6 +372,9 @@ fun FileBrowserPane(
                                 onContextMenuDismiss = onContextMenuDismiss,
                                 onContextAction = onContextAction,
                                 onLoadMore = onLoadMore,
+                                onSelectionChange = onSelectionChange,
+                                onInlineRename = onInlineRename,
+                                onInlineRenameStarted = onInlineRenameStarted,
                             )
                         } else {
                         val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
@@ -520,6 +533,7 @@ fun FileBrowserPane(
                                     style = Stroke(width = 1.dp.toPx()),
                                 )
                             }
+                        }
                         }
                         }
                     }
@@ -870,6 +884,7 @@ private fun FileEntryRow(
     }
 }
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun FileGridContent(
     pane: FilePaneState,
@@ -883,12 +898,65 @@ private fun FileGridContent(
     onContextMenuDismiss: () -> Unit,
     onContextAction: (FileEntry, FileContextAction) -> Unit,
     onLoadMore: () -> Unit,
+    onSelectionChange: (Set<String>, String?) -> Unit,
+    onInlineRename: (FileEntry, String) -> Unit,
+    onInlineRenameStarted: () -> Unit,
 ) {
     val gridState = rememberLazyGridState()
     val windowInfo = LocalWindowInfo.current
+    val focusManager = LocalFocusManager.current
     val currentHasMore by rememberUpdatedState(pane.hasMore)
     val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
     val currentLoadMore by rememberUpdatedState(onLoadMore)
+    val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+    val inlineBounds = LocalInlineRenameBounds.current
+    val rowBounds = remember { mutableStateMapOf<String, Rect>() }
+    var gridCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var dragStart by remember { mutableStateOf<Offset?>(null) }
+    var dragEnd by remember { mutableStateOf<Offset?>(null) }
+    var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
+    var dragAnchorId by remember { mutableStateOf<String?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+    val isDragging = dragging
+    val density = LocalDensity.current
+    val scrollBarTouchWidth = with(density) { 28.dp.toPx() }
+
+    fun updateGridSelection() {
+        val start = dragStart ?: return
+        val end = dragEnd ?: return
+        val rect = Rect(
+            left = min(start.x, end.x),
+            top = min(start.y, end.y),
+            right = max(start.x, end.x),
+            bottom = max(start.y, end.y),
+        )
+        val selected = rowBounds
+            .filterValues { bounds -> bounds.overlaps(rect) }
+            .keys
+            .toSet()
+        currentOnSelectionChange(selected, dragAnchorId ?: selected.firstOrNull())
+    }
+
+    LaunchedEffect(isDragging) {
+        if (!isDragging) return@LaunchedEffect
+        val edge = with(density) { 36.dp.toPx() }
+        val maxStep = with(density) { 28.dp.toPx() }
+        while (true) {
+            updateGridSelection()
+            val pointer = dragPointerLocal
+            val height = gridCoordinates?.size?.height
+            if (pointer != null && height != null) {
+                val delta = when {
+                    pointer.y < edge -> -maxStep * ((edge - pointer.y) / edge).coerceIn(0f, 1f)
+                    pointer.y > height - edge ->
+                        maxStep * ((pointer.y - (height - edge)) / edge).coerceIn(0f, 1f)
+                    else -> 0f
+                }
+                if (delta != 0f) gridState.scrollBy(delta)
+            }
+            withFrameNanos { }
+        }
+    }
 
     LaunchedEffect(pane.location) {
         gridState.scrollToItem(0)
@@ -906,7 +974,82 @@ private fun FileGridContent(
             }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { gridCoordinates = it }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type != PointerEventType.Press) continue
+                        val point = event.changes.firstOrNull()?.position ?: continue
+                        val root = gridCoordinates?.localToRoot(point) ?: point
+                        val bounds = inlineBounds?.value
+                        if (bounds != null && !bounds.contains(root)) {
+                            // 点击编辑框以外的网格区域时先提交当前行内重命名。
+                            focusManager.clearFocus()
+                        }
+                    }
+                }
+            }
+            .pointerInput(pane.id) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val downEvent = awaitPointerEvent(PointerEventPass.Initial)
+                        if (
+                            downEvent.type != PointerEventType.Press ||
+                            !downEvent.buttons.isPrimaryPressed
+                        ) {
+                            continue
+                        }
+                        val down = downEvent.changes.firstOrNull() ?: continue
+                        val coordinates = gridCoordinates
+                        val width = coordinates?.size?.width
+                        if (width != null && down.position.x >= width - scrollBarTouchWidth) {
+                            continue
+                        }
+                        val startRoot = coordinates?.localToRoot(down.position) ?: down.position
+                        if (inlineBounds?.value?.contains(startRoot) == true) continue
+                        val anchor = rowBounds.entries.firstOrNull {
+                            it.value.contains(startRoot)
+                        }?.key ?: rowBounds.minByOrNull { (_, bounds) ->
+                            kotlin.math.abs(bounds.center.y - startRoot.y)
+                        }?.key
+                        var active = false
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull() ?: break
+                            if (event.type == PointerEventType.Scroll) {
+                                if (active) updateGridSelection()
+                                continue
+                            }
+                            val point = coordinates?.localToRoot(change.position) ?: change.position
+                            if (!active && (point - startRoot).getDistance() > viewConfiguration.touchSlop) {
+                                active = true
+                                dragging = true
+                                dragAnchorId = anchor
+                                dragStart = startRoot
+                            }
+                            if (active) {
+                                dragEnd = point
+                                dragPointerLocal = change.position
+                                updateGridSelection()
+                                if (event.type != PointerEventType.Scroll) {
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                            if (!change.pressed) break
+                        }
+                        dragging = false
+                        dragStart = null
+                        dragEnd = null
+                        dragPointerLocal = null
+                        dragAnchorId = null
+                    }
+                }
+            }
+    ) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(112.dp),
             state = gridState,
@@ -921,6 +1064,7 @@ private fun FileGridContent(
                 FileGridItem(
                     row = row,
                     selected = row.id in pane.selectedIds,
+                    startInlineRename = pane.inlineRenameEntryId == row.id,
                     onClick = {
                         val modifiers = windowInfo.keyboardModifiers
                         val mode = when {
@@ -934,6 +1078,11 @@ private fun FileGridContent(
                     onSecondaryClick = {
                         onEntrySecondaryClick(row.entry)
                         onContextMenuRequest(row.id)
+                    },
+                    onInlineRename = { name -> onInlineRename(row.entry, name) },
+                    onInlineRenameStarted = onInlineRenameStarted,
+                    onBoundsChanged = { rect ->
+                        if (rect == null) rowBounds.remove(row.id) else rowBounds[row.id] = rect
                     },
                 )
             }
@@ -953,6 +1102,30 @@ private fun FileGridContent(
                         )
                     }
                 }
+            }
+        }
+
+        val marqueeStart = dragStart
+        val marqueeEnd = dragEnd
+        if (marqueeStart != null && marqueeEnd != null) {
+            val origin = gridCoordinates?.boundsInRoot()?.topLeft ?: Offset.Zero
+            val left = min(marqueeStart.x, marqueeEnd.x) - origin.x
+            val top = min(marqueeStart.y, marqueeEnd.y) - origin.y
+            val width = max(marqueeStart.x, marqueeEnd.x) - min(marqueeStart.x, marqueeEnd.x)
+            val height = max(marqueeStart.y, marqueeEnd.y) - min(marqueeStart.y, marqueeEnd.y)
+            val color = MiuixTheme.colorScheme.primary
+            Canvas(modifier = Modifier.matchParentSize()) {
+                drawRect(
+                    color = color.copy(alpha = 0.12f),
+                    topLeft = Offset(left, top),
+                    size = Size(width, height),
+                )
+                drawRect(
+                    color = color,
+                    topLeft = Offset(left, top),
+                    size = Size(width, height),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
             }
         }
 
@@ -979,15 +1152,67 @@ private fun FileGridContent(
 private fun FileGridItem(
     row: FileRowUi,
     selected: Boolean,
+    startInlineRename: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onSecondaryClick: () -> Unit,
+    onInlineRename: (String) -> Unit,
+    onInlineRenameStarted: () -> Unit,
+    onBoundsChanged: (Rect?) -> Unit,
 ) {
     val color = if (selected) {
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
     } else {
         Color.Transparent
     }
+    val focusManager = LocalFocusManager.current
+    val inlineBounds = LocalInlineRenameBounds.current
+    var editing by remember(row.id) { mutableStateOf(false) }
+    var suppressNextClick by remember(row.id) { mutableStateOf(false) }
+    var itemCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var editFieldWasFocused by remember(row.id) { mutableStateOf(false) }
+    val editState = rememberTextFieldState(row.name)
+    val focusRequester = remember { FocusRequester() }
+
+    fun commitInlineRename() {
+        if (!editing) return
+        editing = false
+        inlineBounds?.value = null
+        onInlineRename(editState.text.toString().trim())
+    }
+
+    DisposableEffect(row.id) {
+        onDispose {
+            onBoundsChanged(null)
+            if (editing) inlineBounds?.value = null
+        }
+    }
+
+    LaunchedEffect(startInlineRename) {
+        if (startInlineRename) {
+            editing = true
+            onInlineRenameStarted()
+        }
+    }
+
+    LaunchedEffect(editing) {
+        if (!editing) {
+            editFieldWasFocused = false
+            return@LaunchedEffect
+        }
+        editFieldWasFocused = false
+        editState.setTextAndPlaceCursorAtEnd(row.name)
+        val selectionEnd = if (row.isDirectory) {
+            row.name.length
+        } else {
+            row.name.lastIndexOf('.').takeIf { it > 0 } ?: row.name.length
+        }
+        editState.edit {
+            selection = TextRange(0, selectionEnd)
+        }
+        focusRequester.requestFocus()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -995,12 +1220,46 @@ private fun FileGridItem(
             .squircleClip(12.dp)
             .background(color)
             .alpha(if (row.entry.isHidden) 0.45f else 1f)
-            .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
-            .pointerInput(onSecondaryClick) {
+            .onGloballyPositioned {
+                itemCoordinates = it
+                onBoundsChanged(it.boundsInRoot())
+            }
+            .pointerInput(editing) {
+                if (!editing) return@pointerInput
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type != PointerEventType.Press) continue
+                        val point = event.changes.firstOrNull()?.position ?: continue
+                        val root = itemCoordinates?.localToRoot(point) ?: point
+                        val bounds = inlineBounds?.value
+                        if (bounds == null || !bounds.contains(root)) {
+                            // 编辑中点击非输入框区域只提交，不能在同一次点击里重新进入编辑。
+                            suppressNextClick = true
+                        }
+                    }
+                }
+            }
+            .combinedClickable(
+                onClick = {
+                    if (suppressNextClick) {
+                        suppressNextClick = false
+                        commitInlineRename()
+                    } else if (editing) {
+                        commitInlineRename()
+                    } else {
+                        focusManager.clearFocus()
+                        if (selected) editing = true else onClick()
+                    }
+                },
+                onDoubleClick = onDoubleClick,
+            )
+            .pointerInput(onSecondaryClick, editing) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
                         if (
+                            !editing &&
                             event.type == PointerEventType.Press &&
                             event.buttons.isSecondaryPressed
                         ) {
@@ -1031,14 +1290,65 @@ private fun FileGridItem(
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = row.name,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            style = MiuixTheme.textStyles.footnote1,
-            color = MiuixTheme.colorScheme.onSurface,
-        )
+        if (editing) {
+            BasicTextField(
+                state = editState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onGloballyPositioned { coordinates ->
+                        if (editing) inlineBounds?.value = coordinates.boundsInRoot()
+                    }
+                    .onFocusChanged { focusState ->
+                        if (!editing) return@onFocusChanged
+                        if (focusState.isFocused) {
+                            editFieldWasFocused = true
+                        } else if (editFieldWasFocused) {
+                            commitInlineRename()
+                        }
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                            commitInlineRename()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    .background(
+                        color = MiuixTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                textStyle = MiuixTheme.textStyles.footnote1.copy(
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    color = MiuixTheme.colorScheme.onSurface,
+                ),
+                cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                lineLimits = TextFieldLineLimits.MultiLine(),
+            )
+        } else {
+            Text(
+                text = row.name,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurface,
+                modifier = if (selected) {
+                    Modifier.combinedClickable(
+                        indication = null,
+                        interactionSource = null,
+                        onDoubleClick = onDoubleClick,
+                    ) {
+                        editing = true
+                    }
+                } else {
+                    Modifier
+                }.fillMaxWidth(),
+            )
+        }
         if (!row.summary.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
             Text(
