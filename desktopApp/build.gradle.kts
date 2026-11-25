@@ -1,6 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 import org.gradle.jvm.toolchain.JavaLanguageVersion
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinJvm)
@@ -46,7 +47,12 @@ val isAppStoreBuild = providers.gradleProperty("dockhand.appStore")
 val macSignEnabled = providers.gradleProperty("dockhand.macSign")
     .orNull
     .toBoolean()
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
 val macSignIdentity = providers.gradleProperty("dockhand.macSignIdentity").orNull
+    ?: localProperties.getProperty("dockhand.macSignIdentity")
 val macSignKeychain = providers.gradleProperty("dockhand.macKeychain").orNull
 val macNotaryAppleId = providers.gradleProperty("dockhand.notaryAppleId").orNull
 val macNotaryPassword = providers.gradleProperty("dockhand.notaryPassword").orNull
@@ -205,6 +211,26 @@ tasks.configureEach {
                 }
             }
         }
+    }
+}
+
+tasks.register("packageSignedDmg") {
+    val identity = macSignIdentity
+    val dmg = releaseDmgDir.resolve("Dockhand-$dockhandVersion.dmg")
+    group = "distribution"
+    description = "Packages and signs the release DMG with the configured Apple certificate"
+    dependsOn("packageReleaseDmg")
+    doLast {
+        check(!identity.isNullOrBlank()) {
+            "Missing dockhand.macSignIdentity in local.properties"
+        }
+        val result = ProcessBuilder(
+            "/usr/bin/codesign",
+            "--force",
+            "--sign", identity,
+            dmg.absolutePath,
+        ).inheritIO().start().waitFor()
+        check(result == 0) { "DMG codesign failed with exit code $result" }
     }
 }
 

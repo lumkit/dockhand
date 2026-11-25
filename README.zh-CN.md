@@ -102,6 +102,10 @@ Dockhand 针对大目录做了响应性优化：
 3. 将 **Dockhand** 拖入 **Applications**。
 4. 从“应用程序”启动 Dockhand。
 
+> **签名说明**
+>
+> 当前 Release 安装包使用 Apple Development 证书签名，尚未使用 Developer ID Application 证书，也未经过 Apple 公证。因此首次启动时，macOS Gatekeeper 可能显示安全警告，这属于当前测试版本的已知行为。请确认安装包来自官方 GitHub Releases，然后在 Finder 中按住 Control 键点按应用，选择“打开”并确认提示。请勿全局关闭 Gatekeeper。
+
 ## 帮助翻译
 
 Dockhand 目前支持简体中文和 English (US)。欢迎母语使用者帮助改进现有翻译，或添加新的语言。

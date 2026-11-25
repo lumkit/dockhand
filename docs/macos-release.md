@@ -54,6 +54,36 @@ Developer ID Application: <Name> (<TEAM_ID>)
   -Pdockhand.macSignIdentity="Developer ID Application: <Name> (<TEAM_ID>)"
 ```
 
+### 本机签名配置
+
+证书指纹放在被 Git 忽略的 `local.properties`：
+
+```properties
+dockhand.macSignIdentity=<SHA-1 certificate hash>
+```
+
+然后直接构建并签名：
+
+```bash
+./gradlew :desktopApp:packageSignedDmg
+```
+
+该任务会：
+
+1. 执行 `packageReleaseDmg`
+2. 使用 `local.properties` 中的证书签名应用
+3. 重新签名最终 DMG
+
+### Apple Development 证书
+
+没有 Developer ID 时，也可以使用 Apple Development 证书：
+
+```bash
+security find-identity -v -p codesigning "$HOME/Library/Keychains/login.keychain-db"
+```
+
+把输出的 SHA-1 填入 `dockhand.macSignIdentity`。同名证书有多张时必须使用指纹，避免 ambiguous。
+
 公证需要 App Store Connect Apple ID、App 专用密码和 Team ID：
 
 ```bash

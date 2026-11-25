@@ -102,6 +102,10 @@ Download the latest macOS DMG from GitHub Releases:
 3. Drag **Dockhand** into **Applications**.
 4. Launch Dockhand from Applications.
 
+> **Code signing notice**
+>
+> Release packages are currently signed with an Apple Development certificate rather than a Developer ID Application certificate, and have not been notarized by Apple. Consequently, macOS Gatekeeper may present a security warning when the application is launched for the first time. This behavior is expected for the current beta release. Please confirm that the package was obtained from the official GitHub Releases page, then Control-click the application in Finder, select **Open**, and confirm the prompt. Do not disable Gatekeeper globally.
+
 ## Help Translate
 
 Dockhand currently ships with Simplified Chinese and English (US). Native speakers are welcome to help improve these translations or add new languages.
