@@ -1,6 +1,9 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 import org.gradle.jvm.toolchain.JavaLanguageVersion
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Properties
 
 plugins {
@@ -217,20 +220,55 @@ tasks.configureEach {
 tasks.register("packageSignedDmg") {
     val identity = macSignIdentity
     val dmg = releaseDmgDir.resolve("Dockhand-$dockhandVersion.dmg")
+    val entitlements = project.file("entitlements.plist")
     group = "distribution"
-    description = "Packages and signs the release DMG with the configured Apple certificate"
+    description = "Packages and signs the release DMG and its embedded app"
+    notCompatibleWithConfigurationCache("Uses hdiutil to modify the mounted DMG")
     dependsOn("packageReleaseDmg")
     doLast {
         check(!identity.isNullOrBlank()) {
             "Missing dockhand.macSignIdentity in local.properties"
         }
-        val result = ProcessBuilder(
-            "/usr/bin/codesign",
-            "--force",
-            "--sign", identity,
-            dmg.absolutePath,
-        ).inheritIO().start().waitFor()
-        check(result == 0) { "DMG codesign failed with exit code $result" }
+        val work = File(releaseDmgDir, "sign-work").apply { deleteRecursively(); mkdirs() }
+        val rwBase = File(work, "Dockhand-rw")
+        val rwDmg = File(work, "Dockhand-rw.dmg")
+        val finalBase = File(work, "Dockhand-final")
+        val finalDmg = File(work, "Dockhand-final.dmg")
+        fun run(vararg command: String): Int =
+            ProcessBuilder(*command).inheritIO().start().waitFor()
+        val existingMount = File("/Volumes/Dockhand")
+        if (existingMount.exists()) run("/usr/bin/hdiutil", "detach", existingMount.absolutePath)
+        check(run("/usr/bin/hdiutil", "convert", dmg.absolutePath, "-format", "UDRW", "-o", rwBase.absolutePath) == 0) {
+            "Unable to convert DMG to read-write"
+        }
+        val mount = File(System.getProperty("java.io.tmpdir"), "dockhand-dmg-sign-mount").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        check(run("/usr/bin/hdiutil", "attach", "-readwrite", "-noverify", "-noautoopen", "-mountpoint", mount.absolutePath, rwDmg.absolutePath) == 0) {
+            "Unable to mount read-write DMG"
+        }
+        try {
+            val app = File(mount, "Dockhand.app")
+            check(app.isDirectory) { "Dockhand.app is missing from DMG" }
+            check(run("/usr/bin/codesign", "--force", "--deep", "--options", "runtime", "--entitlements", entitlements.absolutePath, "--sign", identity, app.absolutePath) == 0) {
+                "App codesign failed"
+            }
+        } finally {
+            run("/usr/bin/hdiutil", "detach", mount.absolutePath)
+        }
+        check(run("/usr/bin/hdiutil", "convert", rwDmg.absolutePath, "-format", "UDZO", "-o", finalBase.absolutePath) == 0) {
+            "Unable to compress signed DMG"
+        }
+        check(run("/usr/bin/codesign", "--force", "--sign", identity, finalDmg.absolutePath) == 0) {
+            "DMG codesign failed"
+        }
+        Files.move(
+            finalDmg.toPath(),
+            dmg.toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+        )
+        work.deleteRecursively()
     }
 }
 
