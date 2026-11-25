@@ -172,6 +172,7 @@ fun FileBrowserPane(
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     val currentEntries by rememberUpdatedState(pane.entries)
     val listState = rememberLazyListState()
+    val inlineRenameBounds = LocalInlineRenameBounds.current
     val scrollBarTouchWidth = with(LocalDensity.current) { 28.dp.toPx() }
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
@@ -278,6 +279,10 @@ fun FileBrowserPane(
                                     continue
                                 }
                                 val start = coordinates?.localToRoot(down.position) ?: down.position
+                                if (inlineRenameBounds?.value?.contains(start) == true) {
+                                    // 行内重命名输入框内部拖动用于选择文字，不能启动框选。
+                                    continue
+                                }
                                 var dragging = false
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
