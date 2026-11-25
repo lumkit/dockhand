@@ -1,50 +1,111 @@
-This is a Kotlin Multiplatform project targeting Desktop (JVM).
+# Dockhand
 
-## 架构
+A fast, native-feeling dual-pane file browser for macOS.
 
-- [主页架构：双列表、焦点、顶栏路径、侧边导航](docs/home-architecture.md)
+Dockhand gives you two independent file panes in one window, so you can browse, compare, copy, and move files without opening multiple Finder windows. It also connects directly to Android devices over MTP.
 
-## MTP 后端
+[中文文档](README.zh-CN.md)
 
-macOS 没有系统级 MTP 挂载 API。项目内嵌了 MIT/Apache-2.0 的
-[`mtp-rs`](https://github.com/vdavid/mtp-rs) 作为 Rust native bridge：
+## Features
 
-- 原生库源码：`native/mtp-bridge`
-- Gradle 的 `buildMtpBridge` 任务会执行 `cargo build --release`，并把
-  `libdockhand_mtp.dylib` 打进 `shared` 的 resources
-- JVM 侧通过 JDK 25 的 FFM 加载，不依赖 OpenMTP、JNA、JNI、libmtp 或 libusb
-- 同时连接多台 MTP 设备时，会按 USB location 分别枚举，侧边栏显示为
-  `设备型号 · 存储名`
-- 侧边栏分组内的条目支持拖拽排序，顺序会持久化到本地设置
-- MTP 存储行可点击展开“相片 / 下载 / 电影 / 音乐 / 图片”快捷入口；
-  展开状态和快捷入口顺序都会持久化
-- MTP 大目录先建立轻量排序索引，再按 300 行分页加载，滚动到底自动追加
-- 构建源码需要 Rust 1.90+；最终 App 不需要用户安装 Rust
+### Dual-pane workflow
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-      folder is the appropriate location.
+- Two independent panes with separate history and navigation
+- Quickly copy or move selected items to the other pane
+- Open either pane in Terminal
+- Restore the last location and window size on launch
 
-### Running the apps
+### File management
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and
-options:
+- Copy, move, rename, delete, and move to Trash
+- Batch operations for multiple selections
+- Batch rename with predictable numbered names
+- Background tasks with live progress, speed, ETA, and cancellation
+- System notifications when background tasks finish
+- Automatic refresh of both panes after operations
 
-- Desktop app:
-    - Hot reload: `./gradlew :desktopApp:hotRun --auto`
-    - Standard run: `./gradlew :desktopApp:run`
+### Selection and keyboard
 
-### Running tests
+- Single click, Command-click, and Shift-click selection
+- Drag a rectangle to select multiple items
+- Shift + arrow keys to extend or shrink a selection in list and grid views
+- Previous/next item navigation with configurable shortcuts
+- Customizable shortcut mappings, including multiple shortcuts per action
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+### Views and organization
 
-- Desktop tests: `./gradlew :shared:jvmTest`
+- Linear list and adaptive grid layouts
+- Sort by name, modification date, size, or type
+- Ascending and descending order
+- Show or hide hidden files from the More menu
+- File type icons and image/video thumbnails
 
----
+### Previews
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+- Image thumbnails for common formats
+- SVG previews
+- Video cover thumbnails
+- Graceful fallback to file type icons when previews are unavailable
+
+### Android MTP
+
+- Browse compatible Android devices directly in either pane
+- Storage and common media folders in the sidebar
+- Paged loading for large directories
+- Copy files between local folders and MTP devices
+- Multiple devices are handled independently
+
+### Appearance and settings
+
+- Light, dark, and system appearance
+- Custom accent color
+- Interface scale adjustment
+- Hidden item visibility
+- Configurable startup behavior
+- Cache size display and deferred cache cleanup
+
+## Performance
+
+Dockhand is designed to stay responsive with large folders:
+
+- File lists render lazily instead of building the entire view at once
+- Large remote directories load page by page while scrolling
+- Thumbnails are generated on demand and cached
+- File transfers run in the background and can be cancelled
+- Long-running work never blocks browsing
+
+## Requirements
+
+- macOS 12 or later
+- Apple Silicon Mac for the current release
+- An Android device with MTP support is optional
+
+## Download
+
+Download the latest macOS DMG from GitHub Releases:
+
+**[Download Dockhand](https://github.com/lumkit/dockhand/releases/latest)**
+
+## Installation
+
+1. Download the latest `.dmg`.
+2. Open the DMG.
+3. Drag **Dockhand** into **Applications**.
+4. Launch Dockhand from Applications.
+
+## Feedback
+
+Found a bug or have a feature request?
+
+- Open an issue: <https://github.com/lumkit/dockhand/issues>
+- Include your macOS version, Dockhand version, and steps to reproduce when possible.
+
+## Privacy
+
+- No account is required.
+- Your files stay on your Mac or connected device.
+- Dockhand does not upload your files.
+
+## License
+
+Copyright © 2026 lumkit. All rights reserved.
