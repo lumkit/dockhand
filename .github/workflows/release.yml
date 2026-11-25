@@ -11,7 +11,7 @@ permissions:
 jobs:
   release:
     name: Build and publish DMG
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       HAS_SIGNING_CERT: ${{ secrets.APPLE_CERTIFICATE_P12 != '' }}
 
@@ -42,6 +42,11 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - name: Import signing certificate
         if: env.HAS_SIGNING_CERT == 'true'
