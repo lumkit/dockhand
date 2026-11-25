@@ -105,12 +105,27 @@ jobs:
             RANGE="$GITHUB_REF_NAME"
             COMPARE="https://github.com/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME"
           fi
+          FEATURES="$(git log "$RANGE" --no-merges --pretty=format:'%s' | grep -E '^feat(\([^)]*\))?!?:' | sed -E 's/^feat(\([^)]*\))?!?: /- /' || true)"
+          FIXES="$(git log "$RANGE" --no-merges --pretty=format:'%s' | grep -E '^fix(\([^)]*\))?!?:' | sed -E 's/^fix(\([^)]*\))?!?: /- /' || true)"
           {
             echo "## What's Changed"
             echo
-            git log "$RANGE" --no-merges --pretty=format:'- %s (%h)' | sed '/^$/d'
-            echo
-            echo
+            if [ -n "$FEATURES" ]; then
+              echo "### Features"
+              echo
+              echo "$FEATURES"
+              echo
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "### Bug Fixes"
+              echo
+              echo "$FIXES"
+              echo
+            fi
+            if [ -z "$FEATURES" ] && [ -z "$FIXES" ]; then
+              echo "No user-facing functional changes in this release."
+              echo
+            fi
             echo "**Full Changelog**: $COMPARE"
           } > release-notes.md
           cat release-notes.md

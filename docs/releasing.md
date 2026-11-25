@@ -32,6 +32,31 @@ dockhand.version=0.1.0-beta.1
 
 Commit it, then create the tag with exactly the same version.
 
+
+## Commit convention
+
+Release notes include only user-facing functional changes. Use Conventional Commits:
+
+```text
+feat: add archive extraction
+fix: correct progress reporting
+feat(archive): support tar.zst
+fix(ui): keep dialog actions visible
+```
+
+Other commit types are excluded from release notes:
+
+```text
+docs: ...
+ci: ...
+chore: ...
+build: ...
+test: ...
+style: ...
+```
+
+If a release contains only documentation or CI changes, the generated notes state that there are no user-facing functional changes.
+
 ## Signing certificate setup
 
 Signing is optional. Without the secrets below, the workflow publishes an unsigned/ad-hoc DMG.
