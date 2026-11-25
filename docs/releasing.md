@@ -40,9 +40,9 @@ Add these repository secrets in Settings → Secrets and variables → Actions:
 
 | Secret | Description |
 |---|---|
-| `MAC_CERTIFICATE_P12` | Base64-encoded `.p12` export of the signing certificate and private key |
-| `MAC_CERTIFICATE_PASSWORD` | Password used when exporting the `.p12` |
-| `MAC_KEYCHAIN_PASSWORD` | Any temporary password for the CI keychain |
+| `APPLE_CERTIFICATE_P12` | Base64-encoded `.p12` export of the signing certificate and private key |
+| `APPLE_CERTIFICATE_PASSWORD` | Password used when exporting the `.p12` |
+| `KEYCHAIN_PASSWORD` | Any temporary password for the CI keychain |
 
 Export the certificate from Keychain Access, then encode it:
 
@@ -50,7 +50,7 @@ Export the certificate from Keychain Access, then encode it:
 base64 -i certificate.p12 | pbcopy
 ```
 
-Paste the result into `MAC_CERTIFICATE_P12`.
+Paste the result into `APPLE_CERTIFICATE_P12`.
 
 The workflow prints the signing identity hash, not the certificate or password.
 
