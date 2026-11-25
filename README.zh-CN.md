@@ -1,10 +1,16 @@
+<div align="center">
+
+<img src="docs/assets/readme-cover.png" alt="Dockhand" width="100%" />
+
 # Dockhand
 
 一款快速、贴近 macOS 原生体验的双栏文件浏览器。
 
-Dockhand 在一个窗口里提供两个独立的文件面板，可以同时浏览、比较、复制和移动文件，不必来回切换多个 Finder 窗口。它还支持直接浏览通过 MTP 连接的 Android 设备。
+在一个窗口里浏览、比较和传输文件，并直接管理通过 MTP 连接的 Android 设备。
 
 [English](README.md)
+
+</div>
 
 ## 功能
 
@@ -92,6 +98,14 @@ Dockhand 针对大目录做了响应性优化：
 2. 打开 DMG。
 3. 将 **Dockhand** 拖入 **Applications**。
 4. 从“应用程序”启动 Dockhand。
+
+## 帮助翻译
+
+Dockhand 目前支持简体中文和 English (US)。欢迎母语使用者帮助改进现有翻译，或添加新的语言。
+
+如果你想参与翻译，请提交 Issue 并说明希望支持的语言：
+
+<https://github.com/lumkit/dockhand/issues>
 
 ## 问题反馈
 

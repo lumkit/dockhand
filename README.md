@@ -1,10 +1,16 @@
+<div align="center">
+
+<img src="docs/assets/readme-cover.png" alt="Dockhand" width="100%" />
+
 # Dockhand
 
 A fast, native-feeling dual-pane file browser for macOS.
 
-Dockhand gives you two independent file panes in one window, so you can browse, compare, copy, and move files without opening multiple Finder windows. It also connects directly to Android devices over MTP.
+Browse, compare, and transfer files between two panes, and manage Android devices over MTP — all in one window.
 
 [中文文档](README.zh-CN.md)
+
+</div>
 
 ## Features
 
@@ -92,6 +98,14 @@ Download the latest macOS DMG from GitHub Releases:
 2. Open the DMG.
 3. Drag **Dockhand** into **Applications**.
 4. Launch Dockhand from Applications.
+
+## Help Translate
+
+Dockhand currently ships with Simplified Chinese and English (US). Native speakers are welcome to help improve these translations or add new languages.
+
+If you would like to contribute a translation, open an issue with the language you would like to add:
+
+<https://github.com/lumkit/dockhand/issues>
 
 ## Feedback
 
