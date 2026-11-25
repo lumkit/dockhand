@@ -782,6 +782,8 @@ private fun FileEntryRow(
                 },
             startAction = {
                 if (row.thumbnailModel != null) {
+                    var isError by remember(row) { mutableStateOf(true) }
+
                     AsyncImage(
                         model = row.thumbnailModel,
                         contentDescription = null,
@@ -790,7 +792,9 @@ private fun FileEntryRow(
                             .squircleClip(8.dp),
                         placeholder = painterResource(row.icon),
                         error = painterResource(row.icon),
-                        contentScale = ContentScale.Crop,
+                        contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
+                        onError = { isError = true },
+                        onSuccess = { isError = false },
                     )
                 } else {
                     Image(
@@ -1282,13 +1286,17 @@ private fun FileGridItem(
             verticalArrangement = Arrangement.Center,
         ) {
             if (row.thumbnailModel != null) {
+                var isError by remember(row) { mutableStateOf(false) }
+
                 AsyncImage(
                     model = row.thumbnailModel,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp).squircleClip(12.dp),
                     placeholder = painterResource(row.icon),
                     error = painterResource(row.icon),
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
+                    onError = { isError = true },
+                    onSuccess = { isError = false },
                 )
             } else {
                 Image(
