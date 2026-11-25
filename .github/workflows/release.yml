@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish DMG
+    runs-on: macos-14
+    env:
+      HAS_SIGNING_CERT: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F= '/^dockhand.version=/{print $2}' gradle.properties)"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "gradle.properties: $VERSION"
+          echo "tag:              $TAG"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "::error::dockhand.version ($VERSION) does not match tag ($TAG)"
+            exit 1
+          fi
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Import signing certificate
+        if: env.HAS_SIGNING_CERT == 'true'
+        shell: bash
+        env:
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          MAC_KEYCHAIN_PASSWORD: ${{ secrets.MAC_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/dockhand.p12"
+          KEYCHAIN="$RUNNER_TEMP/dockhand-signing.keychain-db"
+          echo "$MAC_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -k "$KEYCHAIN" -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*) \([A-F0-9]\{40\}\) ".*/\1/p' | head -1)"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No valid code signing identity found"
+            exit 1
+          fi
+          echo "DOCKHAND_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build unsigned DMG
+        if: env.HAS_SIGNING_CERT != 'true'
+        run: ./gradlew :desktopApp:packageReleaseDmg --console=plain
+
+      - name: Build signed DMG
+        if: env.HAS_SIGNING_CERT == 'true'
+        run: ./gradlew :desktopApp:packageSignedDmg -Pdockhand.macSignIdentity="$DOCKHAND_SIGN_IDENTITY" --console=plain
+
+      - name: Verify DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh desktopApp/build/compose/binaries/main-release/dmg
+          DMG="$(find desktopApp/build/compose/binaries/main-release/dmg -maxdepth 1 -name 'Dockhand-*.dmg' -print -quit)"
+          test -n "$DMG"
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+          echo "DMG_SHA256=$DMG.sha256" >> "$GITHUB_ENV"
+
+      - name: Generate changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREVIOUS="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -n "$PREVIOUS" ]; then
+            RANGE="$PREVIOUS..$GITHUB_REF_NAME"
+            COMPARE="https://github.com/$GITHUB_REPOSITORY/compare/$PREVIOUS...$GITHUB_REF_NAME"
+          else
+            RANGE="$GITHUB_REF_NAME"
+            COMPARE="https://github.com/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME"
+          fi
+          {
+            echo "## What's Changed"
+            echo
+            git log "$RANGE" --no-merges --pretty=format:'- %s (%h)' | sed '/^$/d'
+            echo
+            echo
+            echo "**Full Changelog**: $COMPARE"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            ${{ env.DMG }}
+            ${{ env.DMG_SHA256 }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: false
+
+      - name: Clean up signing keychain
+        if: always() && env.HAS_SIGNING_CERT == 'true'
+        shell: bash
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/dockhand-signing.keychain-db"
+          if [ -f "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN" || true
+          fi
