@@ -14,6 +14,12 @@
     <string name="settings_restore_window_size">恢复窗口大小</string>
     <string name="framework_section">框架</string>
     <string name="shortcut_settings">快捷键</string>
+    <string name="about_section">关于</string>
+    <string name="about_version">版本信息</string>
+    <string name="about_open_source">开源许可</string>
+    <string name="about_open_source_summary">查看项目使用的开源框架和版本</string>
+    <string name="about_project">项目地址</string>
+    <string name="about_licenses_title">开源许可</string>
     <string name="settings_clear_cache">清理缓存</string>
     <string name="settings_clear_cache_summary">缓存 %1$s</string>
     <string name="cache_clear_dialog_title">清理缓存</string>

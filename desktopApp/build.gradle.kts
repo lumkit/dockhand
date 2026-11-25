@@ -138,22 +138,23 @@ fun injectPrivacyManifest(
     taskName: String,
     appPath: String,
 ) {
+    // 这些 File 在配置阶段捕获，避免 doLast 执行时访问 Task.project，
+    // 从而兼容 configuration cache。
+    val manifest = project.file("PrivacyInfo.xcprivacy")
+    val app = project.file(appPath)
+    val entitlements = project.file(
+        if (isAppStoreBuild) "entitlements-appstore.plist"
+        else "entitlements.plist"
+    )
+    val identity = macSignIdentity ?: "-"
+
     tasks.configureEach {
         if (name != taskName) return@configureEach
-        inputs.file(project.file("PrivacyInfo.xcprivacy"))
+        inputs.file(manifest)
         doLast {
-            val app = project.file(appPath)
             val resources = app.resolve("Contents/Resources").apply { mkdirs() }
-            project.copy {
-                from(project.file("PrivacyInfo.xcprivacy"))
-                into(resources)
-            }
+            manifest.copyTo(resources.resolve(manifest.name), overwrite = true)
             // 复制资源会改变 bundle 内容，必须重新签名，否则签名失效。
-            val entitlements = project.file(
-                if (isAppStoreBuild) "entitlements-appstore.plist"
-                else "entitlements.plist"
-            )
-            val identity = macSignIdentity ?: "-"
             val result = ProcessBuilder(
                 "/usr/bin/codesign",
                 "--force",

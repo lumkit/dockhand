@@ -22,12 +22,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import io.github.lumkit.dockhand.core.app.APP_VERSION
+import io.github.lumkit.dockhand.core.app.PROJECT_URL
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
+import dockhand.shared.generated.resources.about_open_source
+import dockhand.shared.generated.resources.about_open_source_summary
+import dockhand.shared.generated.resources.about_project
+import dockhand.shared.generated.resources.about_section
+import dockhand.shared.generated.resources.about_version
 import dockhand.shared.generated.resources.appearance_section
 import dockhand.shared.generated.resources.cache_clear_dialog_summary
 import dockhand.shared.generated.resources.cache_clear_dialog_title
@@ -75,6 +83,7 @@ import io.github.lumkit.dockhand.ui.screen.home.formatFileSize
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.ColorPalette
@@ -141,6 +150,8 @@ fun SettingsBottomSheet(
     var showColorDialog by remember { mutableStateOf(false) }
     var showShortcutSheet by remember { mutableStateOf(false) }
     var showCacheDialog by remember { mutableStateOf(false) }
+    var showLicensesSheet by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
     var dialogColor by remember { mutableStateOf(keyColor) }
     val themeModes = ColorSchemeMode.entries
     val scrollState = rememberScrollState()
@@ -285,6 +296,31 @@ fun SettingsBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+
+            Spacer(Modifier.height(16.dp))
+            SmallTitle(stringResource(Res.string.about_section))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.defaultColors(
+                    color = MiuixTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                BasicComponent(
+                    title = stringResource(Res.string.about_version),
+                    summary = APP_VERSION,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ArrowPreference(
+                    title = stringResource(Res.string.about_open_source),
+                    summary = stringResource(Res.string.about_open_source_summary),
+                    onClick = { showLicensesSheet = true },
+                )
+                ArrowPreference(
+                    title = stringResource(Res.string.about_project),
+                    summary = PROJECT_URL,
+                    onClick = { uriHandler.openUri(PROJECT_URL) },
+                )
+            }
         }
     }
 
@@ -364,6 +400,11 @@ fun SettingsBottomSheet(
             }
         }
     }
+
+    OpenSourceLicensesBottomSheet(
+        show = showLicensesSheet,
+        onDismissRequest = { showLicensesSheet = false },
+    )
 
     ShortcutSettingsBottomSheet(
         show = showShortcutSheet,
