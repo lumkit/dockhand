@@ -9,14 +9,17 @@ import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileEntry
+import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
+import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.displayPath
 import io.github.lumkit.dockhand.domain.model.isTrashLocation
 import io.github.lumkit.dockhand.domain.model.orderedByIds
 import io.github.lumkit.dockhand.domain.model.parentBreadcrumb
+import io.github.lumkit.dockhand.domain.model.sortedFor
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.task.NoopTaskNotifier
 import io.github.lumkit.dockhand.task.TaskContext
@@ -256,6 +259,29 @@ class HomeViewModel(
                 }
         }
     }
+    private val fileLayoutModeJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.fileLayoutMode
+                .catch { }
+                .collect { mode ->
+                    _state.update { it.copy(fileLayoutMode = mode) }
+                }
+        }
+    }
+    private val fileSortModeJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.fileSortMode
+                .catch { }
+                .collect { mode ->
+                    val changed = _state.value.fileSortMode != mode
+                    _state.update { it.copy(fileSortMode = mode) }
+                    if (changed && (_state.value.leftPane.location != null ||
+                            _state.value.rightPane.location != null)) {
+                        refreshAllPanes()
+                    }
+                }
+        }
+    }
     private val startupLeftPathJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.startupPath(PaneId.Left.name)
@@ -470,6 +496,23 @@ class HomeViewModel(
         appliedShowHiddenItems = show
         files.setShowHiddenItems(show)
         if (refresh) refreshAllPanes()
+    }
+
+    fun onFileLayoutModeChange(mode: FileLayoutMode) {
+        if (_state.value.fileLayoutMode == mode) return
+        _state.update { it.copy(fileLayoutMode = mode) }
+        settings?.let { repository ->
+            scope.launch { repository.setFileLayoutMode(mode) }
+        }
+    }
+
+    fun onFileSortModeChange(mode: FileSortMode) {
+        if (_state.value.fileSortMode == mode) return
+        _state.update { it.copy(fileSortMode = mode) }
+        settings?.let { repository ->
+            scope.launch { repository.setFileSortMode(mode) }
+        }
+        refreshAllPanes()
     }
 
     fun onRestoreWindowSizeChange(enabled: Boolean) {
@@ -1585,7 +1628,7 @@ class HomeViewModel(
         moreJobs[paneId] = scope.launch {
             try {
                 val page = files.listPage(location, offset, PAGE_SIZE)
-                val sorted = page.entries.sortedWith(ENTRY_ORDER)
+                val sorted = page.entries.sortedFor(_state.value.fileSortMode)
                 val itemCountTexts = sorted
                     .mapNotNull { it.childCount }
                     .distinct()
@@ -1601,8 +1644,13 @@ class HomeViewModel(
                     val current = state.pane(paneId)
                     if (current.location != location || current.entries.size != offset) state
                     else state.updatePane(paneId) {
+                        val comparator = io.github.lumkit.dockhand.domain.model.fileEntryComparator(
+                            state.fileSortMode
+                        )
                         it.copy(
-                            entries = current.entries + rows,
+                            entries = (current.entries + rows).sortedWith { a, b ->
+                                comparator.compare(a.entry, b.entry)
+                            },
                             hasMore = page.hasMore,
                             isLoadingMore = false,
                         )
@@ -1780,7 +1828,7 @@ class HomeViewModel(
 
                 // 列表加载阶段一次性完成排序 + summary 格式化。
                 // LazyColumn 滚动/重组时只读 FileRowUi.summary，不再做任何时间或大小计算。
-                val sorted = entries.sortedWith(ENTRY_ORDER)
+                val sorted = entries.sortedFor(_state.value.fileSortMode)
                 val itemCountTexts = sorted
                     .mapNotNull { it.childCount }
                     .distinct()
@@ -1847,7 +1895,5 @@ class HomeViewModel(
 
     private companion object {
         const val PAGE_SIZE = 300
-        val ENTRY_ORDER = compareByDescending<FileEntry> { it.isDirectory }
-            .thenBy { it.name.lowercase() }
     }
 }

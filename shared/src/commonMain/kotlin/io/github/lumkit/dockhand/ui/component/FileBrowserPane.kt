@@ -14,11 +14,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +82,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -98,6 +107,7 @@ import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
 import io.github.lumkit.dockhand.domain.model.FileEntry
+import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
@@ -161,6 +171,7 @@ fun FileBrowserPane(
     canTransferToOtherPane: Boolean = false,
     canMoveToOtherPane: Boolean = false,
     canTrash: Boolean = true,
+    layoutMode: FileLayoutMode = FileLayoutMode.List,
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -338,6 +349,21 @@ fun FileBrowserPane(
                     }
 
                     else -> {
+                        if (layoutMode == FileLayoutMode.Grid) {
+                            FileGridContent(
+                                pane = pane,
+                                canTransferToOtherPane = canTransferToOtherPane,
+                                canMoveToOtherPane = canMoveToOtherPane,
+                                canTrash = canTrash,
+                                onEntryClick = onEntryClick,
+                                onEntryDoubleClick = onEntryDoubleClick,
+                                onEntrySecondaryClick = onEntrySecondaryClick,
+                                onContextMenuRequest = onContextMenuRequest,
+                                onContextMenuDismiss = onContextMenuDismiss,
+                                onContextAction = onContextAction,
+                                onLoadMore = onLoadMore,
+                            )
+                        } else {
                         val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
                         val edgeScrollMaxStep = with(LocalDensity.current) { 28.dp.toPx() }
                         LaunchedEffect(isDragging) {
@@ -494,6 +520,7 @@ fun FileBrowserPane(
                                     style = Stroke(width = 1.dp.toPx()),
                                 )
                             }
+                        }
                         }
                     }
                 }
@@ -841,6 +868,268 @@ private fun FileEntryRow(
             },
         )
     }
+}
+
+@Composable
+private fun FileGridContent(
+    pane: FilePaneState,
+    canTransferToOtherPane: Boolean,
+    canMoveToOtherPane: Boolean,
+    canTrash: Boolean,
+    onEntryClick: (FileEntry, SelectionMode) -> Unit,
+    onEntryDoubleClick: (FileEntry) -> Unit,
+    onEntrySecondaryClick: (FileEntry) -> Unit,
+    onContextMenuRequest: (String) -> Unit,
+    onContextMenuDismiss: () -> Unit,
+    onContextAction: (FileEntry, FileContextAction) -> Unit,
+    onLoadMore: () -> Unit,
+) {
+    val gridState = rememberLazyGridState()
+    val windowInfo = LocalWindowInfo.current
+    val currentHasMore by rememberUpdatedState(pane.hasMore)
+    val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
+    val currentLoadMore by rememberUpdatedState(onLoadMore)
+
+    LaunchedEffect(pane.location) {
+        gridState.scrollToItem(0)
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount > 0 && last >= info.totalItemsCount - 4
+        }
+            .distinctUntilChanged()
+            .collect { nearEnd ->
+                if (nearEnd && currentHasMore && !currentLoadingMore) currentLoadMore()
+            }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(112.dp),
+            state = gridState,
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScrollBar(gridState),
+            contentPadding = PaddingValues(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            gridItems(pane.entries, key = { it.id }) { row ->
+                FileGridItem(
+                    row = row,
+                    selected = row.id in pane.selectedIds,
+                    onClick = {
+                        val modifiers = windowInfo.keyboardModifiers
+                        val mode = when {
+                            modifiers.isShiftPressed -> SelectionMode.Range
+                            modifiers.isAltPressed || modifiers.isMetaPressed -> SelectionMode.Toggle
+                            else -> SelectionMode.Replace
+                        }
+                        onEntryClick(row.entry, mode)
+                    },
+                    onDoubleClick = { onEntryDoubleClick(row.entry) },
+                    onSecondaryClick = {
+                        onEntrySecondaryClick(row.entry)
+                        onContextMenuRequest(row.id)
+                    },
+                )
+            }
+            if (pane.isLoadingMore) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        InfiniteProgressIndicator(size = 20.dp)
+                        Text(
+                            text = stringResource(Res.string.text_loading_more),
+                            modifier = Modifier.padding(start = 8.dp),
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                }
+            }
+        }
+
+        val contextEntry = pane.contextMenuEntryId
+            ?.let { id -> pane.entries.firstOrNull { it.id == id } }
+        if (contextEntry != null) {
+            FileGridContextMenu(
+                paneId = pane.id,
+                entry = contextEntry,
+                canTransferToOtherPane = canTransferToOtherPane,
+                canMoveToOtherPane = canMoveToOtherPane,
+                canTrash = canTrash,
+                onDismiss = onContextMenuDismiss,
+                onAction = { action ->
+                    onContextAction(contextEntry.entry, action)
+                    onContextMenuDismiss()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FileGridItem(
+    row: FileRowUi,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onDoubleClick: () -> Unit,
+    onSecondaryClick: () -> Unit,
+) {
+    val color = if (selected) {
+        MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+    } else {
+        Color.Transparent
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 124.dp)
+            .squircleClip(12.dp)
+            .background(color)
+            .alpha(if (row.entry.isHidden) 0.45f else 1f)
+            .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
+            .pointerInput(onSecondaryClick) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (
+                            event.type == PointerEventType.Press &&
+                            event.buttons.isSecondaryPressed
+                        ) {
+                            event.changes.forEach { it.consume() }
+                            onSecondaryClick()
+                        }
+                    }
+                }
+            }
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        if (row.thumbnailModel != null) {
+            AsyncImage(
+                model = row.thumbnailModel,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp).squircleClip(12.dp),
+                placeholder = painterResource(row.icon),
+                error = painterResource(row.icon),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Image(
+                painter = painterResource(row.icon),
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = row.name,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurface,
+        )
+        if (!row.summary.isNullOrBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = row.summary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FileGridContextMenu(
+    paneId: PaneId,
+    entry: FileRowUi,
+    canTransferToOtherPane: Boolean,
+    canMoveToOtherPane: Boolean,
+    canTrash: Boolean,
+    onDismiss: () -> Unit,
+    onAction: (FileContextAction) -> Unit,
+) {
+    val isLocal = entry.entry.location.source.kind == FileSourceKind.Local
+    val copyLabel = stringResource(
+        if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
+    )
+    val moveLabel = stringResource(
+        if (paneId == PaneId.Left) Res.string.action_move_to_right else Res.string.action_move_to_left
+    )
+    val trashLabel = stringResource(Res.string.action_move_to_trash)
+    val deleteLabel = stringResource(Res.string.action_delete)
+    val renameLabel = stringResource(Res.string.action_rename)
+    val compressLabel = stringResource(Res.string.action_compress)
+    val servicesLabel = stringResource(Res.string.action_services)
+    val infoLabel = stringResource(Res.string.action_view_info)
+    val terminalTabLabel = stringResource(
+        if (entry.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
+    )
+    val terminalWindowLabel = stringResource(
+        if (entry.isDirectory) Res.string.action_terminal_window_folder else Res.string.action_terminal_window_file
+    )
+
+    val entries = buildList {
+        add(DropdownEntry(items = listOf(
+            DropdownItem(text = infoLabel, onClick = { onAction(FileContextAction.ViewInfo) })
+        )))
+        if (isLocal) {
+            add(DropdownEntry(items = buildList {
+                if (canTransferToOtherPane) {
+                    add(DropdownItem(text = copyLabel, onClick = { onAction(FileContextAction.Copy) }))
+                    if (canMoveToOtherPane) {
+                        add(DropdownItem(text = moveLabel, onClick = { onAction(FileContextAction.Move) }))
+                    }
+                }
+                if (canTrash) {
+                    add(DropdownItem(text = trashLabel, onClick = { onAction(FileContextAction.Trash) }))
+                }
+                add(DropdownItem(text = deleteLabel, onClick = { onAction(FileContextAction.Delete) }))
+                add(DropdownItem(text = renameLabel, onClick = { onAction(FileContextAction.Rename) }))
+                add(DropdownItem(text = compressLabel, onClick = { onAction(FileContextAction.Compress) }))
+            }))
+            add(DropdownEntry(items = listOf(
+                DropdownItem(
+                    text = servicesLabel,
+                    children = listOf(
+                        DropdownItem(
+                            text = terminalTabLabel,
+                            onClick = { onAction(FileContextAction.TerminalTab) },
+                        ),
+                        DropdownItem(
+                            text = terminalWindowLabel,
+                            onClick = { onAction(FileContextAction.TerminalWindow) },
+                        ),
+                    ),
+                )
+            )))
+        }
+    }
+
+    OverlayCascadingListPopup(
+        show = true,
+        entries = entries,
+        onDismissRequest = onDismiss,
+        alignment = if (paneId == PaneId.Left) {
+            PopupPositionProvider.Align.End
+        } else {
+            PopupPositionProvider.Align.Start
+        },
+    )
 }
 
 @Composable

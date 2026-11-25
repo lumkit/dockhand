@@ -9,8 +9,10 @@ import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
+import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
+import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
@@ -134,6 +136,8 @@ data class HomeUiState(
     /** 莫奈主题的手动主色调。 */
     val keyColor: Color = DEFAULT_KEY_COLOR,
     val showHiddenItems: Boolean = false,
+    val fileLayoutMode: FileLayoutMode = FileLayoutMode.List,
+    val fileSortMode: FileSortMode = FileSortMode.NameAsc,
     val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
         DefaultShortcutBindings.mapValues { listOf(it.value) },
     /** 当前显示进度弹窗的前台任务。 */

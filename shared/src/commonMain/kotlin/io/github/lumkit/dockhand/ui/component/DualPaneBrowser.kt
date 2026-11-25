@@ -106,6 +106,7 @@ fun DualPaneBrowser(
                 canTransferToOtherPane = leftCanTransfer,
                 canMoveToOtherPane = leftCanMove,
                 canTrash = true,
+                layoutMode = uiState.fileLayoutMode,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -135,6 +136,7 @@ fun DualPaneBrowser(
                 canTransferToOtherPane = rightCanTransfer,
                 canMoveToOtherPane = rightCanMove,
                 canTrash = true,
+                layoutMode = uiState.fileLayoutMode,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),

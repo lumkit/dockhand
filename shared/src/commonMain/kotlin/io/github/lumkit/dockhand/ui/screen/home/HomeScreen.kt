@@ -53,6 +53,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.lumkit.dockhand.LocalAppContainer
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.domain.model.FileEntry
+import io.github.lumkit.dockhand.domain.model.FileLayoutMode
+import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.ui.component.FileContextAction
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutRegistry
@@ -81,6 +83,20 @@ import dockhand.shared.generated.resources.action_retry
 import dockhand.shared.generated.resources.file_info_title
 import dockhand.shared.generated.resources.ic_backend_task
 import dockhand.shared.generated.resources.ic_home
+import dockhand.shared.generated.resources.menu_arrangement
+import dockhand.shared.generated.resources.menu_hidden_items
+import dockhand.shared.generated.resources.menu_layout_grid
+import dockhand.shared.generated.resources.menu_layout_list
+import dockhand.shared.generated.resources.menu_sort
+import dockhand.shared.generated.resources.menu_sort_modified_asc
+import dockhand.shared.generated.resources.menu_sort_modified_desc
+import dockhand.shared.generated.resources.menu_sort_name_asc
+import dockhand.shared.generated.resources.menu_sort_name_desc
+import dockhand.shared.generated.resources.menu_sort_size_asc
+import dockhand.shared.generated.resources.menu_sort_size_desc
+import dockhand.shared.generated.resources.menu_sort_type_asc
+import dockhand.shared.generated.resources.menu_sort_type_desc
+import dockhand.shared.generated.resources.menu_view
 import dockhand.shared.generated.resources.task_cancel_message
 import dockhand.shared.generated.resources.task_cancel_title
 import dockhand.shared.generated.resources.task_cancelled
@@ -99,6 +115,8 @@ import dockhand.shared.generated.resources.task_speed_eta
 import dockhand.shared.generated.resources.tasks_badge_overflow
 import dockhand.shared.generated.resources.tasks_empty
 import dockhand.shared.generated.resources.tasks_tooltip_title
+import dockhand.shared.generated.resources.text_loading_more
+import dockhand.shared.generated.resources.text_more
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -130,7 +148,11 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Tasks
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -212,6 +234,8 @@ fun HomeScreen() {
         onKeyColorChange = homeViewModel::onKeyColorChange,
         onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
         onShowHiddenItemsChange = homeViewModel::onShowHiddenItemsChange,
+        onFileLayoutModeChange = homeViewModel::onFileLayoutModeChange,
+        onFileSortModeChange = homeViewModel::onFileSortModeChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onBreadcrumbTerminal = homeViewModel::onBreadcrumbTerminal,
         onRetry = homeViewModel::onRefresh,
@@ -294,6 +318,8 @@ private fun HomeScreenContent(
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
+    onFileLayoutModeChange: (FileLayoutMode) -> Unit,
+    onFileSortModeChange: (FileSortMode) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbTerminal: (FileBreadcrumb, Boolean) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
@@ -410,6 +436,12 @@ private fun HomeScreenContent(
                             onCancelTask = onCancelTask,
                             onDismissTask = onDismissTask,
                             onTaskProgressOpen = onTaskProgressOpen,
+                            layoutMode = uiState.fileLayoutMode,
+                            sortMode = uiState.fileSortMode,
+                            showHiddenItems = uiState.showHiddenItems,
+                            onLayoutModeChange = onFileLayoutModeChange,
+                            onSortModeChange = onFileSortModeChange,
+                            onShowHiddenItemsChange = onShowHiddenItemsChange,
                         )
                     }
                 }
@@ -484,6 +516,12 @@ private fun HomeScreenContent(
                                 onCancelTask = onCancelTask,
                                 onDismissTask = onDismissTask,
                                 onTaskProgressOpen = onTaskProgressOpen,
+                                layoutMode = uiState.fileLayoutMode,
+                                sortMode = uiState.fileSortMode,
+                                showHiddenItems = uiState.showHiddenItems,
+                                onLayoutModeChange = onFileLayoutModeChange,
+                                onSortModeChange = onFileSortModeChange,
+                                onShowHiddenItemsChange = onShowHiddenItemsChange,
                             )
                         }
                     }
@@ -645,11 +683,39 @@ private fun HomeScreenContent(
 }
 
 @Composable
+private fun sortMenuItems(
+    selected: FileSortMode,
+    onSelected: (FileSortMode) -> Unit,
+): List<DropdownItem> = listOf(
+    FileSortMode.NameAsc to Res.string.menu_sort_name_asc,
+    FileSortMode.NameDesc to Res.string.menu_sort_name_desc,
+    FileSortMode.ModifiedDesc to Res.string.menu_sort_modified_desc,
+    FileSortMode.ModifiedAsc to Res.string.menu_sort_modified_asc,
+    FileSortMode.SizeDesc to Res.string.menu_sort_size_desc,
+    FileSortMode.SizeAsc to Res.string.menu_sort_size_asc,
+    FileSortMode.TypeAsc to Res.string.menu_sort_type_asc,
+    FileSortMode.TypeDesc to Res.string.menu_sort_type_desc,
+).map { (mode, label) ->
+    DropdownItem(
+        text = stringResource(label),
+        selected = selected == mode,
+        onClick = { onSelected(mode) },
+    )
+}
+
+@OptIn(ExperimentalScrollBarApi::class)
+@Composable
 private fun TopBarActions(
     tasks: List<AppTask>,
     onCancelTask: (Long) -> Unit,
     onDismissTask: (Long) -> Unit,
     onTaskProgressOpen: (Long) -> Unit,
+    layoutMode: FileLayoutMode,
+    sortMode: FileSortMode,
+    showHiddenItems: Boolean,
+    onLayoutModeChange: (FileLayoutMode) -> Unit,
+    onSortModeChange: (FileSortMode) -> Unit,
+    onShowHiddenItemsChange: (Boolean) -> Unit,
 ) {
     var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
     var popupShow by remember { mutableStateOf(false) }
@@ -741,17 +807,77 @@ private fun TopBarActions(
             }
         }
     }
-    
-//    IconButton(
-//        onClick = { },
-//        modifier = Modifier.size(32.dp),
-//    ) {
-//        Icon(
-//            imageVector = MiuixIcons.More,
-//            contentDescription = null,
-//            modifier = Modifier.size(20.dp),
-//        )
-//    }
+
+    // TODO 更多菜单，多级菜单实现
+    var moreMenuShow by remember { mutableStateOf(false) }
+    TooltipBox(text = stringResource(Res.string.text_more)) {
+        IconButton(
+            onClick = { moreMenuShow = true },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                imageVector = MiuixIcons.More,
+                contentDescription = stringResource(Res.string.text_more),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        OverlayCascadingListPopup(
+            show = moreMenuShow,
+            entries = listOf(
+                DropdownEntry(
+                    items = listOf(
+                        DropdownItem(
+                            text = stringResource(Res.string.menu_arrangement),
+                            children = listOf(
+                                DropdownItem(
+                                    text = stringResource(Res.string.menu_layout_list),
+                                    selected = layoutMode == FileLayoutMode.List,
+                                    onClick = {
+                                        onLayoutModeChange(FileLayoutMode.List)
+                                        moreMenuShow = false
+                                    },
+                                ),
+                                DropdownItem(
+                                    text = stringResource(Res.string.menu_layout_grid),
+                                    selected = layoutMode == FileLayoutMode.Grid,
+                                    onClick = {
+                                        onLayoutModeChange(FileLayoutMode.Grid)
+                                        moreMenuShow = false
+                                    },
+                                ),
+                            ),
+                        ),
+                        DropdownItem(
+                            text = stringResource(Res.string.menu_sort),
+                            children = sortMenuItems(
+                                selected = sortMode,
+                                onSelected = {
+                                    onSortModeChange(it)
+                                    moreMenuShow = false
+                                },
+                            ),
+                        ),
+                        DropdownItem(
+                            text = stringResource(Res.string.menu_view),
+                            children = listOf(
+                                DropdownItem(
+                                    text = stringResource(Res.string.menu_hidden_items),
+                                    selected = showHiddenItems,
+                                    onClick = {
+                                        onShowHiddenItemsChange(!showHiddenItems)
+                                        moreMenuShow = false
+                                    },
+                                ),
+                            ),
+                        ),
+                    )
+                )
+            ),
+            onDismissRequest = { moreMenuShow = false },
+            alignment = PopupPositionProvider.Align.End,
+        )
+    }
 
     val taskToCancel = pendingCancel
     OverlayDialog(

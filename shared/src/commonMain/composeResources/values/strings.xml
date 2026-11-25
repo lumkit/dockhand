@@ -49,6 +49,21 @@
     <string name="theme_monet_dark">莫奈取色（深色）</string>
     <string name="main_color">主色调</string>
     <string name="settings_restore_window_size_summary">Floating 模式关闭时保存并在下次启动恢复</string>
+    <string name="text_more">更多</string>
+    <string name="menu_arrangement">排列方式</string>
+    <string name="menu_layout_list">线性</string>
+    <string name="menu_layout_grid">网格</string>
+    <string name="menu_sort">排序方式</string>
+    <string name="menu_sort_name_asc">名称 A-Z</string>
+    <string name="menu_sort_name_desc">名称 Z-A</string>
+    <string name="menu_sort_modified_desc">修改时间 新到旧</string>
+    <string name="menu_sort_modified_asc">修改时间 旧到新</string>
+    <string name="menu_sort_size_desc">大小 大到小</string>
+    <string name="menu_sort_size_asc">大小 小到大</string>
+    <string name="menu_sort_type_asc">类型 A-Z</string>
+    <string name="menu_sort_type_desc">类型 Z-A</string>
+    <string name="menu_view">查看</string>
+    <string name="menu_hidden_items">隐藏项目</string>
 
     <!-- 侧边栏固定入口 -->
     <string name="text_desktop">桌面</string>

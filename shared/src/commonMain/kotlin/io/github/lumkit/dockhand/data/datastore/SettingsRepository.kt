@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
+import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
+import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.WindowSize
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
@@ -38,6 +40,8 @@ internal object SettingsKeys {
     val InterfaceScale = intPreferencesKey("interface_scale")
     val KeyColor = intPreferencesKey("key_color")
     val ShowHiddenItems = booleanPreferencesKey("show_hidden_items")
+    val FileLayoutMode = stringPreferencesKey("file_layout_mode")
+    val FileSortMode = stringPreferencesKey("file_sort_mode")
 
     fun startupPath(pane: String): Preferences.Key<String> =
         stringPreferencesKey("startup_path_${pane.lowercase()}")
@@ -147,6 +151,28 @@ class SettingsRepository(
 
     suspend fun setShowHiddenItems(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[SettingsKeys.ShowHiddenItems] = enabled }
+    }
+
+    val fileLayoutMode: Flow<FileLayoutMode> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            FileLayoutMode.entries.firstOrNull { it.name == prefs[SettingsKeys.FileLayoutMode] }
+                ?: FileLayoutMode.List
+        }
+
+    suspend fun setFileLayoutMode(mode: FileLayoutMode) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.FileLayoutMode] = mode.name }
+    }
+
+    val fileSortMode: Flow<FileSortMode> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            FileSortMode.entries.firstOrNull { it.name == prefs[SettingsKeys.FileSortMode] }
+                ?: FileSortMode.NameAsc
+        }
+
+    suspend fun setFileSortMode(mode: FileSortMode) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.FileSortMode] = mode.name }
     }
 
     val shortcuts: Flow<Map<ShortcutAction, List<ShortcutKey>>> = dataStore.data
