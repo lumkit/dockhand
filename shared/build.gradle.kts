@@ -8,9 +8,32 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val dockhandVersion = providers.gradleProperty("dockhand.version").get()
+val generatedVersionDir = layout.buildDirectory.dir("generated/dockhand-version")
+val generateAppVersion = tasks.register("generateAppVersion") {
+    val version = dockhandVersion
+    val file = generatedVersionDir.get()
+        .dir("io/github/lumkit/dockhand/core/app")
+        .asFile
+        .resolve("AppVersion.kt")
+    inputs.property("version", version)
+    outputs.file(file)
+    doLast {
+        file.parentFile.mkdirs()
+        file.writeText(
+            "package io.github.lumkit.dockhand.core.app\n\n" +
+                "const val APP_VERSION = \"" + version + "\"\n"
+        )
+    }
+}
+
 kotlin {
     jvmToolchain(25)
     jvm()
+    sourceSets.named("commonMain") {
+        kotlin.srcDir(generatedVersionDir)
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -168,6 +191,12 @@ tasks.named<ProcessResources>("jvmProcessResources") {
     from(openWithHelperBinary) {
         into("native")
     }
+}
+
+tasks.matching { task ->
+    task.name.startsWith("compileKotlin") || task.name.startsWith("kspKotlin")
+}.configureEach {
+    dependsOn(generateAppVersion)
 }
 
 tasks.withType<Test>().configureEach {

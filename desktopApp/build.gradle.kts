@@ -8,6 +8,16 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+val dockhandVersion = providers.gradleProperty("dockhand.version").get()
+val jpackageVersion = dockhandVersion.substringBefore('-').split('.').let { parts ->
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: 1
+    if (major <= 0) {
+        "1.0.0"
+    } else {
+        parts.take(3).joinToString(".")
+    }
+}
+
 kotlin {
     jvmToolchain(25)
 }
@@ -59,7 +69,8 @@ compose.desktop {
             // 只发 macOS
             targetFormats(TargetFormat.Dmg)
             packageName = "Dockhand"
-            packageVersion = "1.0.0"
+            // jpackage 的 macOS app-version 要求首段非 0，真实版本在打包后写入 Info.plist。
+            packageVersion = jpackageVersion
             description = "Dockhand dual-pane file browser"
             vendor = "lumkit"
             copyright = "Copyright © 2026 lumkit. All rights reserved."
@@ -177,3 +188,23 @@ injectPrivacyManifest(
     "createReleaseDistributableImpl",
     "build/compose/binaries/main-release/app/Dockhand.app",
 )
+
+val releaseDmgDir = layout.buildDirectory
+    .dir("compose/binaries/main-release/dmg")
+    .get()
+    .asFile
+
+tasks.configureEach {
+    if (name == "packageReleaseDmg") {
+        val source = releaseDmgDir.resolve("Dockhand-" + jpackageVersion + ".dmg")
+        val target = releaseDmgDir.resolve("Dockhand-" + dockhandVersion + ".dmg")
+        doLast {
+            if (source.isFile) {
+                check(source.renameTo(target)) {
+                    "Failed to rename " + source.name + " to " + target.name
+                }
+            }
+        }
+    }
+}
+

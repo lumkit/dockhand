@@ -67,3 +67,8 @@
 -dontwarn kotlinx.coroutines.**
 -dontwarn androidx.**
 -dontwarn java.lang.management.**
+-dontwarn org.apache.commons.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn com.sun.jna.**
+-dontwarn org.tukaani.**
+-dontwarn org.slf4j.**

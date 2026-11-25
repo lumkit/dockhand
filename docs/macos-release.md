@@ -32,7 +32,10 @@ universal 构建，或者分别发布 arm64/x86_64 两套包。
 - 默认 entitlements：`desktopApp/entitlements.plist`
 - App Store 沙盒模板：`desktopApp/entitlements-appstore.plist`
 - Info.plist 已包含桌面、文稿、下载、外接卷、网络卷用途说明
-- `CFBundleShortVersionString` = `1.0.0`
+- jpackage 的 `CFBundleShortVersionString` 使用 `1.0.0`
+- macOS jpackage 不允许首段为 0，且 app-image 版本必须与 DMG 参数一致
+- App 内关于页显示 `0.1.0-beta.1`
+- 发布 DMG 会重命名为 `Dockhand-0.1.0-beta.1.dmg`
 - `CFBundleVersion` = `1`
 
 ## Developer ID 签名与公证
@@ -101,7 +104,7 @@ Dockhand.app/Contents/Resources/PrivacyInfo.xcprivacy
 ./scripts/verify-macos-app.sh /path/to/Dockhand.app
 codesign --verify --deep --strict --verbose=2 Dockhand.app
 spctl --assess --type execute --verbose Dockhand.app
-xcrun stapler validate Dockhand-1.0.0.dmg
+xcrun stapler validate Dockhand-0.1.0-beta.1.dmg
 plutil -lint Dockhand.app/Contents/Info.plist
 ```
 

@@ -1,6 +1,5 @@
 package io.github.lumkit.dockhand.core.app
 
-const val APP_VERSION = "1.0.0"
 const val PROJECT_URL = "https://github.com/lumkit/dockhand"
 
 data class OpenSourceLibrary(
