@@ -105,6 +105,10 @@ Download the latest macOS DMG from GitHub Releases:
 > **Code signing notice**
 >
 > Release packages are currently signed with an Apple Development certificate rather than a Developer ID Application certificate, and have not been notarized by Apple. Consequently, macOS Gatekeeper may present a security warning when the application is launched for the first time. This behavior is expected for the current beta release. Please confirm that the package was obtained from the official GitHub Releases page, then Control-click the application in Finder, select **Open**, and confirm the prompt. Do not disable Gatekeeper globally.
+>
+> If macOS blocks the DMG, open **System Settings → Privacy & Security → Security**, locate the blocked Dockhand message, click **Open Anyway**, authenticate, and open the DMG again.
+
+![macOS Gatekeeper allow Dockhand](docs/assets/install-gatekeeper-en.png)
 
 ## Help Translate
 

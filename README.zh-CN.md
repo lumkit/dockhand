@@ -105,6 +105,10 @@ Dockhand 针对大目录做了响应性优化：
 > **签名说明**
 >
 > 当前 Release 安装包使用 Apple Development 证书签名，尚未使用 Developer ID Application 证书，也未经过 Apple 公证。因此首次启动时，macOS Gatekeeper 可能显示安全警告，这属于当前测试版本的已知行为。请确认安装包来自官方 GitHub Releases，然后在 Finder 中按住 Control 键点按应用，选择“打开”并确认提示。请勿全局关闭 Gatekeeper。
+>
+> 如果 DMG 被 macOS 阻止，请打开 **系统设置 → 隐私与安全性 → 安全性**，找到被阻止的 Dockhand 提示，点击 **仍要打开**，完成认证后重新打开 DMG。
+
+![macOS 允许打开 Dockhand](docs/assets/install-gatekeeper-zh.png)
 
 ## 帮助翻译
 
