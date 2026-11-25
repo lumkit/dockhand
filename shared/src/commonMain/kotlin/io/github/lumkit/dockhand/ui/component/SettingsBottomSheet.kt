@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import io.github.lumkit.dockhand.core.app.APP_VERSION
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.app.PROJECT_URL
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
@@ -37,6 +38,11 @@ import dockhand.shared.generated.resources.about_project
 import dockhand.shared.generated.resources.about_section
 import dockhand.shared.generated.resources.about_version
 import dockhand.shared.generated.resources.appearance_section
+import dockhand.shared.generated.resources.language_en_us
+import dockhand.shared.generated.resources.language_system
+import dockhand.shared.generated.resources.language_zh_cn
+import dockhand.shared.generated.resources.settings_language
+import dockhand.shared.generated.resources.settings_language_summary
 import dockhand.shared.generated.resources.cache_clear_dialog_summary
 import dockhand.shared.generated.resources.cache_clear_dialog_title
 import dockhand.shared.generated.resources.settings_clear_cache
@@ -124,6 +130,8 @@ fun SettingsBottomSheet(
     onStartupRightPathChange: (String) -> Unit,
     colorSchemeMode: ColorSchemeMode,
     onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit,
     keyColor: Color,
     onKeyColorChange: (Color) -> Unit,
     interfaceScale: Int,
@@ -175,6 +183,13 @@ fun SettingsBottomSheet(
                     color = MiuixTheme.colorScheme.secondaryContainer,
                 ),
             ) {
+                OverlayDropdownPreference(
+                    items = AppLanguage.entries.map { appLanguageLabel(it) },
+                    selectedIndex = AppLanguage.entries.indexOf(language).coerceAtLeast(0),
+                    title = stringResource(Res.string.settings_language),
+                    summary = stringResource(Res.string.settings_language_summary),
+                    onSelectedIndexChange = { onLanguageChange(AppLanguage.entries[it]) },
+                )
                 OverlayDropdownPreference(
                     items = themeModes.map { themeModeLabel(it) },
                     selectedIndex = colorSchemeMode.ordinal,
@@ -403,6 +418,7 @@ fun SettingsBottomSheet(
 
     OpenSourceLicensesBottomSheet(
         show = showLicensesSheet,
+        language = language,
         onDismissRequest = { showLicensesSheet = false },
     )
 
@@ -464,6 +480,13 @@ fun SettingsBottomSheet(
 private fun Color.toHexString(): String {
     val rgb = toArgb() and 0xFFFFFF
     return "#" + rgb.toString(16).uppercase().padStart(6, '0')
+}
+
+@Composable
+private fun appLanguageLabel(language: AppLanguage): String = when (language) {
+    AppLanguage.System -> stringResource(Res.string.language_system)
+    AppLanguage.ChineseSimplified -> stringResource(Res.string.language_zh_cn)
+    AppLanguage.EnglishUS -> stringResource(Res.string.language_en_us)
 }
 
 @Composable

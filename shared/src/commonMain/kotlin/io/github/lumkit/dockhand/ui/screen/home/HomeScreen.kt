@@ -174,6 +174,10 @@ fun HomeScreen() {
     val uiState by homeViewModel.state.collectAsState()
     val tasks by homeViewModel.tasks.collectAsState()
 
+    LaunchedEffect(uiState.language) {
+        homeViewModel.onLanguageChanged()
+    }
+
     HomeScreenContent(
         uiState = uiState,
         tasks = tasks,
@@ -239,6 +243,7 @@ fun HomeScreen() {
         onStartupPathChange = homeViewModel::onStartupPathChange,
         onRestoreWindowSizeChange = homeViewModel::onRestoreWindowSizeChange,
         onColorSchemeModeChange = homeViewModel::onColorSchemeModeChange,
+        onLanguageChange = homeViewModel::onLanguageChange,
         onKeyColorChange = homeViewModel::onKeyColorChange,
         onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
         onShowHiddenItemsChange = homeViewModel::onShowHiddenItemsChange,
@@ -332,6 +337,7 @@ private fun HomeScreenContent(
     onStartupPathChange: (PaneId, String) -> Unit,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     onColorSchemeModeChange: (ColorSchemeMode) -> Unit,
+    onLanguageChange: (io.github.lumkit.dockhand.core.app.AppLanguage) -> Unit,
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
@@ -513,6 +519,8 @@ private fun HomeScreenContent(
                         restoreWindowSize = uiState.restoreWindowSize,
                         onRestoreWindowSizeChange = onRestoreWindowSizeChange,
                         colorSchemeMode = uiState.colorSchemeMode,
+                        language = uiState.language,
+                        onLanguageChange = onLanguageChange,
                         keyColor = uiState.keyColor,
                         interfaceScale = uiState.interfaceScale,
                         showHiddenItems = uiState.showHiddenItems,

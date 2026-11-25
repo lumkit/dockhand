@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FileSortMode
@@ -40,6 +41,7 @@ internal object SettingsKeys {
     val InterfaceScale = intPreferencesKey("interface_scale")
     val KeyColor = intPreferencesKey("key_color")
     val ShowHiddenItems = booleanPreferencesKey("show_hidden_items")
+    val AppLanguage = stringPreferencesKey("app_language")
     val FileLayoutMode = stringPreferencesKey("file_layout_mode")
     val FileSortMode = stringPreferencesKey("file_sort_mode")
 
@@ -151,6 +153,17 @@ class SettingsRepository(
 
     suspend fun setShowHiddenItems(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[SettingsKeys.ShowHiddenItems] = enabled }
+    }
+
+    val language: Flow<AppLanguage> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            AppLanguage.entries.firstOrNull { it.name == prefs[SettingsKeys.AppLanguage] }
+                ?: AppLanguage.System
+        }
+
+    suspend fun setLanguage(language: AppLanguage) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.AppLanguage] = language.name }
     }
 
     val fileLayoutMode: Flow<FileLayoutMode> = dataStore.data

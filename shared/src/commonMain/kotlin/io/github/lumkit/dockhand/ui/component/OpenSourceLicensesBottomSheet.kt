@@ -8,8 +8,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.about_licenses_title
 import io.github.lumkit.dockhand.core.app.OPEN_SOURCE_LIBRARIES
@@ -25,9 +27,16 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun OpenSourceLicensesBottomSheet(
     show: Boolean,
+    language: AppLanguage,
     onDismissRequest: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
+    val systemLocale = LocalLocale.current
+    val useEnglish = when (language) {
+        AppLanguage.EnglishUS -> true
+        AppLanguage.ChineseSimplified -> false
+        AppLanguage.System -> systemLocale.language.startsWith("en")
+    }
     val scrollState = rememberScrollState()
 
     OverlayBottomSheet(
@@ -45,7 +54,7 @@ fun OpenSourceLicensesBottomSheet(
             OPEN_SOURCE_LIBRARIES.forEach { library ->
                 ArrowPreference(
                     title = library.name + " " + library.version,
-                    summary = library.description,
+                    summary = if (useEnglish) library.descriptionEn else library.description,
                     endActions = {
                         Text(
                             text = library.author,

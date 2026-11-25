@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
@@ -258,6 +259,15 @@ class HomeViewModel(
                 .catch { }
                 .collect { shortcuts ->
                     _state.update { it.copy(shortcuts = shortcuts) }
+                }
+        }
+    }
+    private val languageJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.language
+                .catch { }
+                .collect { language ->
+                    _state.update { it.copy(language = language) }
                 }
         }
     }
@@ -529,6 +539,19 @@ class HomeViewModel(
             scope.launch { repository.setFileSortMode(mode) }
         }
         refreshAllPanes()
+    }
+
+    /** 语言切换后重新生成文件行 summary 等本地化文本。 */
+    fun onLanguageChanged() {
+        refreshAllPanes()
+    }
+
+    fun onLanguageChange(language: AppLanguage) {
+        if (_state.value.language == language) return
+        _state.update { it.copy(language = language) }
+        settings?.let { repository ->
+            scope.launch { repository.setLanguage(language) }
+        }
     }
 
     fun onClearCache() {

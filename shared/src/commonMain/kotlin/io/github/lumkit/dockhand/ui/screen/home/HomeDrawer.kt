@@ -56,6 +56,7 @@ import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
 import dockhand.shared.generated.resources.text_settings
 import dockhand.shared.generated.resources.text_storage_usage
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
@@ -121,6 +122,8 @@ fun HomeDrawerContent(
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     colorSchemeMode: ColorSchemeMode,
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit,
     keyColor: Color,
     interfaceScale: Int,
     showHiddenItems: Boolean,
@@ -289,6 +292,8 @@ fun HomeDrawerContent(
         restoreWindowSize = restoreWindowSize,
         onRestoreWindowSizeChange = onRestoreWindowSizeChange,
         colorSchemeMode = colorSchemeMode,
+        language = language,
+        onLanguageChange = onLanguageChange,
         keyColor = keyColor,
         interfaceScale = interfaceScale,
         showHiddenItems = showHiddenItems,

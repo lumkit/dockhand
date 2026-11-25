@@ -9,6 +9,7 @@ import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
+import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FilePlace
@@ -144,6 +145,7 @@ data class HomeUiState(
     val fileLayoutMode: FileLayoutMode = FileLayoutMode.List,
     val fileSortMode: FileSortMode = FileSortMode.NameAsc,
     val cacheBreakdown: CacheBreakdown = CacheBreakdown(),
+    val language: AppLanguage = AppLanguage.System,
     val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
         DefaultShortcutBindings.mapValues { listOf(it.value) },
     /** 当前显示进度弹窗的前台任务。 */

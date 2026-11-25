@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -11,6 +12,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.core.app.applyAppLanguage
 import io.github.lumkit.dockhand.core.thumbnail.installVideoThumbnailSupport
 import io.github.lumkit.dockhand.data.AppContainer
 import io.github.lumkit.dockhand.data.rememberAppContainer
@@ -39,6 +42,8 @@ fun App(container: AppContainer) {
             .apply { installVideoThumbnailSupport() }
             .build()
     }
+    val language by container.settings.language.collectAsState(initial = AppLanguage.System)
+    applyAppLanguage(language)
     val mode by container.settings.colorSchemeMode.collectAsState(initial = ColorSchemeMode.System)
     val keyColor by container.settings.keyColor.collectAsState(initial = null)
     val interfaceScale by container.settings.interfaceScale.collectAsState(initial = 100)
@@ -57,12 +62,14 @@ fun App(container: AppContainer) {
         )
     }
 
-    DockhandTheme(controller = controller) {
-        CompositionLocalProvider(
-            LocalAppContainer provides container,
-            LocalDensity provides scaledDensity,
-        ) {
-            HomeScreen()
+    key(language) {
+        DockhandTheme(controller = controller) {
+            CompositionLocalProvider(
+                LocalAppContainer provides container,
+                LocalDensity provides scaledDensity,
+            ) {
+                HomeScreen()
+            }
         }
     }
 }
