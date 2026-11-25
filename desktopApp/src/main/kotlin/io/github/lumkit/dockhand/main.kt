@@ -32,7 +32,10 @@ import top.yukonga.miuix.kmp.window.MiuixWindowProperties
 fun main() = application {
     val container = remember { createAppContainer() }
     DisposableEffect(container) {
-        onDispose { container.close() }
+        onDispose {
+            container.close()
+            container.cacheManager.clearIfPending()
+        }
     }
     val savedSize = remember(container) {
         runBlocking {
@@ -63,6 +66,8 @@ fun main() = application {
                     }
                 }
             }
+            container.close()
+            container.cacheManager.clearIfPending()
             exitApplication()
         },
         title = "Dockhand",

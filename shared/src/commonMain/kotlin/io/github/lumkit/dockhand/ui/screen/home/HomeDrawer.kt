@@ -56,6 +56,7 @@ import dockhand.shared.generated.resources.text_no_mtp_devices
 import dockhand.shared.generated.resources.text_pictures
 import dockhand.shared.generated.resources.text_settings
 import dockhand.shared.generated.resources.text_storage_usage
+import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.lumkit.dockhand.domain.model.FileLocation
@@ -131,6 +132,9 @@ fun HomeDrawerContent(
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
+    cacheBreakdown: CacheBreakdown,
+    onClearCache: () -> Unit,
+    onRefreshCacheSize: () -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -254,7 +258,10 @@ fun HomeDrawerContent(
         HorizontalDivider()
 
         Button(
-            onClick = { showSettings = true },
+            onClick = {
+                onRefreshCacheSize()
+                showSettings = true
+            },
             modifier = Modifier.fillMaxWidth()
                 .padding(8.dp),
         ) {
@@ -293,6 +300,8 @@ fun HomeDrawerContent(
         onKeyColorChange = onKeyColorChange,
         onInterfaceScaleChange = onInterfaceScaleChange,
         onShowHiddenItemsChange = onShowHiddenItemsChange,
+        cacheBreakdown = cacheBreakdown,
+        onClearCache = onClearCache,
     )
 }
 

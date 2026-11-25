@@ -1,6 +1,8 @@
 package io.github.lumkit.dockhand.data
 
 import androidx.compose.runtime.Composable
+import io.github.lumkit.dockhand.core.cache.CacheManager
+import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.platform.NoopTerminalLauncher
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
@@ -19,9 +21,16 @@ class AppContainer(
     val trashHistory: TrashHistoryRepository? = null,
     val terminalLauncher: TerminalLauncher = NoopTerminalLauncher,
     val taskNotifier: TaskNotifier = NoopTaskNotifier,
+    val cacheManager: CacheManager = NoopCacheManager,
     private val onClose: () -> Unit = {},
 ) {
-    fun close() = onClose()
+    private var closed = false
+
+    fun close() {
+        if (closed) return
+        closed = true
+        onClose()
+    }
 }
 
 /**

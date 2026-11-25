@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
+import io.github.lumkit.dockhand.core.cache.CacheManager
+import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
@@ -29,6 +31,7 @@ import io.github.lumkit.dockhand.ui.component.FileContextAction
 import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
+import dockhand.shared.generated.resources.cache_clear_pending
 import dockhand.shared.generated.resources.error_name_empty
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import dockhand.shared.generated.resources.error_name_invalid
@@ -85,6 +88,7 @@ class HomeViewModel(
     /** 侧边栏顺序等 UI 设置；测试可省略。 */
     private val settings: SettingsRepository? = null,
     private val terminalLauncher: TerminalLauncher? = null,
+    private val cacheManager: CacheManager = NoopCacheManager,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -236,6 +240,18 @@ class HomeViewModel(
         }
     }
     private var appliedShowHiddenItems: Boolean? = null
+    private val cacheSizeJob: Job = scope.launch { refreshCacheSizeNow() }
+
+    fun refreshCacheSize() {
+        scope.launch { refreshCacheSizeNow() }
+    }
+
+    private suspend fun refreshCacheSizeNow() {
+        runCatching { cacheManager.breakdown() }
+            .onSuccess { breakdown ->
+                _state.update { it.copy(cacheBreakdown = breakdown) }
+            }
+    }
     private val shortcutsJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.shortcuts
@@ -515,6 +531,15 @@ class HomeViewModel(
         refreshAllPanes()
     }
 
+    fun onClearCache() {
+        cacheManager.markClearPending()
+        scope.launch {
+            _state.update {
+                it.copy(snackbarMessage = getString(Res.string.cache_clear_pending))
+            }
+        }
+    }
+
     fun onRestoreWindowSizeChange(enabled: Boolean) {
         _state.update { it.copy(restoreWindowSize = enabled) }
         settings?.let { repository ->
@@ -584,6 +609,7 @@ class HomeViewModel(
                     } else {
                         entry.id
                     },
+                    selectionLeadId = entry.id,
                 )
             }
         }
@@ -604,6 +630,7 @@ class HomeViewModel(
                     it.copy(
                         selectedIds = ids,
                         selectionAnchorId = anchorId ?: it.selectionAnchorId,
+                        selectionLeadId = null,
                     )
                 }
             }
@@ -617,7 +644,11 @@ class HomeViewModel(
                 state
             } else {
                 state.updatePane(paneId) {
-                    it.copy(selectedIds = emptySet(), selectionAnchorId = null)
+                    it.copy(
+                        selectedIds = emptySet(),
+                        selectionAnchorId = null,
+                        selectionLeadId = null,
+                    )
                 }
             }
         }
@@ -838,16 +869,83 @@ class HomeViewModel(
         return true
     }
 
+    fun onGridColumnsChanged(paneId: PaneId, count: Int) {
+        if (count <= 0) return
+        _state.update { state ->
+            val pane = state.pane(paneId)
+            if (pane.gridColumnCount == count) state
+            else state.updatePane(paneId) { it.copy(gridColumnCount = count) }
+        }
+    }
+
+    fun onExtendSelectionUp(): Boolean = extendSelection(0, -1)
+
+    fun onExtendSelectionDown(): Boolean = extendSelection(0, 1)
+
+    fun onExtendSelectionLeft(): Boolean = extendSelection(-1, 0)
+
+    fun onExtendSelectionRight(): Boolean = extendSelection(1, 0)
+
+    private fun extendSelection(columnDelta: Int, itemDelta: Int): Boolean {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.selectedIds.isEmpty()) return false
+        val isGrid = _state.value.fileLayoutMode == FileLayoutMode.Grid
+        if (!isGrid && columnDelta != 0) return false
+        val anchorIndex = pane.entries.indexOfFirst { it.id == pane.selectionAnchorId }
+            .takeIf { it >= 0 }
+            ?: pane.entries.indexOfFirst { it.id in pane.selectedIds }
+        if (anchorIndex < 0) return false
+        val selectedIndices = pane.entries.indices.filter { pane.entries[it].id in pane.selectedIds }
+        val leadIndex = selectedIndices.maxByOrNull { kotlin.math.abs(it - anchorIndex) }
+            ?: anchorIndex
+        val step = if (isGrid) {
+            columnDelta + itemDelta * pane.gridColumnCount.coerceAtLeast(1)
+        } else {
+            itemDelta
+        }
+        val target = leadIndex + step
+        if (target !in pane.entries.indices) return false
+        val from = minOf(anchorIndex, target)
+        val to = maxOf(anchorIndex, target)
+        val ids = pane.entries.subList(from, to + 1).map { it.id }.toSet()
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    selectedIds = ids,
+                    selectionAnchorId = pane.entries[anchorIndex].id,
+                    selectionLeadId = pane.entries[target].id,
+                )
+            }
+        }
+        return true
+    }
+
     fun onSelectPrevious(): Boolean = moveSingleSelection(-1)
 
     fun onSelectNext(): Boolean = moveSingleSelection(1)
 
-    private fun moveSingleSelection(delta: Int): Boolean {
+    fun onSelectLeft(): Boolean {
+        if (_state.value.fileLayoutMode != FileLayoutMode.Grid) return false
+        return moveSingleSelection(-1, horizontal = true)
+    }
+
+    fun onSelectRight(): Boolean {
+        if (_state.value.fileLayoutMode != FileLayoutMode.Grid) return false
+        return moveSingleSelection(1, horizontal = true)
+    }
+
+    private fun moveSingleSelection(delta: Int, horizontal: Boolean = false): Boolean {
         val paneId = _state.value.focusedPane
         val pane = _state.value.pane(paneId)
         if (pane.selectedIds.size != 1) return false
         val current = pane.entries.indexOfFirst { it.id in pane.selectedIds }
-        val target = current + delta
+        val step = if (_state.value.fileLayoutMode == FileLayoutMode.Grid) {
+            if (horizontal) delta else delta * pane.gridColumnCount.coerceAtLeast(1)
+        } else {
+            delta
+        }
+        val target = current + step
         if (current < 0 || target !in pane.entries.indices) return false
         val entry = pane.entries[target]
         _state.update { state ->
@@ -855,6 +953,7 @@ class HomeViewModel(
                 it.copy(
                     selectedIds = setOf(entry.id),
                     selectionAnchorId = entry.id,
+                    selectionLeadId = entry.id,
                 )
             }
         }
@@ -869,6 +968,7 @@ class HomeViewModel(
                 it.copy(
                     selectedIds = pane.entries.map { row -> row.id }.toSet(),
                     selectionAnchorId = pane.entries.firstOrNull()?.id,
+                    selectionLeadId = pane.entries.lastOrNull()?.id,
                 )
             }
         }
@@ -897,7 +997,11 @@ class HomeViewModel(
                 state
             } else {
                 state.updatePane(paneId) {
-                    it.copy(selectedIds = setOf(entry.id), selectionAnchorId = entry.id)
+                    it.copy(
+                        selectedIds = setOf(entry.id),
+                        selectionAnchorId = entry.id,
+                        selectionLeadId = entry.id,
+                    )
                 }
             }
         }
@@ -1448,6 +1552,7 @@ class HomeViewModel(
                 it.copy(
                     selectedIds = setOf(entry.id),
                     selectionAnchorId = entry.id,
+                    selectionLeadId = entry.id,
                 )
             }
         }

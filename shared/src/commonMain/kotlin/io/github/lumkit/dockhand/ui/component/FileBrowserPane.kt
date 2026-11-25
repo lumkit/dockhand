@@ -174,6 +174,7 @@ fun FileBrowserPane(
     canMoveToOtherPane: Boolean = false,
     canTrash: Boolean = true,
     layoutMode: FileLayoutMode = FileLayoutMode.List,
+    onGridColumnsChanged: (Int) -> Unit = {},
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
@@ -374,6 +375,7 @@ fun FileBrowserPane(
                                     onSelectionChange = onSelectionChange,
                                     onInlineRename = onInlineRename,
                                     onInlineRenameStarted = onInlineRenameStarted,
+                                    onGridColumnsChanged = onGridColumnsChanged,
                                 )
                             } else {
                                 val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
@@ -432,13 +434,37 @@ fun FileBrowserPane(
                                     listState.scrollToItem(0)
                                 }
 
-                                LaunchedEffect(pane.selectedIds) {
-                                    if (pane.selectedIds.size != 1) return@LaunchedEffect
-                                    val index = pane.entries.indexOfFirst { it.id in pane.selectedIds }
+                                LaunchedEffect(pane.selectionLeadId) {
+                                    val leadId = pane.selectionLeadId ?: return@LaunchedEffect
+                                    val index = pane.entries.indexOfFirst { it.id == leadId }
                                     if (index < 0) return@LaunchedEffect
-                                    val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
-                                    if (!visible) {
-                                        listState.animateScrollToItem(index)
+                                    val info = listState.layoutInfo
+                                    val visible = info.visibleItemsInfo
+                                    val viewportStart = info.viewportStartOffset
+                                    val viewportEnd = info.viewportEndOffset
+                                    val viewportHeight = viewportEnd - viewportStart
+                                    val item = visible.firstOrNull { it.index == index }
+                                    if (item != null) {
+                                        when {
+                                            item.offset < viewportStart ->
+                                                listState.animateScrollToItem(index, 0)
+                                            item.offset + item.size > viewportEnd ->
+                                                listState.animateScrollToItem(
+                                                    index,
+                                                    -(viewportHeight - item.size).coerceAtLeast(0),
+                                                )
+                                        }
+                                    } else {
+                                        val first = visible.firstOrNull()?.index ?: 0
+                                        val last = visible.lastOrNull()?.index ?: 0
+                                        val itemHeight = visible.firstOrNull()?.size ?: 44
+                                        when {
+                                            index < first -> listState.animateScrollToItem(index, 0)
+                                            index > last -> listState.animateScrollToItem(
+                                                index,
+                                                -(viewportHeight - itemHeight).coerceAtLeast(0),
+                                            )
+                                        }
                                     }
                                 }
 
@@ -907,6 +933,7 @@ private fun FileGridContent(
     onSelectionChange: (Set<String>, String?) -> Unit,
     onInlineRename: (FileEntry, String) -> Unit,
     onInlineRenameStarted: () -> Unit,
+    onGridColumnsChanged: (Int) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
     val windowInfo = LocalWindowInfo.current
@@ -982,6 +1009,50 @@ private fun FileGridContent(
 
     LaunchedEffect(pane.location) {
         gridState.scrollToItem(0)
+    }
+
+    LaunchedEffect(pane.selectionLeadId) {
+        val leadId = pane.selectionLeadId ?: return@LaunchedEffect
+        val index = pane.entries.indexOfFirst { it.id == leadId }
+        if (index < 0) return@LaunchedEffect
+        val info = gridState.layoutInfo
+        val visible = info.visibleItemsInfo
+        val viewportStart = info.viewportStartOffset
+        val viewportEnd = info.viewportEndOffset
+        val viewportHeight = viewportEnd - viewportStart
+        val item = visible.firstOrNull { it.index == index }
+        if (item != null) {
+            when {
+                item.offset.y < viewportStart ->
+                    gridState.animateScrollToItem(index, 0)
+                item.offset.y + item.size.height > viewportEnd ->
+                    gridState.animateScrollToItem(
+                        index,
+                        -(viewportHeight - item.size.height).coerceAtLeast(0),
+                    )
+            }
+        } else {
+            val first = visible.firstOrNull()?.index ?: 0
+            val last = visible.lastOrNull()?.index ?: 0
+            val itemHeight = visible.firstOrNull()?.size?.height ?: 156
+            when {
+                index < first -> gridState.animateScrollToItem(index, 0)
+                index > last -> gridState.animateScrollToItem(
+                    index,
+                    -(viewportHeight - itemHeight).coerceAtLeast(0),
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow {
+            gridState.layoutInfo.visibleItemsInfo.map { it.offset.x }.distinct().size
+        }
+            .distinctUntilChanged()
+            .collect { columns ->
+                if (columns > 0) onGridColumnsChanged(columns)
+            }
     }
 
     LaunchedEffect(gridState) {

@@ -9,6 +9,7 @@ import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
+import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
@@ -40,10 +41,14 @@ data class FilePaneState(
     val selectedIds: Set<String> = emptySet(),
     /** Shift 区间选择的锚点项目。 */
     val selectionAnchorId: String? = null,
+    /** 键盘选择的最新项目，用于把该项滚动到可见边缘。 */
+    val selectionLeadId: String? = null,
     /** 当前打开的右键菜单项目。 */
     val contextMenuEntryId: String? = null,
     /** 快捷键请求进入行内重命名的项目。 */
     val inlineRenameEntryId: String? = null,
+    /** 网格当前列数；用于左右/上下方向扩选。 */
+    val gridColumnCount: Int = 1,
     val isLoading: Boolean = false,
     /** 分页后端是否还有下一页。 */
     val hasMore: Boolean = false,
@@ -138,6 +143,7 @@ data class HomeUiState(
     val showHiddenItems: Boolean = false,
     val fileLayoutMode: FileLayoutMode = FileLayoutMode.List,
     val fileSortMode: FileSortMode = FileSortMode.NameAsc,
+    val cacheBreakdown: CacheBreakdown = CacheBreakdown(),
     val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
         DefaultShortcutBindings.mapValues { listOf(it.value) },
     /** 当前显示进度弹窗的前台任务。 */

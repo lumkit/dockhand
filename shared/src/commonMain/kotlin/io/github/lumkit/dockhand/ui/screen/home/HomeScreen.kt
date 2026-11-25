@@ -168,6 +168,7 @@ fun HomeScreen() {
             files = container.files,
             settings = container.settings,
             terminalLauncher = container.terminalLauncher,
+            cacheManager = container.cacheManager,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -185,13 +186,20 @@ fun HomeScreen() {
         onClearSelection = homeViewModel::onClearSelectionShortcut,
         onSelectPrevious = homeViewModel::onSelectPrevious,
         onSelectNext = homeViewModel::onSelectNext,
+        onSelectLeft = homeViewModel::onSelectLeft,
+        onSelectRight = homeViewModel::onSelectRight,
         onOpenContextMenu = homeViewModel::onOpenContextMenu,
         onShortcutCopy = homeViewModel::onShortcutCopy,
         onShortcutMove = homeViewModel::onShortcutMove,
         onShortcutDelete = homeViewModel::onShortcutDelete,
         onShortcutRename = homeViewModel::onShortcutRename,
         onShortcutTrash = homeViewModel::onShortcutTrash,
+        onExtendSelectionUp = homeViewModel::onExtendSelectionUp,
+        onExtendSelectionDown = homeViewModel::onExtendSelectionDown,
+        onExtendSelectionLeft = homeViewModel::onExtendSelectionLeft,
+        onExtendSelectionRight = homeViewModel::onExtendSelectionRight,
         onInlineRenameStarted = homeViewModel::onInlineRenameStarted,
+        onGridColumnsChanged = homeViewModel::onGridColumnsChanged,
         onContextMenuRequest = homeViewModel::onContextMenuRequest,
         onContextMenuDismiss = homeViewModel::onContextMenuDismiss,
         onShortcutAdd = homeViewModel::onShortcutAdd,
@@ -234,6 +242,8 @@ fun HomeScreen() {
         onKeyColorChange = homeViewModel::onKeyColorChange,
         onInterfaceScaleChange = homeViewModel::onInterfaceScaleChange,
         onShowHiddenItemsChange = homeViewModel::onShowHiddenItemsChange,
+        onClearCache = homeViewModel::onClearCache,
+        onRefreshCacheSize = homeViewModel::refreshCacheSize,
         onFileLayoutModeChange = homeViewModel::onFileLayoutModeChange,
         onFileSortModeChange = homeViewModel::onFileSortModeChange,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
@@ -269,13 +279,20 @@ private fun HomeScreenContent(
     onClearSelection: () -> Unit,
     onSelectPrevious: () -> Boolean,
     onSelectNext: () -> Boolean,
+    onSelectLeft: () -> Boolean,
+    onSelectRight: () -> Boolean,
     onOpenContextMenu: () -> Boolean,
     onShortcutCopy: () -> Boolean,
     onShortcutMove: () -> Boolean,
     onShortcutDelete: () -> Boolean,
     onShortcutRename: () -> Boolean,
     onShortcutTrash: () -> Boolean,
+    onExtendSelectionUp: () -> Boolean,
+    onExtendSelectionDown: () -> Boolean,
+    onExtendSelectionLeft: () -> Boolean,
+    onExtendSelectionRight: () -> Boolean,
     onInlineRenameStarted: (PaneId) -> Unit,
+    onGridColumnsChanged: (PaneId, Int) -> Unit,
     onContextMenuRequest: (PaneId, String) -> Unit,
     onContextMenuDismiss: (PaneId) -> Unit,
     onShortcutAdd: (ShortcutAction, ShortcutKey) -> Unit,
@@ -318,6 +335,8 @@ private fun HomeScreenContent(
     onKeyColorChange: (Color) -> Unit,
     onInterfaceScaleChange: (Int) -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
+    onClearCache: () -> Unit,
+    onRefreshCacheSize: () -> Unit,
     onFileLayoutModeChange: (FileLayoutMode) -> Unit,
     onFileSortModeChange: (FileSortMode) -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
@@ -346,12 +365,18 @@ private fun HomeScreenContent(
     val currentClearSelection by rememberUpdatedState(onClearSelection)
     val currentSelectPrevious by rememberUpdatedState(onSelectPrevious)
     val currentSelectNext by rememberUpdatedState(onSelectNext)
+    val currentSelectLeft by rememberUpdatedState(onSelectLeft)
+    val currentSelectRight by rememberUpdatedState(onSelectRight)
     val currentOpenContextMenu by rememberUpdatedState(onOpenContextMenu)
     val currentShortcutCopy by rememberUpdatedState(onShortcutCopy)
     val currentShortcutMove by rememberUpdatedState(onShortcutMove)
     val currentShortcutDelete by rememberUpdatedState(onShortcutDelete)
     val currentShortcutRename by rememberUpdatedState(onShortcutRename)
     val currentShortcutTrash by rememberUpdatedState(onShortcutTrash)
+    val currentExtendUp by rememberUpdatedState(onExtendSelectionUp)
+    val currentExtendDown by rememberUpdatedState(onExtendSelectionDown)
+    val currentExtendLeft by rememberUpdatedState(onExtendSelectionLeft)
+    val currentExtendRight by rememberUpdatedState(onExtendSelectionRight)
     val currentShortcuts by rememberUpdatedState(shortcuts)
     DisposableEffect(Unit) {
         ShortcutDispatcher.setHandler { event ->
@@ -378,12 +403,18 @@ private fun HomeScreenContent(
 
                     ShortcutAction.SelectPrevious -> currentSelectPrevious()
                     ShortcutAction.SelectNext -> currentSelectNext()
+                    ShortcutAction.SelectLeft -> currentSelectLeft()
+                    ShortcutAction.SelectRight -> currentSelectRight()
                     ShortcutAction.OpenContextMenu -> currentOpenContextMenu()
                     ShortcutAction.Copy -> currentShortcutCopy()
                     ShortcutAction.Move -> currentShortcutMove()
                     ShortcutAction.Delete -> currentShortcutDelete()
                     ShortcutAction.Rename -> currentShortcutRename()
                     ShortcutAction.Trash -> currentShortcutTrash()
+                    ShortcutAction.ExtendSelectionUp -> currentExtendUp()
+                    ShortcutAction.ExtendSelectionDown -> currentExtendDown()
+                    ShortcutAction.ExtendSelectionLeft -> currentExtendLeft()
+                    ShortcutAction.ExtendSelectionRight -> currentExtendRight()
                     null -> false
                 }
             }
@@ -493,6 +524,9 @@ private fun HomeScreenContent(
                         onKeyColorChange = onKeyColorChange,
                         onInterfaceScaleChange = onInterfaceScaleChange,
                         onShowHiddenItemsChange = onShowHiddenItemsChange,
+                        cacheBreakdown = uiState.cacheBreakdown,
+                        onClearCache = onClearCache,
+                        onRefreshCacheSize = onRefreshCacheSize,
                         onPlaceMove = onPlaceMove,
                         onMtpStorageClick = onMtpStorageClick,
                         onMtpShortcutMove = onMtpShortcutMove,
@@ -570,6 +604,7 @@ private fun HomeScreenContent(
                                 onContextMenuRequest = onContextMenuRequest,
                                 onContextMenuDismiss = onContextMenuDismiss,
                                 onInlineRenameStarted = onInlineRenameStarted,
+                                onGridColumnsChanged = onGridColumnsChanged,
                                 onEntryContextAction = onEntryContextAction,
                                 onInlineRename = onInlineRename,
                                 onRetry = onRetry,

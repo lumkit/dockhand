@@ -33,6 +33,7 @@ fun DualPaneBrowser(
     onContextMenuRequest: (PaneId, String) -> Unit,
     onContextMenuDismiss: (PaneId) -> Unit,
     onInlineRenameStarted: (PaneId) -> Unit,
+    onGridColumnsChanged: (PaneId, Int) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onInlineRename: (PaneId, FileEntry, String) -> Unit,
     onRetry: (PaneId) -> Unit,
@@ -97,6 +98,7 @@ fun DualPaneBrowser(
                 onContextMenuRequest = { id -> onContextMenuRequest(PaneId.Left, id) },
                 onContextMenuDismiss = { onContextMenuDismiss(PaneId.Left) },
                 onInlineRenameStarted = { onInlineRenameStarted(PaneId.Left) },
+                onGridColumnsChanged = { onGridColumnsChanged(PaneId.Left, it) },
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Left, entry, action)
                 },
@@ -127,6 +129,7 @@ fun DualPaneBrowser(
                 onContextMenuRequest = { id -> onContextMenuRequest(PaneId.Right, id) },
                 onContextMenuDismiss = { onContextMenuDismiss(PaneId.Right) },
                 onInlineRenameStarted = { onInlineRenameStarted(PaneId.Right) },
+                onGridColumnsChanged = { onGridColumnsChanged(PaneId.Right, it) },
                 onContextAction = { entry, action ->
                     onEntryContextAction(PaneId.Right, entry, action)
                 },

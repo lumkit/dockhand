@@ -16,12 +16,18 @@ enum class ShortcutAction {
     ClearSelection,
     SelectPrevious,
     SelectNext,
+    SelectLeft,
+    SelectRight,
     OpenContextMenu,
     Copy,
     Move,
     Delete,
     Rename,
     Trash,
+    ExtendSelectionUp,
+    ExtendSelectionDown,
+    ExtendSelectionLeft,
+    ExtendSelectionRight,
 }
 
 /** 一个按键组合；meta 对应 macOS Command。 */
@@ -57,12 +63,18 @@ val DefaultShortcutBindings: Map<ShortcutAction, ShortcutKey> = mapOf(
     ShortcutAction.ClearSelection to ShortcutKey(Key.Escape),
     ShortcutAction.SelectPrevious to ShortcutKey(Key.DirectionUp, alt = true),
     ShortcutAction.SelectNext to ShortcutKey(Key.DirectionDown, alt = true),
+    ShortcutAction.SelectLeft to ShortcutKey(Key.DirectionLeft, alt = true),
+    ShortcutAction.SelectRight to ShortcutKey(Key.DirectionRight, alt = true),
     ShortcutAction.OpenContextMenu to ShortcutKey(Key.Enter, meta = true, shift = true),
     ShortcutAction.Copy to ShortcutKey(Key.C, meta = true, shift = true),
     ShortcutAction.Move to ShortcutKey(Key.M, meta = true, shift = true),
     ShortcutAction.Delete to ShortcutKey(Key.Backspace, meta = true, shift = true),
     ShortcutAction.Rename to ShortcutKey(Key.R, meta = true, shift = true),
     ShortcutAction.Trash to ShortcutKey(Key.Backspace, meta = true),
+    ShortcutAction.ExtendSelectionUp to ShortcutKey(Key.DirectionUp, shift = true),
+    ShortcutAction.ExtendSelectionDown to ShortcutKey(Key.DirectionDown, shift = true),
+    ShortcutAction.ExtendSelectionLeft to ShortcutKey(Key.DirectionLeft, shift = true),
+    ShortcutAction.ExtendSelectionRight to ShortcutKey(Key.DirectionRight, shift = true),
 )
 
 fun ShortcutKey.encode(): String =

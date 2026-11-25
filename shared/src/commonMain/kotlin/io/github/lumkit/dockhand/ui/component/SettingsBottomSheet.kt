@@ -29,6 +29,10 @@ import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.appearance_section
+import dockhand.shared.generated.resources.cache_clear_dialog_summary
+import dockhand.shared.generated.resources.cache_clear_dialog_title
+import dockhand.shared.generated.resources.settings_clear_cache
+import dockhand.shared.generated.resources.settings_clear_cache_summary
 import dockhand.shared.generated.resources.interface_scale
 import dockhand.shared.generated.resources.interface_scale_range
 import dockhand.shared.generated.resources.interface_scale_summary
@@ -60,12 +64,14 @@ import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_trash
 import dockhand.shared.generated.resources.text_pictures
 import dockhand.shared.generated.resources.text_settings
+import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.ui.screen.home.STARTUP_PATH_LAST
+import io.github.lumkit.dockhand.ui.screen.home.formatFileSize
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -121,6 +127,8 @@ fun SettingsBottomSheet(
     onResetShortcuts: () -> Unit,
     restoreWindowSize: Boolean,
     onRestoreWindowSizeChange: (Boolean) -> Unit,
+    cacheBreakdown: CacheBreakdown,
+    onClearCache: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val localPlaces = remember(places) {
@@ -132,6 +140,7 @@ fun SettingsBottomSheet(
     val scaleInput = rememberTextFieldState()
     var showColorDialog by remember { mutableStateOf(false) }
     var showShortcutSheet by remember { mutableStateOf(false) }
+    var showCacheDialog by remember { mutableStateOf(false) }
     var dialogColor by remember { mutableStateOf(keyColor) }
     val themeModes = ColorSchemeMode.entries
     val scrollState = rememberScrollState()
@@ -224,6 +233,14 @@ fun SettingsBottomSheet(
                     summary = stringResource(Res.string.shortcut_settings_summary),
                     onClick = { showShortcutSheet = true },
                 )
+                ArrowPreference(
+                    title = stringResource(Res.string.settings_clear_cache),
+                    summary = stringResource(
+                        Res.string.settings_clear_cache_summary,
+                        formatFileSize(cacheBreakdown.totalBytes),
+                    ),
+                    onClick = { showCacheDialog = true },
+                )
             }
 
             Spacer(Modifier.height(16.dp))
@@ -307,6 +324,42 @@ fun SettingsBottomSheet(
                     ) {
                         Text(text = stringResource(Res.string.action_cancel))
                     }
+                }
+            }
+        }
+    }
+
+    if (showCacheDialog) {
+        OverlayDialog(
+            show = true,
+            title = stringResource(Res.string.cache_clear_dialog_title),
+            summary = stringResource(
+                Res.string.cache_clear_dialog_summary,
+                formatFileSize(cacheBreakdown.preferencesBytes),
+                formatFileSize(cacheBreakdown.databaseBytes),
+                formatFileSize(cacheBreakdown.thumbnailBytes),
+            ),
+            onDismissRequest = { showCacheDialog = false },
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = {
+                        onClearCache()
+                        showCacheDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = stringResource(Res.string.action_confirm))
+                }
+                Button(
+                    onClick = { showCacheDialog = false },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = stringResource(Res.string.action_cancel))
                 }
             }
         }

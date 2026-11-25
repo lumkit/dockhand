@@ -44,9 +44,15 @@ import dockhand.shared.generated.resources.shortcut_action_delete
 import dockhand.shared.generated.resources.shortcut_action_move
 import dockhand.shared.generated.resources.shortcut_action_next
 import dockhand.shared.generated.resources.shortcut_action_previous
+import dockhand.shared.generated.resources.shortcut_action_extend_down
+import dockhand.shared.generated.resources.shortcut_action_extend_left
+import dockhand.shared.generated.resources.shortcut_action_extend_right
+import dockhand.shared.generated.resources.shortcut_action_extend_up
 import dockhand.shared.generated.resources.shortcut_action_rename
 import dockhand.shared.generated.resources.shortcut_action_trash
 import dockhand.shared.generated.resources.shortcut_action_select_all
+import dockhand.shared.generated.resources.shortcut_action_select_left
+import dockhand.shared.generated.resources.shortcut_action_select_right
 import dockhand.shared.generated.resources.shortcut_add
 import dockhand.shared.generated.resources.shortcut_conflict
 import dockhand.shared.generated.resources.shortcut_delete
@@ -304,10 +310,16 @@ private fun ShortcutAction.label(): String = when (this) {
     ShortcutAction.ClearSelection -> stringResource(Res.string.shortcut_action_clear_selection)
     ShortcutAction.SelectPrevious -> stringResource(Res.string.shortcut_action_previous)
     ShortcutAction.SelectNext -> stringResource(Res.string.shortcut_action_next)
+    ShortcutAction.SelectLeft -> stringResource(Res.string.shortcut_action_select_left)
+    ShortcutAction.SelectRight -> stringResource(Res.string.shortcut_action_select_right)
     ShortcutAction.OpenContextMenu -> stringResource(Res.string.shortcut_action_context_menu)
     ShortcutAction.Copy -> stringResource(Res.string.shortcut_action_copy)
     ShortcutAction.Move -> stringResource(Res.string.shortcut_action_move)
     ShortcutAction.Delete -> stringResource(Res.string.shortcut_action_delete)
     ShortcutAction.Rename -> stringResource(Res.string.shortcut_action_rename)
     ShortcutAction.Trash -> stringResource(Res.string.shortcut_action_trash)
+    ShortcutAction.ExtendSelectionUp -> stringResource(Res.string.shortcut_action_extend_up)
+    ShortcutAction.ExtendSelectionDown -> stringResource(Res.string.shortcut_action_extend_down)
+    ShortcutAction.ExtendSelectionLeft -> stringResource(Res.string.shortcut_action_extend_left)
+    ShortcutAction.ExtendSelectionRight -> stringResource(Res.string.shortcut_action_extend_right)
 }
