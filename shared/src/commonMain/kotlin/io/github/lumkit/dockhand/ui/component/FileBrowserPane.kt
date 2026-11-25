@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -91,6 +92,10 @@ import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_compress
 import dockhand.shared.generated.resources.action_extract
+import dockhand.shared.generated.resources.action_open
+import dockhand.shared.generated.resources.action_open_with
+import dockhand.shared.generated.resources.open_with_empty
+import dockhand.shared.generated.resources.open_with_loading
 import dockhand.shared.generated.resources.action_copy_to_left
 import dockhand.shared.generated.resources.action_copy_to_right
 import dockhand.shared.generated.resources.action_delete
@@ -110,6 +115,8 @@ import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
 import io.github.lumkit.dockhand.core.archive.archiveFormatForName
+import io.github.lumkit.dockhand.ui.component.LocalOpenWithSelect
+import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
@@ -614,6 +621,10 @@ private fun FileEntryRow(
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
     val focusManager = LocalFocusManager.current
     val infoLabel = stringResource(Res.string.action_view_info)
+    val openLabel = stringResource(Res.string.action_open)
+    val openWithLabel = stringResource(Res.string.action_open_with)
+    val openWithState = LocalOpenWithState.current
+    val openWithSelect = LocalOpenWithSelect.current
     val copyLabel = stringResource(
         if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
     )
@@ -697,6 +708,32 @@ private fun FileEntryRow(
 
         if (isLocal) {
             val fileActions = buildList {
+                add(DropdownItem(text = openLabel, onClick = { dispatch(FileContextAction.Open) }))
+                if (!row.isDirectory) {
+                    val current = openWithState?.takeIf { it.entry.id == row.entry.id }
+                    val children = when {
+                        current == null || current.loading ->
+                            listOf(DropdownItem(text = stringResource(Res.string.open_with_loading), enabled = false))
+                        current.applications.isEmpty() ->
+                            listOf(DropdownItem(text = stringResource(Res.string.open_with_empty), enabled = false))
+                        else -> current.applications.map { app ->
+                            DropdownItem(
+                                text = app.name,
+                                icon = app.iconPath?.let { iconPath ->
+                                    { modifier ->
+                                        AsyncImage(
+                                            model = iconPath,
+                                            contentDescription = null,
+                                            modifier = modifier.size(24.dp),
+                                        )
+                                    }
+                                },
+                                onClick = { openWithSelect(row.entry, app) },
+                            )
+                        }
+                    }
+                    add(DropdownItem(text = openWithLabel, children = children))
+                }
                 if (canTransferToOtherPane) {
                     add(
                         DropdownItem(
@@ -1498,6 +1535,10 @@ private fun FileGridContextMenu(
     val isArchive = archiveFormatForName(entry.name) != null
     val servicesLabel = stringResource(Res.string.action_services)
     val infoLabel = stringResource(Res.string.action_view_info)
+    val openLabel = stringResource(Res.string.action_open)
+    val openWithLabel = stringResource(Res.string.action_open_with)
+    val openWithState = LocalOpenWithState.current
+    val openWithSelect = LocalOpenWithSelect.current
     val terminalTabLabel = stringResource(
         if (entry.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
     )
@@ -1515,6 +1556,32 @@ private fun FileGridContextMenu(
         )
         if (isLocal) {
             add(DropdownEntry(items = buildList {
+                add(DropdownItem(text = openLabel, onClick = { onAction(FileContextAction.Open) }))
+                if (!entry.isDirectory) {
+                    val current = openWithState?.takeIf { it.entry.id == entry.entry.id }
+                    val children = when {
+                        current == null || current.loading ->
+                            listOf(DropdownItem(text = stringResource(Res.string.open_with_loading), enabled = false))
+                        current.applications.isEmpty() ->
+                            listOf(DropdownItem(text = stringResource(Res.string.open_with_empty), enabled = false))
+                        else -> current.applications.map { app ->
+                            DropdownItem(
+                                text = app.name,
+                                icon = app.iconPath?.let { iconPath ->
+                                    { modifier ->
+                                        AsyncImage(
+                                            model = iconPath,
+                                            contentDescription = null,
+                                            modifier = modifier.size(24.dp),
+                                        )
+                                    }
+                                },
+                                onClick = { openWithSelect(entry.entry, app) },
+                            )
+                        }
+                    }
+                    add(DropdownItem(text = openWithLabel, children = children))
+                }
                 if (canTransferToOtherPane) {
                     add(DropdownItem(text = copyLabel, onClick = { onAction(FileContextAction.Copy) }))
                     if (canMoveToOtherPane) {

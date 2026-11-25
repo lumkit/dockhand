@@ -5,6 +5,7 @@ import coil3.Uri
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.ic_file_folder
 import dockhand.shared.generated.resources.ic_file_generic
+import io.github.lumkit.dockhand.core.archive.archiveFormatForName
 import io.github.lumkit.dockhand.core.thumbnail.VideoThumbnailRequest
 import dockhand.shared.generated.resources.ic_file_ai
 import dockhand.shared.generated.resources.ic_file_avi
@@ -111,6 +112,7 @@ private fun FileEntry.thumbnailModel(): Any? {
 /** 图标在构建行数据时决定，LazyColumn 内不再做扩展名判断。 */
 private fun FileEntry.fileIcon(): DrawableResource {
     if (isDirectory) return Res.drawable.ic_file_folder
+    if (archiveFormatForName(name) != null) return Res.drawable.ic_file_zip
     return when (extension?.lowercase()) {
         "ai" -> Res.drawable.ic_file_ai
         "avi" -> Res.drawable.ic_file_avi
@@ -141,7 +143,6 @@ private fun FileEntry.fileIcon(): DrawableResource {
         "ps" -> Res.drawable.ic_file_ps
         "psd" -> Res.drawable.ic_file_psd
         "pub" -> Res.drawable.ic_file_pub
-        "rar" -> Res.drawable.ic_file_rar
         "raw" -> Res.drawable.ic_file_raw
         "rss" -> Res.drawable.ic_file_rss
         "svg" -> Res.drawable.ic_file_svg
@@ -151,7 +152,6 @@ private fun FileEntry.fileIcon(): DrawableResource {
         "wma" -> Res.drawable.ic_file_wma
         "xml", "json" -> Res.drawable.ic_file_xml
         "xsl", "xslt" -> Res.drawable.ic_file_xsl
-        "zip", "7z", "gz", "tar" -> Res.drawable.ic_file_zip
         else -> Res.drawable.ic_file_generic
     }
 }

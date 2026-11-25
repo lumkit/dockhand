@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import io.github.lumkit.dockhand.core.archive.LocalArchiveService
 import io.github.lumkit.dockhand.core.cache.LocalCacheManager
+import io.github.lumkit.dockhand.core.platform.DesktopFileOpener
 import io.github.lumkit.dockhand.core.platform.MacTerminalLauncher
 import io.github.lumkit.dockhand.core.platform.cleanupTaskTempDirectories
 import io.github.lumkit.dockhand.core.platform.defaultAppDataDirectory
@@ -54,6 +55,7 @@ fun createAppContainer(): AppContainer {
         taskNotifier = MacTaskNotifier(),
         cacheManager = LocalCacheManager(dataDir),
         archiveService = LocalArchiveService(),
+        fileOpener = DesktopFileOpener(),
         onClose = {
             scope.cancel()
             database.close()

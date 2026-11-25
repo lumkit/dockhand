@@ -69,6 +69,8 @@ import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CompressRequestDialog
 import io.github.lumkit.dockhand.ui.component.ExtractPasswordDialog
 import io.github.lumkit.dockhand.ui.component.ExtractRequestDialog
+import io.github.lumkit.dockhand.ui.component.LocalOpenWithSelect
+import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
@@ -173,6 +175,7 @@ fun HomeScreen() {
             terminalLauncher = container.terminalLauncher,
             cacheManager = container.cacheManager,
             archiveService = container.archiveService,
+            fileOpener = container.fileOpener,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -260,6 +263,7 @@ fun HomeScreen() {
         onExtractPasswordChange = homeViewModel::onExtractPasswordChange,
         onExtractPasswordDismiss = homeViewModel::onExtractPasswordDismiss,
         onExtractPasswordConfirm = homeViewModel::onExtractPasswordConfirm,
+        onOpenWithApplicationSelected = homeViewModel::onOpenWithApplicationSelected,
         onTrashRequestBackgroundChange = homeViewModel::onTrashRequestBackgroundChange,
         onTrashRequestDismiss = homeViewModel::onTrashRequestDismiss,
         onTrashRequestConfirm = homeViewModel::onTrashRequestConfirm,
@@ -376,6 +380,7 @@ private fun HomeScreenContent(
     onExtractPasswordChange: (String) -> Unit,
     onExtractPasswordDismiss: () -> Unit,
     onExtractPasswordConfirm: () -> Unit,
+    onOpenWithApplicationSelected: (FileEntry, io.github.lumkit.dockhand.core.platform.ExternalApplication) -> Unit,
     onTrashRequestBackgroundChange: (Boolean) -> Unit,
     onTrashRequestDismiss: () -> Unit,
     onTrashRequestConfirm: () -> Unit,
@@ -444,6 +449,7 @@ private fun HomeScreenContent(
                     currentUiState.compressRequest != null ||
                     currentUiState.extractRequest != null ||
                     currentUiState.extractPasswordRequest != null ||
+                    currentUiState.openWith != null ||
                     currentUiState.trashRequest != null
             if (modalOpen) {
                 false
@@ -493,7 +499,11 @@ private fun HomeScreenContent(
         onSnackbarShown()
     }
 
-    CompositionLocalProvider(LocalInlineRenameBounds provides inlineRenameBounds) {
+    CompositionLocalProvider(
+        LocalInlineRenameBounds provides inlineRenameBounds,
+        LocalOpenWithState provides uiState.openWith,
+        LocalOpenWithSelect provides onOpenWithApplicationSelected,
+    ) {
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()

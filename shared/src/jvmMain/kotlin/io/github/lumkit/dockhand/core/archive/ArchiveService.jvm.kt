@@ -33,9 +33,11 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Date
+import java.util.concurrent.atomic.AtomicBoolean
 
 class LocalArchiveService : ArchiveService {
     override suspend fun compress(request: CompressRequest, callbacks: CompressCallbacks) =
@@ -68,9 +70,22 @@ class LocalArchiveService : ArchiveService {
             var completedBytes = 0L
             val createdTargets = jobs.map { it.target }
 
-            fun report(size: Long) {
+            var lastBytes = 0L
+            var lastBytesAt = 0L
+            fun bytes(delta: Long) {
+                completedBytes += delta.coerceAtLeast(0)
+                val now = System.nanoTime()
+                if (completedBytes - lastBytes >= 256 * 1024 ||
+                    now - lastBytesAt >= 100_000_000 ||
+                    completedBytes >= totalBytes
+                ) {
+                    lastBytes = completedBytes
+                    lastBytesAt = now
+                    callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
+                }
+            }
+            fun fileDone() {
                 completedFiles++
-                completedBytes += size
                 callbacks.onProgress(completedFiles, totalFiles.toLong())
                 callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
             }
@@ -79,18 +94,18 @@ class LocalArchiveService : ArchiveService {
                 jobs.forEach { job ->
                     if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
                     when (request.format) {
-                        ArchiveFormat.Zip -> writeZip(job, request, callbacks) { report(it) }
-                        ArchiveFormat.SevenZ -> writeSevenZ(job, request, callbacks) { report(it) }
+                        ArchiveFormat.Zip -> writeZip(job, request, callbacks, ::bytes, ::fileDone)
+                        ArchiveFormat.SevenZ -> writeSevenZ(job, request, callbacks, ::bytes, ::fileDone)
                         ArchiveFormat.Tar,
                         ArchiveFormat.TarGz,
                         ArchiveFormat.TarXz,
                         ArchiveFormat.TarBz2,
                         ArchiveFormat.TarZst,
-                        -> writeTar(job, request, callbacks) { report(it) }
+                        -> writeTar(job, request, callbacks, ::bytes, ::fileDone)
                         ArchiveFormat.Gzip,
                         ArchiveFormat.Xz,
                         ArchiveFormat.Zstd,
-                        -> writeSingleStream(job, request, callbacks) { report(it) }
+                        -> writeSingleStream(job, request, callbacks, ::bytes, ::fileDone)
                     }
                     if (request.deleteSource) {
                         job.roots.forEach { root ->
@@ -129,26 +144,40 @@ class LocalArchiveService : ArchiveService {
             }
             var completedFiles = 0L
             var completedBytes = 0L
-            fun report(size: Long) {
+            val totalBytes = archive.length().coerceAtLeast(1)
+            var lastBytes = 0L
+            var lastBytesAt = 0L
+            fun bytes(delta: Long) {
+                completedBytes += delta.coerceAtLeast(0)
+                val now = System.nanoTime()
+                if (completedBytes - lastBytes >= 256 * 1024 ||
+                    now - lastBytesAt >= 100_000_000 ||
+                    completedBytes >= totalBytes
+                ) {
+                    lastBytes = completedBytes
+                    lastBytesAt = now
+                    callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
+                }
+            }
+            fun fileDone() {
                 completedFiles++
-                completedBytes += size.coerceAtLeast(0)
                 callbacks.onProgress(completedFiles, null)
-                callbacks.onBytes(completedBytes, archive.length().coerceAtLeast(1))
+                callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
             }
             try {
                 when (format) {
-                    ArchiveFormat.Zip -> extractZip(archive, root, request.password, callbacks, ::report)
-                    ArchiveFormat.SevenZ -> extractSevenZ(archive, root, request.password, callbacks, ::report)
+                    ArchiveFormat.Zip -> extractZip(archive, root, request.password, callbacks, ::bytes, ::fileDone)
+                    ArchiveFormat.SevenZ -> extractSevenZ(archive, root, request.password, callbacks, ::bytes, ::fileDone)
                     ArchiveFormat.Tar,
                     ArchiveFormat.TarGz,
                     ArchiveFormat.TarXz,
                     ArchiveFormat.TarBz2,
                     ArchiveFormat.TarZst,
-                    -> extractTar(archive, root, format, callbacks, ::report)
+                    -> extractTar(archive, root, format, callbacks, ::bytes, ::fileDone)
                     ArchiveFormat.Gzip,
                     ArchiveFormat.Xz,
                     ArchiveFormat.Zstd,
-                    -> extractSingleStream(archive, root, format, callbacks, ::report)
+                    -> extractSingleStream(archive, root, format, callbacks, ::bytes, ::fileDone)
                 }
                 if (request.deleteSource) archive.delete()
             } catch (error: Throwable) {
@@ -179,19 +208,26 @@ class LocalArchiveService : ArchiveService {
         root: File,
         password: String,
         callbacks: ExtractCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val zip = ZipFile(archive)
         if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
-        zip.fileHeaders.forEach { header ->
-            if (callbacks.isCancelled()) throw CancellationException("解压已取消")
-            val target = safeTarget(root, header.fileName)
-            if (header.isDirectory) {
-                target.mkdirs()
-            } else {
-                target.parentFile?.mkdirs()
-                zip.extractFile(header, target.parentFile.absolutePath, target.name)
-                report(header.uncompressedSize)
+        withZipProgress(
+            zip = zip,
+            onBytes = onBytes,
+            isCancelled = { callbacks.isCancelled() },
+        ) {
+            zip.fileHeaders.forEach { header ->
+                if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                val target = safeTarget(root, header.fileName)
+                if (header.isDirectory) {
+                    target.mkdirs()
+                } else {
+                    target.parentFile?.mkdirs()
+                    zip.extractFile(header, target.parentFile.absolutePath, target.name)
+                    onFileDone()
+                }
             }
         }
     }
@@ -201,7 +237,8 @@ class LocalArchiveService : ArchiveService {
         root: File,
         password: String,
         callbacks: ExtractCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val passwordChars = password.takeIf { it.isNotEmpty() }?.toCharArray()
         SevenZFile(archive, passwordChars).use { seven ->
@@ -220,9 +257,10 @@ class LocalArchiveService : ArchiveService {
                             val read = seven.read(buffer)
                             if (read < 0) break
                             output.write(buffer, 0, read)
+                            onBytes(read.toLong())
                         }
                     }
-                    report(entry.size)
+                    onFileDone()
                 }
                 entry = seven.nextEntry
             }
@@ -234,9 +272,12 @@ class LocalArchiveService : ArchiveService {
         root: File,
         format: ArchiveFormat,
         callbacks: ExtractCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
-        val fileInput = BufferedInputStream(FileInputStream(archive))
+        val countingInput = CountingInputStream(BufferedInputStream(FileInputStream(archive)))
+        val fileInput = countingInput
+        var reportedBytes = 0L
         val decompressed = when (format) {
             ArchiveFormat.TarGz -> GzipCompressorInputStream(fileInput)
             ArchiveFormat.TarXz -> XZCompressorInputStream(fileInput)
@@ -253,8 +294,21 @@ class LocalArchiveService : ArchiveService {
                     target.mkdirs()
                 } else {
                     target.parentFile?.mkdirs()
-                    target.outputStream().use { output -> tar.copyTo(output) }
-                    report(entry.size)
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                            val read = tar.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            val position = countingInput.count
+                            if (position > reportedBytes) {
+                                onBytes(position - reportedBytes)
+                                reportedBytes = position
+                            }
+                        }
+                    }
+                    onFileDone()
                 }
                 entry = tar.nextEntry
             }
@@ -266,7 +320,8 @@ class LocalArchiveService : ArchiveService {
         root: File,
         format: ArchiveFormat,
         callbacks: ExtractCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val baseName = when (format) {
             ArchiveFormat.Gzip -> archive.name.removeSuffix(".gz")
@@ -276,26 +331,29 @@ class LocalArchiveService : ArchiveService {
         }.ifBlank { "archive" }
         val target = safeTarget(root, baseName)
         target.parentFile?.mkdirs()
-        val fileInput = BufferedInputStream(FileInputStream(archive))
+        val countingInput = CountingInputStream(BufferedInputStream(FileInputStream(archive)))
         val input: InputStream = when (format) {
-            ArchiveFormat.Gzip -> GzipCompressorInputStream(fileInput)
-            ArchiveFormat.Xz -> XZCompressorInputStream(fileInput)
-            ArchiveFormat.Zstd -> ZstdInputStream(fileInput)
-            else -> fileInput
+            ArchiveFormat.Gzip -> GzipCompressorInputStream(countingInput)
+            ArchiveFormat.Xz -> XZCompressorInputStream(countingInput)
+            ArchiveFormat.Zstd -> ZstdInputStream(countingInput)
+            else -> countingInput
         }
         input.use { source ->
             target.outputStream().use { output ->
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var total = 0L
+                var reported = 0L
                 while (true) {
                     if (callbacks.isCancelled()) throw CancellationException("解压已取消")
                     val read = source.read(buffer)
                     if (read < 0) break
                     output.write(buffer, 0, read)
-                    total += read
-                    callbacks.onBytes(total, archive.length().coerceAtLeast(1))
+                    val position = countingInput.count
+                    if (position > reported) {
+                        onBytes(position - reported)
+                        reported = position
+                    }
                 }
-                report(total)
+                onFileDone()
             }
         }
     }
@@ -323,7 +381,13 @@ class LocalArchiveService : ArchiveService {
         return target
     }
 
-    private fun writeZip(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+    private fun writeZip(
+        job: Job,
+        request: CompressRequest,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
+    ) {
         val params = ZipParameters().apply {
             compressionMethod = if (request.level == CompressionLevel.Store) {
                 CompressionMethod.STORE
@@ -343,38 +407,107 @@ class LocalArchiveService : ArchiveService {
         val splitBytes = request.splitSizeMb
             ?.takeIf { it > 0 && request.password.isEmpty() }
             ?.times(1024L * 1024L)
-        if (splitBytes != null && job.roots.all { it.isFile }) {
-            zip.createSplitZipFile(job.roots, params, true, splitBytes)
-            job.files.forEach { report(it.length()) }
-        } else {
-            job.roots.forEach { root ->
-                if (root.isFile) {
-                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
-                    zip.addFile(root, params.copyWithName(root.name))
-                    report(root.length())
-                } else {
-                    val rootPath = root.toPath()
-                    root.walkTopDown().filter { it.isFile }.forEach { file ->
+        withZipProgress(
+            zip = zip,
+            onBytes = onBytes,
+            expectedBytes = job.totalBytes,
+            isCancelled = { callbacks.isCancelled() },
+        ) {
+            if (splitBytes != null && job.roots.all { it.isFile }) {
+                zip.createSplitZipFile(job.roots, params, true, splitBytes)
+                job.files.forEach { onFileDone() }
+            } else {
+                job.roots.forEach { root ->
+                    if (root.isFile) {
                         if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
-                        val relative = root.name + "/" +
-                            rootPath.relativize(file.toPath()).toString().replace(File.separatorChar, '/')
-                        zip.addFile(file, params.copyWithName(relative))
-                        report(file.length())
+                        zip.addFile(root, params.copyWithName(root.name))
+                        onFileDone()
+                    } else {
+                        val rootPath = root.toPath()
+                        root.walkTopDown().filter { it.isFile }.forEach { file ->
+                            if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                            val relative = root.name + "/" +
+                                rootPath.relativize(file.toPath()).toString().replace(File.separatorChar, '/')
+                            zip.addFile(file, params.copyWithName(relative))
+                            onFileDone()
+                        }
                     }
                 }
             }
         }
     }
 
-    private fun writeSevenZ(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+    private fun withZipProgress(
+        zip: ZipFile,
+        onBytes: (Long) -> Unit,
+        expectedBytes: Long? = null,
+        isCancelled: () -> Boolean = { false },
+        block: () -> Unit,
+    ) {
+        val monitor = zip.progressMonitor
+        var last = 0L
+        var emitted = 0L
+        val running = AtomicBoolean(true)
+        val thread = Thread {
+            while (running.get()) {
+                if (isCancelled()) {
+                    monitor.setCancelAllTasks(true)
+                }
+                val completed = monitor.workCompleted
+                if (completed < last) {
+                    // zip4j 每处理一个条目会重置当前条目的工作量。
+                    last = 0L
+                }
+                if (completed > last) {
+                    val delta = completed - last
+                    onBytes(delta)
+                    emitted += delta
+                    last = completed
+                }
+                try {
+                    Thread.sleep(100)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }.apply {
+            isDaemon = true
+            name = "dockhand-zip-progress"
+            start()
+        }
+        var success = false
+        try {
+            block()
+            success = true
+        } catch (error: Throwable) {
+            if (isCancelled()) throw CancellationException("压缩已取消")
+            throw error
+        } finally {
+            running.set(false)
+            thread.interrupt()
+            thread.join(500)
+            if (isCancelled()) throw CancellationException("压缩已取消")
+            if (success && expectedBytes != null && emitted < expectedBytes) {
+                onBytes(expectedBytes - emitted)
+            }
+        }
+    }
+
+    private fun writeSevenZ(
+        job: Job,
+        request: CompressRequest,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
+    ) {
         val password = request.password.takeIf { it.isNotEmpty() }?.toCharArray()
         SevenZOutputFile(job.target, password).use { output ->
             job.roots.forEach { root ->
                 if (root.isFile) {
                     if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
-                    addSevenZEntry(output, root, root.name, report)
+                    addSevenZEntry(output, root, root.name, callbacks, onBytes, onFileDone)
                 } else {
-                    addSevenZDirectory(output, root, root.name, callbacks, report)
+                    addSevenZDirectory(output, root, root.name, callbacks, onBytes, onFileDone)
                 }
             }
         }
@@ -385,7 +518,8 @@ class LocalArchiveService : ArchiveService {
         directory: File,
         entryName: String,
         callbacks: CompressCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val entry = SevenZArchiveEntry().apply {
             name = entryName + "/"
@@ -397,9 +531,9 @@ class LocalArchiveService : ArchiveService {
         directory.listFiles()?.sortedBy { it.name }?.forEach { child ->
             if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
             if (child.isDirectory) {
-                addSevenZDirectory(output, child, entryName + "/" + child.name, callbacks, report)
+                addSevenZDirectory(output, child, entryName + "/" + child.name, callbacks, onBytes, onFileDone)
             } else {
-                addSevenZEntry(output, child, entryName + "/" + child.name, report)
+                addSevenZEntry(output, child, entryName + "/" + child.name, callbacks, onBytes, onFileDone)
             }
         }
     }
@@ -408,7 +542,9 @@ class LocalArchiveService : ArchiveService {
         output: SevenZOutputFile,
         file: File,
         entryName: String,
-        report: (Long) -> Unit,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val entry = SevenZArchiveEntry().apply {
             name = entryName
@@ -416,12 +552,27 @@ class LocalArchiveService : ArchiveService {
             lastModifiedDate = Date(file.lastModified())
         }
         output.putArchiveEntry(entry)
-        file.inputStream().use { input -> output.write(input) }
+        file.inputStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                val read = input.read(buffer)
+                if (read < 0) break
+                output.write(buffer, 0, read)
+                onBytes(read.toLong())
+            }
+        }
         output.closeArchiveEntry()
-        report(file.length())
+        onFileDone()
     }
 
-    private fun writeTar(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+    private fun writeTar(
+        job: Job,
+        request: CompressRequest,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
+    ) {
         val fileOutput = BufferedOutputStream(FileOutputStream(job.target))
         val compressor: OutputStream = when (request.format) {
             ArchiveFormat.Tar -> fileOutput
@@ -440,9 +591,9 @@ class LocalArchiveService : ArchiveService {
             job.roots.forEach { root ->
                 if (root.isFile) {
                     if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
-                    addTarEntry(tar, root, root.name, report)
+                    addTarEntry(tar, root, root.name, callbacks, onBytes, onFileDone)
                 } else {
-                    addTarDirectory(tar, root, root.name, callbacks, report)
+                    addTarDirectory(tar, root, root.name, callbacks, onBytes, onFileDone)
                 }
             }
         }
@@ -453,7 +604,8 @@ class LocalArchiveService : ArchiveService {
         directory: File,
         entryName: String,
         callbacks: CompressCallbacks,
-        report: (Long) -> Unit,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val dirEntry = TarArchiveEntry(entryName + "/").apply {
             mode = 0b111101101
@@ -464,9 +616,9 @@ class LocalArchiveService : ArchiveService {
         directory.listFiles()?.sortedBy { it.name }?.forEach { child ->
             if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
             if (child.isDirectory) {
-                addTarDirectory(tar, child, entryName + "/" + child.name, callbacks, report)
+                addTarDirectory(tar, child, entryName + "/" + child.name, callbacks, onBytes, onFileDone)
             } else {
-                addTarEntry(tar, child, entryName + "/" + child.name, report)
+                addTarEntry(tar, child, entryName + "/" + child.name, callbacks, onBytes, onFileDone)
             }
         }
     }
@@ -475,19 +627,36 @@ class LocalArchiveService : ArchiveService {
         tar: TarArchiveOutputStream,
         file: File,
         entryName: String,
-        report: (Long) -> Unit,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
     ) {
         val entry = TarArchiveEntry(file, entryName).apply {
             size = file.length()
             modTime = Date(file.lastModified())
         }
         tar.putArchiveEntry(entry)
-        file.inputStream().use { input -> input.copyTo(tar) }
+        file.inputStream().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                val read = input.read(buffer)
+                if (read < 0) break
+                tar.write(buffer, 0, read)
+                onBytes(read.toLong())
+            }
+        }
         tar.closeArchiveEntry()
-        report(file.length())
+        onFileDone()
     }
 
-    private fun writeSingleStream(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+    private fun writeSingleStream(
+        job: Job,
+        request: CompressRequest,
+        callbacks: CompressCallbacks,
+        onBytes: (Long) -> Unit,
+        onFileDone: () -> Unit,
+    ) {
         val root = job.roots.firstOrNull() ?: return
         if (!root.isFile) throw FileBrowserException("该格式只能压缩单个文件")
         val fileOutput = BufferedOutputStream(FileOutputStream(job.target))
@@ -505,9 +674,18 @@ class LocalArchiveService : ArchiveService {
         }
         output.use {
             if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
-            root.inputStream().use { input -> input.copyTo(output) }
+            root.inputStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    onBytes(read.toLong())
+                }
+            }
         }
-        report(root.length())
+        onFileDone()
     }
 
     private fun buildJobs(roots: List<File>, request: CompressRequest): List<Job> {
@@ -573,4 +751,21 @@ class LocalArchiveService : ArchiveService {
         val files: List<File>,
         val totalBytes: Long,
     )
+
+    private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
+        var count: Long = 0
+            private set
+
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) count++
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val read = super.read(buffer, offset, length)
+            if (read > 0) count += read
+            return read
+        }
+    }
 }

@@ -122,6 +122,13 @@ data class RenameRequestState(
     val entries: List<FileEntry> = listOf(entry),
 )
 
+@Immutable
+data class OpenWithState(
+    val entry: FileEntry,
+    val applications: List<io.github.lumkit.dockhand.core.platform.ExternalApplication> = emptyList(),
+    val loading: Boolean = true,
+)
+
 enum class ExtractDestinationMode {
     CurrentDirectory,
     Folder,
@@ -215,6 +222,7 @@ data class HomeUiState(
     val compressRequest: CompressRequestState? = null,
     val extractRequest: ExtractRequestState? = null,
     val extractPasswordRequest: ExtractPasswordState? = null,
+    val openWith: OpenWithState? = null,
     val trashRequest: TrashRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),

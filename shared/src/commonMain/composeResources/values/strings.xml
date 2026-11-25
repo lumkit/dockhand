@@ -202,6 +202,11 @@
     <string name="action_rename">重命名</string>
     <string name="action_compress">压缩</string>
     <string name="action_extract">解压</string>
+    <string name="action_open">打开</string>
+    <string name="action_open_with">打开方式</string>
+    <string name="open_with_title">打开方式</string>
+    <string name="open_with_loading">正在查找可用应用…</string>
+    <string name="open_with_empty">没有找到可用的应用</string>
     <string name="extract_dialog_title">解压</string>
     <string name="extract_to_current">解压到当前目录</string>
     <string name="extract_to_folder">解压到文件夹...</string>

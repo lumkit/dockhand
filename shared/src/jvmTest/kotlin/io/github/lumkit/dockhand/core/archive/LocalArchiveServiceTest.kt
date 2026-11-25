@@ -55,6 +55,46 @@ class LocalArchiveServiceTest {
     }
 
     @Test
+    fun reportsCompleteByteProgressForDirectoryZip() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-progress").toFile()
+        try {
+            val sourceDir = root.resolve("folder").apply { mkdirs() }
+            sourceDir.resolve("one.txt").writeText("one")
+            sourceDir.resolve("two.txt").writeText("two")
+            val outputDir = root.resolve("output").apply { mkdirs() }
+            val source = FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local)
+            val folderEntry = FileEntry(
+                id = sourceDir.path,
+                name = sourceDir.name,
+                location = FileLocation(source, sourceDir.path),
+                isDirectory = true,
+                size = 6,
+            )
+            var lastCompleted = 0L
+            var lastTotal = 0L
+
+            LocalArchiveService().compress(
+                CompressRequest(
+                    entries = listOf(folderEntry),
+                    destination = FileLocation(source, outputDir.path),
+                    archiveName = "folder",
+                ),
+                CompressCallbacks(
+                    onBytes = { completed, total ->
+                        lastCompleted = completed
+                        lastTotal = total
+                    },
+                ),
+            )
+
+            assertTrue(lastTotal > 0)
+            assertEquals(lastTotal, lastCompleted)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun extractsZipIntoSubfolder() = runBlocking {
         val root = Files.createTempDirectory("dockhand-extract").toFile()
         try {

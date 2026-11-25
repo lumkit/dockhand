@@ -137,6 +137,39 @@ tasks.named<ProcessResources>("jvmProcessResources") {
     }
 }
 
+// ---------------------------------------------------------------------------
+// macOS Open With helper
+// ---------------------------------------------------------------------------
+val openWithHelperDir = rootProject.layout.projectDirectory.dir("native/open-with-helper")
+val openWithHelperBinary = openWithHelperDir.file("open-with-helper")
+val buildOpenWithHelper = tasks.register<Exec>("buildOpenWithHelper") {
+    group = "build"
+    description = "Builds the AppKit Open With helper"
+    workingDir(openWithHelperDir)
+    commandLine(
+        "/usr/bin/swiftc",
+        "-O",
+        "-target",
+        if (System.getProperty("os.arch") in setOf("aarch64", "arm64")) {
+            "arm64-apple-macos12.0"
+        } else {
+            "x86_64-apple-macos12.0"
+        },
+        "-framework", "AppKit",
+        "main.swift",
+        "-o", "open-with-helper",
+    )
+    inputs.file(openWithHelperDir.file("main.swift"))
+    outputs.file(openWithHelperBinary)
+}
+
+tasks.named<ProcessResources>("jvmProcessResources") {
+    dependsOn(buildOpenWithHelper)
+    from(openWithHelperBinary) {
+        into("native")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

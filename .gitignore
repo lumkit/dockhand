@@ -79,3 +79,4 @@ node_modules/
 # Generated native helpers
 native/video-thumbnailer/video-thumbnailer
 /tmp/
+native/open-with-helper/open-with-helper

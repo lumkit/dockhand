@@ -15,6 +15,8 @@ import io.github.lumkit.dockhand.core.archive.archiveFormatForName
 import io.github.lumkit.dockhand.core.archive.CompressRequest
 import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.archive.NoopArchiveService
+import io.github.lumkit.dockhand.core.platform.FileOpener
+import io.github.lumkit.dockhand.core.platform.NoopFileOpener
 import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
@@ -110,6 +112,7 @@ class HomeViewModel(
     private val terminalLauncher: TerminalLauncher? = null,
     private val cacheManager: CacheManager = NoopCacheManager,
     private val archiveService: ArchiveService = NoopArchiveService,
+    private val fileOpener: FileOpener = NoopFileOpener,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -1294,12 +1297,86 @@ class HomeViewModel(
     fun onEntryDoubleClick(paneId: PaneId, entry: FileEntry) {
         onPaneFocus(paneId)
         selectEntry(paneId, entry)
+        openEntry(entry, paneId)
+    }
+
+    private fun openEntry(entry: FileEntry, paneId: PaneId? = null) {
         if (entry.isDirectory) {
-            navigate(paneId, entry.location)
+            paneId?.let { navigate(it, entry.location) }
         } else if (archiveFormatForName(entry.name) != null) {
             openExtractRequest(entry)
+        } else if (entry.location.source.kind == FileSourceKind.Local) {
+            scope.launch {
+                runCatching { fileOpener.open(entry.location) }
+                    .onFailure { error ->
+                        setOperationError(error.message ?: "无法打开文件")
+                    }
+            }
+        } else {
+            setOperationError("暂不支持打开 MTP 文件")
         }
-        // 其他文件双击打开由后续的打开方式/预览窗口接入。
+    }
+
+    private fun openDirectly(entry: FileEntry, paneId: PaneId) {
+        if (entry.isDirectory) {
+            navigate(paneId, entry.location)
+            return
+        }
+        if (entry.location.source.kind != FileSourceKind.Local) {
+            setOperationError("暂不支持打开 MTP 文件")
+            return
+        }
+        scope.launch {
+            runCatching { fileOpener.open(entry.location) }
+                .onFailure { error -> setOperationError(error.message ?: "无法打开文件") }
+        }
+    }
+
+    private fun openWith(entry: FileEntry) {
+        if (entry.isDirectory || entry.location.source.kind != FileSourceKind.Local) return
+        _state.update { it.copy(openWith = OpenWithState(entry = entry)) }
+        scope.launch {
+            runCatching { fileOpener.applications(entry.location) }
+                .onSuccess { apps ->
+                    _state.update { state ->
+                        if (state.openWith?.entry?.id == entry.id) {
+                            state.copy(openWith = state.openWith?.copy(applications = apps, loading = false))
+                        } else {
+                            state
+                        }
+                    }
+                    apps.forEachIndexed { index, app ->
+                        val iconPath = app.iconPath ?: fileOpener.icon(app) ?: return@forEachIndexed
+                        _state.update { state ->
+                            val current = state.openWith?.takeIf { it.entry.id == entry.id } ?: return@update state
+                            val updated = current.applications.toMutableList()
+                            if (index in updated.indices) {
+                                updated[index] = updated[index].copy(iconPath = iconPath)
+                            }
+                            state.copy(openWith = current.copy(applications = updated))
+                        }
+                    }
+                }
+                .onFailure { error ->
+                    _state.update { it.copy(openWith = null) }
+                    setOperationError(error.message ?: "无法读取打开方式")
+                }
+        }
+    }
+
+    fun onOpenWithDismiss() {
+        _state.update { it.copy(openWith = null) }
+    }
+
+    fun onOpenWithApplicationSelected(
+        entry: FileEntry,
+        app: io.github.lumkit.dockhand.core.platform.ExternalApplication,
+    ) {
+        _state.update { it.copy(openWith = null) }
+        scope.launch {
+            runCatching { fileOpener.openWith(entry.location, app) }
+                .onFailure { error -> setOperationError(error.message ?: "无法打开文件") }
+        }
     }
 
     private fun openExtractRequest(entry: FileEntry) {
@@ -1320,6 +1397,9 @@ class HomeViewModel(
      */
     fun onEntrySecondaryClick(paneId: PaneId, entry: FileEntry) {
         onPaneFocus(paneId)
+        if (!entry.isDirectory && entry.location.source.kind == FileSourceKind.Local) {
+            openWith(entry)
+        }
         _state.update { state ->
             val pane = state.pane(paneId)
             if (entry.id in pane.selectedIds) {
@@ -1354,6 +1434,8 @@ class HomeViewModel(
         }
         when (action) {
             FileContextAction.ViewInfo -> openFileInfo(targets)
+            FileContextAction.Open -> openDirectly(entry, paneId)
+            FileContextAction.OpenWith -> openWith(entry)
             FileContextAction.Copy -> {
                 val destination = _state.value.pane(paneId.other).location
                 if (destination == null) {

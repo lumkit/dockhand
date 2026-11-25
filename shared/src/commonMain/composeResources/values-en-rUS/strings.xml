@@ -209,6 +209,11 @@ Changes take effect after restart.</string>
     <string name="action_rename">Rename</string>
     <string name="action_compress">Compress</string>
     <string name="action_extract">Extract</string>
+    <string name="action_open">Open</string>
+    <string name="action_open_with">Open With</string>
+    <string name="open_with_title">Open With</string>
+    <string name="open_with_loading">Finding available apps…</string>
+    <string name="open_with_empty">No apps available</string>
     <string name="extract_dialog_title">Extract</string>
     <string name="extract_to_current">Extract to current folder</string>
     <string name="extract_to_folder">Extract to folder...</string>
