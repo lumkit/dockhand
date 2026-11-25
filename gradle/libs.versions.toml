@@ -12,6 +12,9 @@ ksp = "2.3.14"
 miuix = "0.9.5-beta03"
 room = "2.8.5"
 zip4j = "2.11.5"
+commonsCompress = "1.28.0"
+xz = "1.10"
+zstdJni = "1.5.7-29"
 sqlite = "2.7.1"
 
 [libraries]
@@ -32,6 +35,9 @@ kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-co
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-serializationJson = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "zip4j" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
+xz = { module = "org.tukaani:xz", version.ref = "xz" }
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstdJni" }
 
 # Miuix —— Compose Multiplatform 组件库（替换 Material3）
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version.ref = "miuix" }

@@ -47,6 +47,9 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.kotlinx.serializationJson)
             implementation(libs.zip4j)
+            implementation(libs.commons.compress)
+            implementation(libs.xz)
+            implementation(libs.zstd.jni)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

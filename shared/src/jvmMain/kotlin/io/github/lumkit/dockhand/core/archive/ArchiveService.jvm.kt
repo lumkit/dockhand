@@ -2,6 +2,7 @@ package io.github.lumkit.dockhand.core.archive
 
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.lingala.zip4j.ZipFile
@@ -10,7 +11,21 @@ import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.CompressionLevel as ZipCompressionLevel
 import net.lingala.zip4j.model.enums.CompressionMethod
 import net.lingala.zip4j.model.enums.EncryptionMethod
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
+import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
+import org.apache.commons.compress.compressors.gzip.GzipParameters
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
+import com.github.luben.zstd.ZstdOutputStream
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.Date
 
 class LocalArchiveService : ArchiveService {
     override suspend fun compress(request: CompressRequest, callbacks: CompressCallbacks) =
@@ -30,90 +45,248 @@ class LocalArchiveService : ArchiveService {
                     if (!it.exists()) throw FileBrowserException("源文件不存在：" + it.path)
                 }
             }
+            if (request.format.singleFile && !request.separateArchives) {
+                if (roots.size != 1 || !roots.first().isFile) {
+                    throw FileBrowserException("该格式只能压缩单个文件")
+                }
+            }
 
             val jobs = buildJobs(roots, request)
             val totalFiles = jobs.sumOf { it.files.size }.coerceAtLeast(1)
+            val totalBytes = jobs.sumOf { it.totalBytes }.coerceAtLeast(1L)
             var completedFiles = 0L
             var completedBytes = 0L
-            val totalBytes = jobs.sumOf { it.totalBytes }.coerceAtLeast(1L)
+            val createdTargets = jobs.map { it.target }
+
+            fun report(size: Long) {
+                completedFiles++
+                completedBytes += size
+                callbacks.onProgress(completedFiles, totalFiles.toLong())
+                callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
+            }
 
             try {
                 jobs.forEach { job ->
-                    if (callbacks.isCancelled()) throw kotlinx.coroutines.CancellationException("压缩已取消")
-                    val params = ZipParameters().apply {
-                        compressionMethod = if (request.level == CompressionLevel.Store) {
-                            CompressionMethod.STORE
-                        } else {
-                            CompressionMethod.DEFLATE
-                        }
-                        compressionLevel = request.level.toZipLevel()
-                        isIncludeRootFolder = true
-                        if (request.password.isNotEmpty()) {
-                            isEncryptFiles = true
-                            encryptionMethod = EncryptionMethod.AES
-                            aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
-                        }
-                    }
-                    val zip = ZipFile(job.target)
-                    if (request.password.isNotEmpty()) zip.setPassword(request.password.toCharArray())
-                    if (job.files.isNotEmpty()) {
-                        val splitBytes = request.splitSizeMb
-                            ?.takeIf { it > 0 && request.password.isEmpty() && job.roots.size == 1 }
-                            ?.times(1024L * 1024L)
-                        if (splitBytes != null && job.roots.all { it.isFile }) {
-                            zip.createSplitZipFile(job.roots, params, true, splitBytes)
-                            completedFiles += job.files.size
-                            completedBytes += job.totalBytes
-                            callbacks.onProgress(completedFiles, totalFiles.toLong())
-                            callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
-                        } else {
-                            job.roots.forEach { root ->
-                                if (root.isFile) {
-                                    if (callbacks.isCancelled()) throw kotlinx.coroutines.CancellationException("压缩已取消")
-                                    zip.addFile(root, params.copyWithName(root.name))
-                                    completedFiles++
-                                    completedBytes += root.length()
-                                    callbacks.onProgress(completedFiles, totalFiles.toLong())
-                                    callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
-                                } else {
-                                    val rootPath = root.toPath()
-                                    root.walkTopDown().filter { it.isFile }.forEach { file ->
-                                        if (callbacks.isCancelled()) throw kotlinx.coroutines.CancellationException("压缩已取消")
-                                        val relative = root.name + "/" +
-                                            rootPath.relativize(file.toPath()).toString()
-                                                .replace(File.separatorChar, '/')
-                                        zip.addFile(file, params.copyWithName(relative))
-                                        completedFiles++
-                                        completedBytes += file.length()
-                                        callbacks.onProgress(completedFiles, totalFiles.toLong())
-                                        callbacks.onBytes(completedBytes.coerceAtMost(totalBytes), totalBytes)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        job.target.delete()
+                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                    when (request.format) {
+                        ArchiveFormat.Zip -> writeZip(job, request, callbacks) { report(it) }
+                        ArchiveFormat.SevenZ -> writeSevenZ(job, request, callbacks) { report(it) }
+                        ArchiveFormat.Tar,
+                        ArchiveFormat.TarGz,
+                        ArchiveFormat.TarXz,
+                        ArchiveFormat.TarBz2,
+                        ArchiveFormat.TarZst,
+                        -> writeTar(job, request, callbacks) { report(it) }
+                        ArchiveFormat.Gzip,
+                        ArchiveFormat.Xz,
+                        ArchiveFormat.Zstd,
+                        -> writeSingleStream(job, request, callbacks) { report(it) }
                     }
                     if (request.deleteSource) {
                         job.roots.forEach { root ->
-                            if (callbacks.isCancelled()) throw kotlinx.coroutines.CancellationException("压缩已取消")
+                            if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
                             root.deleteRecursively()
                         }
                     }
                 }
             } catch (error: Throwable) {
-                jobs.forEach { job -> job.target.delete() }
+                createdTargets.forEach { target ->
+                    target.delete()
+                }
                 throw error
             }
         }
 
+    private fun writeZip(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+        val params = ZipParameters().apply {
+            compressionMethod = if (request.level == CompressionLevel.Store) {
+                CompressionMethod.STORE
+            } else {
+                CompressionMethod.DEFLATE
+            }
+            compressionLevel = request.level.toZipLevel()
+            isIncludeRootFolder = true
+            if (request.password.isNotEmpty()) {
+                isEncryptFiles = true
+                encryptionMethod = EncryptionMethod.AES
+                aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
+            }
+        }
+        val zip = ZipFile(job.target)
+        if (request.password.isNotEmpty()) zip.setPassword(request.password.toCharArray())
+        val splitBytes = request.splitSizeMb
+            ?.takeIf { it > 0 && request.password.isEmpty() }
+            ?.times(1024L * 1024L)
+        if (splitBytes != null && job.roots.all { it.isFile }) {
+            zip.createSplitZipFile(job.roots, params, true, splitBytes)
+            job.files.forEach { report(it.length()) }
+        } else {
+            job.roots.forEach { root ->
+                if (root.isFile) {
+                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                    zip.addFile(root, params.copyWithName(root.name))
+                    report(root.length())
+                } else {
+                    val rootPath = root.toPath()
+                    root.walkTopDown().filter { it.isFile }.forEach { file ->
+                        if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                        val relative = root.name + "/" +
+                            rootPath.relativize(file.toPath()).toString().replace(File.separatorChar, '/')
+                        zip.addFile(file, params.copyWithName(relative))
+                        report(file.length())
+                    }
+                }
+            }
+        }
+    }
+
+    private fun writeSevenZ(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+        val password = request.password.takeIf { it.isNotEmpty() }?.toCharArray()
+        SevenZOutputFile(job.target, password).use { output ->
+            job.roots.forEach { root ->
+                if (root.isFile) {
+                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                    addSevenZEntry(output, root, root.name, report)
+                } else {
+                    addSevenZDirectory(output, root, root.name, callbacks, report)
+                }
+            }
+        }
+    }
+
+    private fun addSevenZDirectory(
+        output: SevenZOutputFile,
+        directory: File,
+        entryName: String,
+        callbacks: CompressCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val entry = SevenZArchiveEntry().apply {
+            name = entryName + "/"
+            isDirectory = true
+            lastModifiedDate = Date(directory.lastModified())
+        }
+        output.putArchiveEntry(entry)
+        output.closeArchiveEntry()
+        directory.listFiles()?.sortedBy { it.name }?.forEach { child ->
+            if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+            if (child.isDirectory) {
+                addSevenZDirectory(output, child, entryName + "/" + child.name, callbacks, report)
+            } else {
+                addSevenZEntry(output, child, entryName + "/" + child.name, report)
+            }
+        }
+    }
+
+    private fun addSevenZEntry(
+        output: SevenZOutputFile,
+        file: File,
+        entryName: String,
+        report: (Long) -> Unit,
+    ) {
+        val entry = SevenZArchiveEntry().apply {
+            name = entryName
+            size = file.length()
+            lastModifiedDate = Date(file.lastModified())
+        }
+        output.putArchiveEntry(entry)
+        file.inputStream().use { input -> output.write(input) }
+        output.closeArchiveEntry()
+        report(file.length())
+    }
+
+    private fun writeTar(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+        val fileOutput = BufferedOutputStream(FileOutputStream(job.target))
+        val compressor: OutputStream = when (request.format) {
+            ArchiveFormat.Tar -> fileOutput
+            ArchiveFormat.TarGz -> GzipCompressorOutputStream(
+                fileOutput,
+                GzipParameters().apply { compressionLevel = request.level.zipLevel.coerceIn(1, 9) },
+            )
+            ArchiveFormat.TarXz -> XZCompressorOutputStream(fileOutput, request.level.zipLevel)
+            ArchiveFormat.TarBz2 -> BZip2CompressorOutputStream(fileOutput)
+            ArchiveFormat.TarZst -> ZstdOutputStream(fileOutput, request.level.zipLevel)
+            else -> fileOutput
+        }
+        TarArchiveOutputStream(compressor).use { tar ->
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX)
+            tar.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX)
+            job.roots.forEach { root ->
+                if (root.isFile) {
+                    if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+                    addTarEntry(tar, root, root.name, report)
+                } else {
+                    addTarDirectory(tar, root, root.name, callbacks, report)
+                }
+            }
+        }
+    }
+
+    private fun addTarDirectory(
+        tar: TarArchiveOutputStream,
+        directory: File,
+        entryName: String,
+        callbacks: CompressCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val dirEntry = TarArchiveEntry(entryName + "/").apply {
+            mode = 0b111101101
+            modTime = Date(directory.lastModified())
+        }
+        tar.putArchiveEntry(dirEntry)
+        tar.closeArchiveEntry()
+        directory.listFiles()?.sortedBy { it.name }?.forEach { child ->
+            if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+            if (child.isDirectory) {
+                addTarDirectory(tar, child, entryName + "/" + child.name, callbacks, report)
+            } else {
+                addTarEntry(tar, child, entryName + "/" + child.name, report)
+            }
+        }
+    }
+
+    private fun addTarEntry(
+        tar: TarArchiveOutputStream,
+        file: File,
+        entryName: String,
+        report: (Long) -> Unit,
+    ) {
+        val entry = TarArchiveEntry(file, entryName).apply {
+            size = file.length()
+            modTime = Date(file.lastModified())
+        }
+        tar.putArchiveEntry(entry)
+        file.inputStream().use { input -> input.copyTo(tar) }
+        tar.closeArchiveEntry()
+        report(file.length())
+    }
+
+    private fun writeSingleStream(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
+        val root = job.roots.firstOrNull() ?: return
+        if (!root.isFile) throw FileBrowserException("该格式只能压缩单个文件")
+        val fileOutput = BufferedOutputStream(FileOutputStream(job.target))
+        val output: OutputStream = when (request.format) {
+            ArchiveFormat.Gzip -> GzipCompressorOutputStream(
+                fileOutput,
+                GzipParameters().apply {
+                    compressionLevel = request.level.zipLevel.coerceIn(1, 9)
+                    fileName = root.name
+                },
+            )
+            ArchiveFormat.Xz -> XZCompressorOutputStream(fileOutput, request.level.zipLevel)
+            ArchiveFormat.Zstd -> ZstdOutputStream(fileOutput, request.level.zipLevel)
+            else -> fileOutput
+        }
+        output.use {
+            if (callbacks.isCancelled()) throw CancellationException("压缩已取消")
+            root.inputStream().use { input -> input.copyTo(output) }
+        }
+        report(root.length())
+    }
+
     private fun buildJobs(roots: List<File>, request: CompressRequest): List<Job> {
-        val baseName = request.archiveName.trim().ifEmpty { "archive" }
-            .removeSuffix(".zip")
-            .replace('/', '_')
-            .replace('\\', '_')
-            .ifBlank { "archive" }
         val destination = File(request.destination.path)
+        val baseName = cleanBaseName(request.archiveName, request.format)
         val selectedRoots = if (request.separateArchives) {
             roots.map { root -> listOf(root) }
         } else {
@@ -122,24 +295,31 @@ class LocalArchiveService : ArchiveService {
         return selectedRoots.map { jobRoots ->
             val name = if (request.separateArchives) {
                 val root = jobRoots.first()
-                if (root.isDirectory) root.name else root.nameWithoutExtension
+                if (root.isDirectory) root.name else root.nameWithoutExtension.ifBlank { root.name }
             } else {
                 baseName
             }
-            val target = uniqueTarget(destination, name)
+            val target = uniqueTarget(destination, name, request.format.extension)
             val files = jobRoots.flatMap { collectFiles(it) }
             Job(jobRoots, target, files, files.sumOf { it.length() })
         }
     }
 
-    private fun ZipParameters.copyWithName(name: String): ZipParameters =
-        ZipParameters(this).apply { fileNameInZip = name }
+    private fun cleanBaseName(name: String, format: ArchiveFormat): String {
+        var base = name.trim().ifEmpty { "archive" }
+        ArchiveFormat.entries
+            .sortedByDescending { it.extension.length }
+            .forEach { candidate ->
+                base = base.removeSuffix("." + candidate.extension)
+            }
+        return base.replace('/', '_').replace('\\', '_').ifBlank { "archive" }
+    }
 
-    private fun uniqueTarget(destination: File, baseName: String): File {
-        var target = File(destination, baseName + ".zip")
+    private fun uniqueTarget(destination: File, baseName: String, extension: String): File {
+        var target = File(destination, baseName + "." + extension)
         var index = 1
         while (target.exists()) {
-            target = File(destination, baseName + " (" + index + ").zip")
+            target = File(destination, baseName + " (" + index + ")." + extension)
             index++
         }
         return target
@@ -148,6 +328,9 @@ class LocalArchiveService : ArchiveService {
     private fun collectFiles(root: File): List<File> =
         if (root.isFile) listOf(root)
         else root.walkTopDown().filter { it.isFile }.toList()
+
+    private fun ZipParameters.copyWithName(name: String): ZipParameters =
+        ZipParameters(this).apply { fileNameInZip = name }
 
     private fun CompressionLevel.toZipLevel(): ZipCompressionLevel = when (this) {
         CompressionLevel.Store -> ZipCompressionLevel.NO_COMPRESSION

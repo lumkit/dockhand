@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.core.archive.ArchiveFormat
 import io.github.lumkit.dockhand.core.archive.ArchiveService
 import io.github.lumkit.dockhand.core.archive.CompressCallbacks
 import io.github.lumkit.dockhand.core.archive.CompressRequest
@@ -38,7 +39,9 @@ import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.cache_clear_pending
+import dockhand.shared.generated.resources.compress_multiple_single_file
 import dockhand.shared.generated.resources.compress_name_empty
+import dockhand.shared.generated.resources.compress_single_file_only
 import dockhand.shared.generated.resources.task_compress_detail
 import dockhand.shared.generated.resources.task_compress_title
 import dockhand.shared.generated.resources.task_compress_title_multiple
@@ -588,6 +591,16 @@ class HomeViewModel(
         updateCompressRequest { it.copy(archiveName = name) }
     }
 
+    fun onCompressRequestFormatChange(format: ArchiveFormat) {
+        updateCompressRequest {
+            it.copy(
+                format = format,
+                password = if (format.supportsPassword) it.password else "",
+                splitSizeMb = if (format.supportsSplit) it.splitSizeMb else "",
+            )
+        }
+    }
+
     fun onCompressRequestLevelChange(level: CompressionLevel) {
         updateCompressRequest { it.copy(level = level) }
     }
@@ -653,6 +666,16 @@ class HomeViewModel(
             scope.launch { setOperationError(getString(Res.string.compress_name_empty)) }
             return
         }
+        if (request.format.singleFile) {
+            if (entries.any { it.isDirectory }) {
+                scope.launch { setOperationError(getString(Res.string.compress_single_file_only)) }
+                return
+            }
+            if (!request.separateArchives && entries.size > 1) {
+                scope.launch { setOperationError(getString(Res.string.compress_multiple_single_file)) }
+                return
+            }
+        }
         _state.update { it.copy(compressRequest = null) }
         scope.launch {
             val title = if (entries.size > 1) {
@@ -674,6 +697,7 @@ class HomeViewModel(
                         entries = entries,
                         destination = destination,
                         archiveName = name,
+                        format = request.format,
                         level = request.level,
                         password = request.password,
                         splitSizeMb = request.splitSizeMb.trim().toLongOrNull()?.takeIf { it > 0 },

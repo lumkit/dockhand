@@ -1,5 +1,6 @@
 package io.github.lumkit.dockhand.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,16 @@ import dockhand.shared.generated.resources.compress_field_level
 import dockhand.shared.generated.resources.compress_field_name
 import dockhand.shared.generated.resources.compress_field_password
 import dockhand.shared.generated.resources.compress_field_split
+import dockhand.shared.generated.resources.compress_format_7z
+import dockhand.shared.generated.resources.compress_format_gzip
+import dockhand.shared.generated.resources.compress_format_tar
+import dockhand.shared.generated.resources.compress_format_tar_bz2
+import dockhand.shared.generated.resources.compress_format_tar_gz
+import dockhand.shared.generated.resources.compress_format_tar_xz
+import dockhand.shared.generated.resources.compress_format_tar_zst
+import dockhand.shared.generated.resources.compress_format_xz
 import dockhand.shared.generated.resources.compress_format_zip
+import dockhand.shared.generated.resources.compress_format_zstd
 import dockhand.shared.generated.resources.compress_level_fast
 import dockhand.shared.generated.resources.compress_level_fastest
 import dockhand.shared.generated.resources.compress_level_maximum
@@ -45,6 +55,7 @@ import dockhand.shared.generated.resources.compress_password_hint
 import dockhand.shared.generated.resources.compress_separate
 import dockhand.shared.generated.resources.compress_split_unit
 import dockhand.shared.generated.resources.compress_to_other_pane
+import io.github.lumkit.dockhand.core.archive.ArchiveFormat
 import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.ui.screen.home.CompressRequestState
 import org.jetbrains.compose.resources.stringResource
@@ -63,6 +74,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun CompressRequestDialog(
     request: CompressRequestState?,
     onNameChange: (String) -> Unit,
+    onFormatChange: (ArchiveFormat) -> Unit,
     onLevelChange: (CompressionLevel) -> Unit,
     onPasswordChange: (String) -> Unit,
     onSplitChange: (String) -> Unit,
@@ -114,7 +126,6 @@ fun CompressRequestDialog(
                     .heightIn(max = 360.dp)
                     .verticalScroll(scrollState)
                     .verticalScrollBar(scrollState),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
             TextField(
                 state = nameState,
@@ -122,11 +133,15 @@ fun CompressRequestDialog(
                 modifier = Modifier.fillMaxWidth(),
                 lineLimits = TextFieldLineLimits.SingleLine,
             )
-            BasicComponent(
+            Spacer(Modifier.height(10.dp))
+            OverlayDropdownPreference(
+                items = ArchiveFormat.entries.map { archiveFormatLabel(it) },
+                selectedIndex = ArchiveFormat.entries.indexOf(current.format).coerceAtLeast(0),
                 title = stringResource(Res.string.compress_field_format),
-                summary = stringResource(Res.string.compress_format_zip),
-                modifier = Modifier.fillMaxWidth(),
+                summary = archiveFormatLabel(current.format),
+                onSelectedIndexChange = { onFormatChange(ArchiveFormat.entries[it]) },
             )
+            Spacer(Modifier.height(10.dp))
             OverlayDropdownPreference(
                 items = CompressionLevel.entries.map { compressionLevelLabel(it) },
                 selectedIndex = CompressionLevel.entries.indexOf(current.level).coerceAtLeast(0),
@@ -134,51 +149,66 @@ fun CompressRequestDialog(
                 summary = compressionLevelLabel(current.level),
                 onSelectedIndexChange = { onLevelChange(CompressionLevel.entries[it]) },
             )
-            TextField(
-                state = passwordState,
-                label = stringResource(Res.string.compress_field_password),
-                modifier = Modifier.fillMaxWidth(),
-                useLabelAsPlaceholder = true,
-                lineLimits = TextFieldLineLimits.SingleLine,
-                outputTransformation = passwordMask,
-            )
-            Text(
-                text = stringResource(Res.string.compress_password_hint),
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            TextField(
-                state = splitState,
-                label = stringResource(Res.string.compress_field_split),
-                modifier = Modifier.fillMaxWidth(),
-                useLabelAsPlaceholder = true,
-                lineLimits = TextFieldLineLimits.SingleLine,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                ),
-                trailingIcon = {
-                    Text(
-                        text = stringResource(Res.string.compress_split_unit),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(horizontal = 12.dp)
+            Spacer(Modifier.height(10.dp))
+            AnimatedVisibility(visible = current.format.supportsPassword) {
+                Column {
+                    TextField(
+                        state = passwordState,
+                        label = stringResource(Res.string.compress_field_password),
+                        modifier = Modifier.fillMaxWidth(),
+                        useLabelAsPlaceholder = true,
+                        lineLimits = TextFieldLineLimits.SingleLine,
+                        outputTransformation = passwordMask,
                     )
-                },
-            )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(Res.string.compress_password_hint),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
+            AnimatedVisibility(visible = current.format.supportsSplit) {
+                Column {
+                    TextField(
+                        state = splitState,
+                        label = stringResource(Res.string.compress_field_split),
+                        modifier = Modifier.fillMaxWidth(),
+                        useLabelAsPlaceholder = true,
+                        lineLimits = TextFieldLineLimits.SingleLine,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                        ),
+                        trailingIcon = {
+                            Text(
+                                text = stringResource(Res.string.compress_split_unit),
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                        },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
             CheckboxRow(
                 title = stringResource(Res.string.compress_separate),
                 checked = current.separateArchives,
                 onCheckedChange = onSeparateChange,
             )
+            Spacer(Modifier.height(10.dp))
             CheckboxRow(
                 title = stringResource(Res.string.compress_delete_source),
                 checked = current.deleteSource,
                 onCheckedChange = onDeleteSourceChange,
             )
+            Spacer(Modifier.height(10.dp))
             CheckboxRow(
                 title = stringResource(Res.string.compress_to_other_pane),
                 checked = current.toOtherPane,
                 onCheckedChange = onToOtherPaneChange,
             )
+            Spacer(Modifier.height(10.dp))
             CheckboxRow(
                 title = stringResource(Res.string.compress_dialog_background),
                 checked = current.background,
@@ -236,6 +266,20 @@ private fun CheckboxRow(
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+@Composable
+private fun archiveFormatLabel(format: ArchiveFormat): String = when (format) {
+    ArchiveFormat.Zip -> stringResource(Res.string.compress_format_zip)
+    ArchiveFormat.SevenZ -> stringResource(Res.string.compress_format_7z)
+    ArchiveFormat.Tar -> stringResource(Res.string.compress_format_tar)
+    ArchiveFormat.TarGz -> stringResource(Res.string.compress_format_tar_gz)
+    ArchiveFormat.TarXz -> stringResource(Res.string.compress_format_tar_xz)
+    ArchiveFormat.TarBz2 -> stringResource(Res.string.compress_format_tar_bz2)
+    ArchiveFormat.TarZst -> stringResource(Res.string.compress_format_tar_zst)
+    ArchiveFormat.Gzip -> stringResource(Res.string.compress_format_gzip)
+    ArchiveFormat.Xz -> stringResource(Res.string.compress_format_xz)
+    ArchiveFormat.Zstd -> stringResource(Res.string.compress_format_zstd)
 }
 
 @Composable

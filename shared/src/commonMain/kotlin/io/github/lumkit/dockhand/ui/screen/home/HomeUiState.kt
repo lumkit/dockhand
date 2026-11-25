@@ -10,6 +10,7 @@ import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.core.archive.ArchiveFormat
 import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
@@ -126,6 +127,7 @@ data class CompressRequestState(
     val entry: FileEntry,
     val entries: List<FileEntry> = listOf(entry),
     val archiveName: String = "",
+    val format: ArchiveFormat = ArchiveFormat.Zip,
     val level: CompressionLevel = CompressionLevel.Normal,
     val password: String = "",
     val splitSizeMb: String = "",

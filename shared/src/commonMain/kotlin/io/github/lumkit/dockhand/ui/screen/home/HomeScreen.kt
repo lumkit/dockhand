@@ -238,6 +238,7 @@ fun HomeScreen() {
         onRenameRequestDismiss = homeViewModel::onRenameRequestDismiss,
         onRenameRequestConfirm = homeViewModel::onRenameRequestConfirm,
         onCompressRequestNameChange = homeViewModel::onCompressRequestNameChange,
+        onCompressRequestFormatChange = homeViewModel::onCompressRequestFormatChange,
         onCompressRequestLevelChange = homeViewModel::onCompressRequestLevelChange,
         onCompressRequestPasswordChange = homeViewModel::onCompressRequestPasswordChange,
         onCompressRequestSplitChange = homeViewModel::onCompressRequestSplitChange,
@@ -343,6 +344,7 @@ private fun HomeScreenContent(
     onRenameRequestDismiss: () -> Unit,
     onRenameRequestConfirm: () -> Unit,
     onCompressRequestNameChange: (String) -> Unit,
+    onCompressRequestFormatChange: (io.github.lumkit.dockhand.core.archive.ArchiveFormat) -> Unit,
     onCompressRequestLevelChange: (io.github.lumkit.dockhand.core.archive.CompressionLevel) -> Unit,
     onCompressRequestPasswordChange: (String) -> Unit,
     onCompressRequestSplitChange: (String) -> Unit,
@@ -687,6 +689,7 @@ private fun HomeScreenContent(
                 CompressRequestDialog(
                     request = uiState.compressRequest,
                     onNameChange = onCompressRequestNameChange,
+                    onFormatChange = onCompressRequestFormatChange,
                     onLevelChange = onCompressRequestLevelChange,
                     onPasswordChange = onCompressRequestPasswordChange,
                     onSplitChange = onCompressRequestSplitChange,

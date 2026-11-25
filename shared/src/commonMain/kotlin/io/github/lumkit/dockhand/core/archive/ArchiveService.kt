@@ -12,10 +12,29 @@ enum class CompressionLevel(val zipLevel: Int) {
     Ultra(9),
 }
 
+enum class ArchiveFormat(
+    val extension: String,
+    val supportsPassword: Boolean = false,
+    val supportsSplit: Boolean = false,
+    val singleFile: Boolean = false,
+) {
+    Zip("zip", supportsPassword = true, supportsSplit = true),
+    SevenZ("7z", supportsPassword = true),
+    Tar("tar"),
+    TarGz("tar.gz"),
+    TarXz("tar.xz"),
+    TarBz2("tar.bz2"),
+    TarZst("tar.zst"),
+    Gzip("gz", singleFile = true),
+    Xz("xz", singleFile = true),
+    Zstd("zst", singleFile = true),
+}
+
 data class CompressRequest(
     val entries: List<FileEntry>,
     val destination: FileLocation,
     val archiveName: String,
+    val format: ArchiveFormat = ArchiveFormat.Zip,
     val level: CompressionLevel = CompressionLevel.Normal,
     val password: String = "",
     val splitSizeMb: Long? = null,
