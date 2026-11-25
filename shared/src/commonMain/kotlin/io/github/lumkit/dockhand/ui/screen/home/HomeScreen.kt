@@ -356,12 +356,12 @@ private fun HomeScreenContent(
     DisposableEffect(Unit) {
         ShortcutDispatcher.setHandler { event ->
             val modalOpen = inlineRenameBounds.value != null ||
-                currentUiState.activeTaskId != null ||
-                currentUiState.copyRequest != null ||
-                currentUiState.moveRequest != null ||
-                currentUiState.deleteRequest != null ||
-                currentUiState.renameRequest != null ||
-                currentUiState.trashRequest != null
+                    currentUiState.activeTaskId != null ||
+                    currentUiState.copyRequest != null ||
+                    currentUiState.moveRequest != null ||
+                    currentUiState.deleteRequest != null ||
+                    currentUiState.renameRequest != null ||
+                    currentUiState.trashRequest != null
             if (modalOpen) {
                 false
             } else {
@@ -370,10 +370,12 @@ private fun HomeScreenContent(
                         currentSelectAll()
                         true
                     }
+
                     ShortcutAction.ClearSelection -> {
                         currentClearSelection()
                         true
                     }
+
                     ShortcutAction.SelectPrevious -> currentSelectPrevious()
                     ShortcutAction.SelectNext -> currentSelectNext()
                     ShortcutAction.OpenContextMenu -> currentOpenContextMenu()
@@ -403,108 +405,28 @@ private fun HomeScreenContent(
 
     CompositionLocalProvider(LocalInlineRenameBounds provides inlineRenameBounds) {
         Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(inlineRenameBounds) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (event.type == PointerEventType.Press) {
-                            val bounds = inlineRenameBounds.value
-                            if (
-                                bounds != null &&
-                                event.changes.any { !bounds.contains(it.position) }
-                            ) {
-                                focusManager.clearFocus()
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(inlineRenameBounds) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press) {
+                                val bounds = inlineRenameBounds.value
+                                if (
+                                    bounds != null &&
+                                    event.changes.any { !bounds.contains(it.position) }
+                                ) {
+                                    focusManager.clearFocus()
+                                }
                             }
                         }
                     }
-                }
-            },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            MiuixCaptionBar {
-                if (windowPlacement != WindowPlacement.Fullscreen) {
-                    HomeTopBar(
-                        location = uiState.focusedLocation,
-                        onBreadcrumbClick = onBreadcrumbClick,
-                        onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
-                        onBreadcrumbTerminal = onBreadcrumbTerminal,
-                    ) {
-                        TopBarActions(
-                            tasks = tasks,
-                            onCancelTask = onCancelTask,
-                            onDismissTask = onDismissTask,
-                            onTaskProgressOpen = onTaskProgressOpen,
-                            layoutMode = uiState.fileLayoutMode,
-                            sortMode = uiState.fileSortMode,
-                            showHiddenItems = uiState.showHiddenItems,
-                            onLayoutModeChange = onFileLayoutModeChange,
-                            onSortModeChange = onFileSortModeChange,
-                            onShowHiddenItemsChange = onShowHiddenItemsChange,
-                        )
-                    }
-                }
-            }
-        }
-    ) { paddingValues ->
-        Row(modifier = Modifier.fillMaxSize()) {
-            val drawerPaddingValues = PaddingValues(
-                start = paddingValues.calculateStartPadding(direction),
-                top = paddingValues.calculateTopPadding(),
-                bottom = paddingValues.calculateBottomPadding(),
-            )
-            val contentPaddingValues = PaddingValues(
-                top = paddingValues.calculateTopPadding(),
-                bottom = paddingValues.calculateBottomPadding(),
-                end = paddingValues.calculateEndPadding(direction),
-            )
-
-            // 左侧：真实地点列表
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(280.dp)
-            ) {
-                HomeDrawerContent(
-                    places = uiState.places,
-                    activeLocation = uiState.focusedLocation,
-                    placeOrder = uiState.drawerPlaceOrder,
-                    mtpExpandedSources = uiState.mtpExpandedSources,
-                    mtpShortcutOrder = uiState.mtpShortcutOrder,
-                    startupLeftPath = uiState.startupLeftPath,
-                    startupRightPath = uiState.startupRightPath,
-                    onStartupPathChange = onStartupPathChange,
-                    restoreWindowSize = uiState.restoreWindowSize,
-                    onRestoreWindowSizeChange = onRestoreWindowSizeChange,
-                    colorSchemeMode = uiState.colorSchemeMode,
-                    keyColor = uiState.keyColor,
-                    interfaceScale = uiState.interfaceScale,
-                    showHiddenItems = uiState.showHiddenItems,
-                    shortcutBindings = uiState.shortcuts,
-                    onShortcutAdd = onShortcutAdd,
-                    onShortcutRemove = onShortcutRemove,
-                    onResetShortcuts = onResetShortcuts,
-                    onColorSchemeModeChange = onColorSchemeModeChange,
-                    onKeyColorChange = onKeyColorChange,
-                    onInterfaceScaleChange = onInterfaceScaleChange,
-                    onShowHiddenItemsChange = onShowHiddenItemsChange,
-                    onPlaceMove = onPlaceMove,
-                    onMtpStorageClick = onMtpStorageClick,
-                    onMtpShortcutMove = onMtpShortcutMove,
-                    onPlaceClick = onPlaceClick,
-                    modifier = Modifier.padding(drawerPaddingValues),
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                if (windowPlacement == WindowPlacement.Fullscreen) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
+                },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                MiuixCaptionBar {
+                    if (windowPlacement != WindowPlacement.Fullscreen) {
                         HomeTopBar(
                             location = uiState.focusedLocation,
                             onBreadcrumbClick = onBreadcrumbClick,
@@ -526,140 +448,222 @@ private fun HomeScreenContent(
                         }
                     }
                 }
+            },
+            containerColor = MiuixTheme.colorScheme.surface,
+        ) { paddingValues ->
+            Row(modifier = Modifier.fillMaxSize()) {
+                val drawerPaddingValues = PaddingValues(
+                    start = paddingValues.calculateStartPadding(direction),
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = paddingValues.calculateBottomPadding(),
+                )
+                val contentPaddingValues = PaddingValues(
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = paddingValues.calculateBottomPadding(),
+                    end = paddingValues.calculateEndPadding(direction),
+                )
 
+                // 左侧：真实地点列表
                 Surface(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPaddingValues)
-                        .squircleClip(
-                            topStart = 12.dp,
-                            topEnd = 0.dp,
-                            bottomStart = 0.dp,
-                            bottomEnd = 0.dp,
-                        ),
-                    color = MiuixTheme.colorScheme.surfaceContainer,
+                        .fillMaxHeight()
+                        .width(280.dp),
+                    color = MiuixTheme.colorScheme.surface,
                 ) {
-                    if (uiState.isBootstrapping) {
+                    HomeDrawerContent(
+                        places = uiState.places,
+                        activeLocation = uiState.focusedLocation,
+                        placeOrder = uiState.drawerPlaceOrder,
+                        mtpExpandedSources = uiState.mtpExpandedSources,
+                        mtpShortcutOrder = uiState.mtpShortcutOrder,
+                        startupLeftPath = uiState.startupLeftPath,
+                        startupRightPath = uiState.startupRightPath,
+                        onStartupPathChange = onStartupPathChange,
+                        restoreWindowSize = uiState.restoreWindowSize,
+                        onRestoreWindowSizeChange = onRestoreWindowSizeChange,
+                        colorSchemeMode = uiState.colorSchemeMode,
+                        keyColor = uiState.keyColor,
+                        interfaceScale = uiState.interfaceScale,
+                        showHiddenItems = uiState.showHiddenItems,
+                        shortcutBindings = uiState.shortcuts,
+                        onShortcutAdd = onShortcutAdd,
+                        onShortcutRemove = onShortcutRemove,
+                        onResetShortcuts = onResetShortcuts,
+                        onColorSchemeModeChange = onColorSchemeModeChange,
+                        onKeyColorChange = onKeyColorChange,
+                        onInterfaceScaleChange = onInterfaceScaleChange,
+                        onShowHiddenItemsChange = onShowHiddenItemsChange,
+                        onPlaceMove = onPlaceMove,
+                        onMtpStorageClick = onMtpStorageClick,
+                        onMtpShortcutMove = onMtpShortcutMove,
+                        onPlaceClick = onPlaceClick,
+                        modifier = Modifier.padding(drawerPaddingValues),
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    if (windowPlacement == WindowPlacement.Fullscreen) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (uiState.placesError != null) {
-                                Text(
-                                    text = uiState.placesError,
-                                    style = MiuixTheme.textStyles.footnote1,
-                                    color = MiuixTheme.colorScheme.error,
+                            HomeTopBar(
+                                location = uiState.focusedLocation,
+                                onBreadcrumbClick = onBreadcrumbClick,
+                                onBreadcrumbSecondaryClick = onBreadcrumbSecondaryClick,
+                                onBreadcrumbTerminal = onBreadcrumbTerminal,
+                            ) {
+                                TopBarActions(
+                                    tasks = tasks,
+                                    onCancelTask = onCancelTask,
+                                    onDismissTask = onDismissTask,
+                                    onTaskProgressOpen = onTaskProgressOpen,
+                                    layoutMode = uiState.fileLayoutMode,
+                                    sortMode = uiState.fileSortMode,
+                                    showHiddenItems = uiState.showHiddenItems,
+                                    onLayoutModeChange = onFileLayoutModeChange,
+                                    onSortModeChange = onFileSortModeChange,
+                                    onShowHiddenItemsChange = onShowHiddenItemsChange,
                                 )
-                            } else {
-                                InfiniteProgressIndicator()
                             }
                         }
-                    } else {
-                        DualPaneBrowser(
-                            uiState = uiState,
-                            onPaneFocus = onPaneFocus,
-                            onEntryClick = onEntryClick,
-                            onEntryDoubleClick = onEntryDoubleClick,
-                            onEntrySecondaryClick = onEntrySecondaryClick,
-                            onSelectionChange = onSelectionChange,
-                            onSelectionClear = onSelectionClear,
-                            onContextMenuRequest = onContextMenuRequest,
-                            onContextMenuDismiss = onContextMenuDismiss,
-                            onInlineRenameStarted = onInlineRenameStarted,
-                            onEntryContextAction = onEntryContextAction,
-                            onInlineRename = onInlineRename,
-                            onRetry = onRetry,
-                            onLoadMore = onLoadMore,
-                            onBack = onBack,
-                            onForward = onForward,
-                            onGoUp = onGoUp,
-                            onCreate = onCreate,
-                            onSync = onSync,
-                            onDismissOperationError = onDismissOperationError,
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(contentPaddingValues)
+                            .squircleClip(
+                                topStart = 12.dp,
+                                topEnd = 0.dp,
+                                bottomStart = 0.dp,
+                                bottomEnd = 0.dp,
+                            ),
+                        color = MiuixTheme.colorScheme.surfaceContainer,
+                    ) {
+                        if (uiState.isBootstrapping) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (uiState.placesError != null) {
+                                    Text(
+                                        text = uiState.placesError,
+                                        style = MiuixTheme.textStyles.footnote1,
+                                        color = MiuixTheme.colorScheme.error,
+                                    )
+                                } else {
+                                    InfiniteProgressIndicator()
+                                }
+                            }
+                        } else {
+                            DualPaneBrowser(
+                                uiState = uiState,
+                                onPaneFocus = onPaneFocus,
+                                onEntryClick = onEntryClick,
+                                onEntryDoubleClick = onEntryDoubleClick,
+                                onEntrySecondaryClick = onEntrySecondaryClick,
+                                onSelectionChange = onSelectionChange,
+                                onSelectionClear = onSelectionClear,
+                                onContextMenuRequest = onContextMenuRequest,
+                                onContextMenuDismiss = onContextMenuDismiss,
+                                onInlineRenameStarted = onInlineRenameStarted,
+                                onEntryContextAction = onEntryContextAction,
+                                onInlineRename = onInlineRename,
+                                onRetry = onRetry,
+                                onLoadMore = onLoadMore,
+                                onBack = onBack,
+                                onForward = onForward,
+                                onGoUp = onGoUp,
+                                onCreate = onCreate,
+                                onSync = onSync,
+                                onDismissOperationError = onDismissOperationError,
+                            )
+                        }
+                    }
+                }
+
+                CopyRequestDialog(
+                    request = uiState.copyRequest,
+                    onBackgroundChange = onCopyRequestBackgroundChange,
+                    onDismiss = onCopyRequestDismiss,
+                    onConfirm = onCopyRequestConfirm,
+                )
+
+                MoveRequestDialog(
+                    request = uiState.moveRequest,
+                    onBackgroundChange = onMoveRequestBackgroundChange,
+                    onDismiss = onMoveRequestDismiss,
+                    onConfirm = onMoveRequestConfirm,
+                )
+
+                DeleteRequestDialog(
+                    request = uiState.deleteRequest,
+                    onBackgroundChange = onDeleteRequestBackgroundChange,
+                    onDismiss = onDeleteRequestDismiss,
+                    onConfirm = onDeleteRequestConfirm,
+                )
+
+                RenameRequestDialog(
+                    request = uiState.renameRequest,
+                    onNameChange = onRenameRequestNameChange,
+                    onBackgroundChange = onRenameRequestBackgroundChange,
+                    onDismiss = onRenameRequestDismiss,
+                    onConfirm = onRenameRequestConfirm,
+                )
+
+                TrashRequestDialog(
+                    request = uiState.trashRequest,
+                    onBackgroundChange = onTrashRequestBackgroundChange,
+                    onDismiss = onTrashRequestDismiss,
+                    onConfirm = onTrashRequestConfirm,
+                )
+
+                TaskProgressDialog(
+                    task = uiState.activeTaskId?.let { id -> tasks.firstOrNull { it.id == id } },
+                    onBackground = onActiveTaskBackground,
+                    onCancel = { showProgressCancelConfirm = true },
+                )
+
+                val activeTask = uiState.activeTaskId?.let { id ->
+                    tasks.firstOrNull { it.id == id }
+                }
+                LaunchedEffect(uiState.activeTaskId) {
+                    if (uiState.activeTaskId == null) {
+                        showProgressCancelConfirm = false
+                    }
+                }
+                OverlayDialog(
+                    show = showProgressCancelConfirm && activeTask != null,
+                    title = stringResource(Res.string.task_cancel_title),
+                    summary = activeTask?.let {
+                        stringResource(Res.string.task_cancel_message, it.title)
+                    },
+                    onDismissRequest = { showProgressCancelConfirm = false },
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(
+                            text = stringResource(Res.string.action_confirm),
+                            onClick = {
+                                showProgressCancelConfirm = false
+                                onActiveTaskCancel()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                        )
+                        TextButton(
+                            text = stringResource(Res.string.action_cancel),
+                            onClick = { showProgressCancelConfirm = false },
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
             }
-
-            CopyRequestDialog(
-                request = uiState.copyRequest,
-                onBackgroundChange = onCopyRequestBackgroundChange,
-                onDismiss = onCopyRequestDismiss,
-                onConfirm = onCopyRequestConfirm,
-            )
-
-            MoveRequestDialog(
-                request = uiState.moveRequest,
-                onBackgroundChange = onMoveRequestBackgroundChange,
-                onDismiss = onMoveRequestDismiss,
-                onConfirm = onMoveRequestConfirm,
-            )
-
-            DeleteRequestDialog(
-                request = uiState.deleteRequest,
-                onBackgroundChange = onDeleteRequestBackgroundChange,
-                onDismiss = onDeleteRequestDismiss,
-                onConfirm = onDeleteRequestConfirm,
-            )
-
-            RenameRequestDialog(
-                request = uiState.renameRequest,
-                onNameChange = onRenameRequestNameChange,
-                onBackgroundChange = onRenameRequestBackgroundChange,
-                onDismiss = onRenameRequestDismiss,
-                onConfirm = onRenameRequestConfirm,
-            )
-
-            TrashRequestDialog(
-                request = uiState.trashRequest,
-                onBackgroundChange = onTrashRequestBackgroundChange,
-                onDismiss = onTrashRequestDismiss,
-                onConfirm = onTrashRequestConfirm,
-            )
-
-            TaskProgressDialog(
-                task = uiState.activeTaskId?.let { id -> tasks.firstOrNull { it.id == id } },
-                onBackground = onActiveTaskBackground,
-                onCancel = { showProgressCancelConfirm = true },
-            )
-
-            val activeTask = uiState.activeTaskId?.let { id ->
-                tasks.firstOrNull { it.id == id }
-            }
-            LaunchedEffect(uiState.activeTaskId) {
-                if (uiState.activeTaskId == null) {
-                    showProgressCancelConfirm = false
-                }
-            }
-            OverlayDialog(
-                show = showProgressCancelConfirm && activeTask != null,
-                title = stringResource(Res.string.task_cancel_title),
-                summary = activeTask?.let {
-                    stringResource(Res.string.task_cancel_message, it.title)
-                },
-                onDismissRequest = { showProgressCancelConfirm = false },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TextButton(
-                        text = stringResource(Res.string.action_confirm),
-                        onClick = {
-                            showProgressCancelConfirm = false
-                            onActiveTaskCancel()
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColorsPrimary(),
-                    )
-                    TextButton(
-                        text = stringResource(Res.string.action_cancel),
-                        onClick = { showProgressCancelConfirm = false },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
         }
     }
 
@@ -921,11 +925,13 @@ private fun formatEta(seconds: Long): String {
             value / 60,
             value % 60,
         )
+
         value < 86_400 -> stringResource(
             Res.string.task_eta_hours_minutes,
             value / 3600,
             (value % 3600) / 60,
         )
+
         else -> stringResource(
             Res.string.task_eta_days_hours,
             value / 86_400,

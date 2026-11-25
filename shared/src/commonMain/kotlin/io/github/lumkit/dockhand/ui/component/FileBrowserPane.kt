@@ -40,7 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -302,11 +301,11 @@ fun FileBrowserPane(
                                 var dragging = false
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull() ?: break
                                     if (event.type == PointerEventType.Scroll) {
                                         updateMarqueeSelection()
                                         continue
                                     }
+                                    val change = event.changes.firstOrNull() ?: break
                                     val point = coordinates?.localToRoot(change.position) ?: change.position
                                     if (!dragging && (point - start).getDistance() > touchSlop) {
                                         dragging = true
@@ -359,182 +358,185 @@ fun FileBrowserPane(
                             animationSpec = tween(durationMillis = 180),
                             label = "file-layout",
                         ) { mode ->
-                        if (mode == FileLayoutMode.Grid) {
-                            FileGridContent(
-                                pane = pane,
-                                canTransferToOtherPane = canTransferToOtherPane,
-                                canMoveToOtherPane = canMoveToOtherPane,
-                                canTrash = canTrash,
-                                onEntryClick = onEntryClick,
-                                onEntryDoubleClick = onEntryDoubleClick,
-                                onEntrySecondaryClick = onEntrySecondaryClick,
-                                onContextMenuRequest = onContextMenuRequest,
-                                onContextMenuDismiss = onContextMenuDismiss,
-                                onContextAction = onContextAction,
-                                onLoadMore = onLoadMore,
-                                onSelectionChange = onSelectionChange,
-                                onInlineRename = onInlineRename,
-                                onInlineRenameStarted = onInlineRenameStarted,
-                            )
-                        } else {
-                        val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
-                        val edgeScrollMaxStep = with(LocalDensity.current) { 28.dp.toPx() }
-                        LaunchedEffect(isDragging) {
-                            if (!isDragging) return@LaunchedEffect
-                            while (true) {
-                                val pointer = dragPointerLocal
-                                val viewportHeight = listCoordinates?.size?.height
-                                if (pointer != null && viewportHeight != null) {
-                                    val y = pointer.y
-                                    val delta = when {
-                                        y < edgeScrollThreshold -> {
-                                            val intensity = ((edgeScrollThreshold - y) / edgeScrollThreshold)
-                                                .coerceIn(0f, 1f)
-                                            -edgeScrollMaxStep * intensity
-                                        }
-                                        y > viewportHeight - edgeScrollThreshold -> {
-                                            val intensity = (
-                                                (y - (viewportHeight - edgeScrollThreshold)) /
-                                                    edgeScrollThreshold
-                                                ).coerceIn(0f, 1f)
-                                            edgeScrollMaxStep * intensity
-                                        }
-                                        else -> 0f
-                                    }
-                                    if (delta != 0f) {
-                                        listState.scrollBy(delta)
-                                    }
-                                }
-                                withFrameNanos { }
-                            }
-                        }
-                        val currentHasMore by rememberUpdatedState(pane.hasMore)
-                        val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
-                        val currentLoadMore by rememberUpdatedState(onLoadMore)
-
-                        LaunchedEffect(listState) {
-                            snapshotFlow {
-                                val layoutInfo = listState.layoutInfo
-                                val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                                val total = layoutInfo.totalItemsCount
-                                total > 0 && lastVisible >= total - 3
-                            }
-                                .distinctUntilChanged()
-                                .collect { nearEnd ->
-                                    if (nearEnd && currentHasMore && !currentLoadingMore) {
-                                        currentLoadMore()
-                                    }
-                                }
-                        }
-
-                        LaunchedEffect(pane.location) {
-                            listState.scrollToItem(0)
-                        }
-
-                        LaunchedEffect(pane.selectedIds) {
-                            if (pane.selectedIds.size != 1) return@LaunchedEffect
-                            val index = pane.entries.indexOfFirst { it.id in pane.selectedIds }
-                            if (index < 0) return@LaunchedEffect
-                            val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
-                            if (!visible) {
-                                listState.animateScrollToItem(index)
-                            }
-                        }
-
-                        LaunchedEffect(listState) {
-                            snapshotFlow { listState.isScrollInProgress }
-                                .distinctUntilChanged()
-                                .collect { scrolling ->
-                                    if (scrolling) onContextMenuDismiss()
-                                }
-                        }
-
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScrollBar(listState),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                        ) {
-                            items(pane.entries, key = { it.id }) { row ->
-                                FileEntryRow(
-                                    row = row,
-                                    paneId = pane.id,
-                                    selected = row.id in pane.selectedIds,
+                            if (mode == FileLayoutMode.Grid) {
+                                FileGridContent(
+                                    pane = pane,
                                     canTransferToOtherPane = canTransferToOtherPane,
                                     canMoveToOtherPane = canMoveToOtherPane,
                                     canTrash = canTrash,
-                                    onInlineRename = { name -> onInlineRename(row.entry, name) },
-                                    startInlineRename = pane.inlineRenameEntryId == row.id,
+                                    onEntryClick = onEntryClick,
+                                    onEntryDoubleClick = onEntryDoubleClick,
+                                    onEntrySecondaryClick = onEntrySecondaryClick,
+                                    onContextMenuRequest = onContextMenuRequest,
+                                    onContextMenuDismiss = onContextMenuDismiss,
+                                    onContextAction = onContextAction,
+                                    onLoadMore = onLoadMore,
+                                    onSelectionChange = onSelectionChange,
+                                    onInlineRename = onInlineRename,
                                     onInlineRenameStarted = onInlineRenameStarted,
-                                    showContextMenu = pane.contextMenuEntryId == row.id,
-                                    onClick = {
-                                        val modifiers = windowInfo.keyboardModifiers
-                                        val mode = when {
-                                            modifiers.isShiftPressed -> SelectionMode.Range
-                                            modifiers.isAltPressed || modifiers.isMetaPressed ->
-                                                SelectionMode.Toggle
-                                            else -> SelectionMode.Replace
-                                        }
-                                        onEntryClick(row.entry, mode)
-                                    },
-                                    onDoubleClick = { onEntryDoubleClick(row.entry) },
-                                    onSecondaryClick = {
-                                        onEntrySecondaryClick(row.entry)
-                                        onContextMenuRequest(row.id)
-                                    },
-                                    onDismissContextMenu = onContextMenuDismiss,
-                                    onContextAction = { action ->
-                                        onContextAction(row.entry, action)
-                                    },
                                 )
-                            }
+                            } else {
+                                val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
+                                val edgeScrollMaxStep = with(LocalDensity.current) { 28.dp.toPx() }
+                                LaunchedEffect(isDragging) {
+                                    if (!isDragging) return@LaunchedEffect
+                                    while (true) {
+                                        val pointer = dragPointerLocal
+                                        val viewportHeight = listCoordinates?.size?.height
+                                        if (pointer != null && viewportHeight != null) {
+                                            val y = pointer.y
+                                            val delta = when {
+                                                y < edgeScrollThreshold -> {
+                                                    val intensity = ((edgeScrollThreshold - y) / edgeScrollThreshold)
+                                                        .coerceIn(0f, 1f)
+                                                    -edgeScrollMaxStep * intensity
+                                                }
 
-                            if (pane.isLoadingMore) {
-                                item(key = "load-more") {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 10.dp, vertical = 12.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        InfiniteProgressIndicator(size = 20.dp)
-                                        Text(
-                                            text = stringResource(Res.string.text_loading_more),
-                                            modifier = Modifier.padding(start = 8.dp),
-                                            style = MiuixTheme.textStyles.body1,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                y > viewportHeight - edgeScrollThreshold -> {
+                                                    val intensity = (
+                                                            (y - (viewportHeight - edgeScrollThreshold)) /
+                                                                    edgeScrollThreshold
+                                                            ).coerceIn(0f, 1f)
+                                                    edgeScrollMaxStep * intensity
+                                                }
+
+                                                else -> 0f
+                                            }
+                                            if (delta != 0f) {
+                                                listState.scrollBy(delta)
+                                            }
+                                        }
+                                        withFrameNanos { }
+                                    }
+                                }
+                                val currentHasMore by rememberUpdatedState(pane.hasMore)
+                                val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
+                                val currentLoadMore by rememberUpdatedState(onLoadMore)
+
+                                LaunchedEffect(listState) {
+                                    snapshotFlow {
+                                        val layoutInfo = listState.layoutInfo
+                                        val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                                        val total = layoutInfo.totalItemsCount
+                                        total > 0 && lastVisible >= total - 3
+                                    }
+                                        .distinctUntilChanged()
+                                        .collect { nearEnd ->
+                                            if (nearEnd && currentHasMore && !currentLoadingMore) {
+                                                currentLoadMore()
+                                            }
+                                        }
+                                }
+
+                                LaunchedEffect(pane.location) {
+                                    listState.scrollToItem(0)
+                                }
+
+                                LaunchedEffect(pane.selectedIds) {
+                                    if (pane.selectedIds.size != 1) return@LaunchedEffect
+                                    val index = pane.entries.indexOfFirst { it.id in pane.selectedIds }
+                                    if (index < 0) return@LaunchedEffect
+                                    val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+                                    if (!visible) {
+                                        listState.animateScrollToItem(index)
+                                    }
+                                }
+
+                                LaunchedEffect(listState) {
+                                    snapshotFlow { listState.isScrollInProgress }
+                                        .distinctUntilChanged()
+                                        .collect { scrolling ->
+                                            if (scrolling) onContextMenuDismiss()
+                                        }
+                                }
+
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScrollBar(listState),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                ) {
+                                    items(pane.entries, key = { it.id }) { row ->
+                                        FileEntryRow(
+                                            row = row,
+                                            paneId = pane.id,
+                                            selected = row.id in pane.selectedIds,
+                                            canTransferToOtherPane = canTransferToOtherPane,
+                                            canMoveToOtherPane = canMoveToOtherPane,
+                                            canTrash = canTrash,
+                                            onInlineRename = { name -> onInlineRename(row.entry, name) },
+                                            startInlineRename = pane.inlineRenameEntryId == row.id,
+                                            onInlineRenameStarted = onInlineRenameStarted,
+                                            showContextMenu = pane.contextMenuEntryId == row.id,
+                                            onClick = {
+                                                val modifiers = windowInfo.keyboardModifiers
+                                                val mode = when {
+                                                    modifiers.isShiftPressed -> SelectionMode.Range
+                                                    modifiers.isAltPressed || modifiers.isMetaPressed ->
+                                                        SelectionMode.Toggle
+
+                                                    else -> SelectionMode.Replace
+                                                }
+                                                onEntryClick(row.entry, mode)
+                                            },
+                                            onDoubleClick = { onEntryDoubleClick(row.entry) },
+                                            onSecondaryClick = {
+                                                onEntrySecondaryClick(row.entry)
+                                                onContextMenuRequest(row.id)
+                                            },
+                                            onDismissContextMenu = onContextMenuDismiss,
+                                            onContextAction = { action ->
+                                                onContextAction(row.entry, action)
+                                            },
+                                        )
+                                    }
+
+                                    if (pane.isLoadingMore) {
+                                        item(key = "load-more") {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                                                horizontalArrangement = Arrangement.Center,
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                InfiniteProgressIndicator(size = 20.dp)
+                                                Text(
+                                                    text = stringResource(Res.string.text_loading_more),
+                                                    modifier = Modifier.padding(start = 8.dp),
+                                                    style = MiuixTheme.textStyles.body1,
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                val start = dragStart
+                                val end = dragEnd
+                                if (start != null && end != null) {
+                                    val origin = listCoordinates?.boundsInRoot()?.topLeft ?: Offset.Zero
+                                    val left = min(start.x, end.x) - origin.x
+                                    val top = min(start.y, end.y) - origin.y
+                                    val width = max(start.x, end.x) - min(start.x, end.x)
+                                    val height = max(start.y, end.y) - min(start.y, end.y)
+                                    val selectionColor = MiuixTheme.colorScheme.primary
+                                    Canvas(modifier = Modifier.matchParentSize()) {
+                                        drawRect(
+                                            color = selectionColor.copy(alpha = 0.12f),
+                                            topLeft = Offset(left, top),
+                                            size = Size(width, height),
+                                        )
+                                        drawRect(
+                                            color = selectionColor,
+                                            topLeft = Offset(left, top),
+                                            size = Size(width, height),
+                                            style = Stroke(width = 1.dp.toPx()),
                                         )
                                     }
                                 }
                             }
-                        }
-
-                        val start = dragStart
-                        val end = dragEnd
-                        if (start != null && end != null) {
-                            val origin = listCoordinates?.boundsInRoot()?.topLeft ?: Offset.Zero
-                            val left = min(start.x, end.x) - origin.x
-                            val top = min(start.y, end.y) - origin.y
-                            val width = max(start.x, end.x) - min(start.x, end.x)
-                            val height = max(start.y, end.y) - min(start.y, end.y)
-                            val selectionColor = MiuixTheme.colorScheme.primary
-                            Canvas(modifier = Modifier.matchParentSize()) {
-                                drawRect(
-                                    color = selectionColor.copy(alpha = 0.12f),
-                                    topLeft = Offset(left, top),
-                                    size = Size(width, height),
-                                )
-                                drawRect(
-                                    color = selectionColor,
-                                    topLeft = Offset(left, top),
-                                    size = Size(width, height),
-                                    style = Stroke(width = 1.dp.toPx()),
-                                )
-                            }
-                        }
-                        }
                         }
                     }
                 }
@@ -851,12 +853,12 @@ private fun FileEntryRow(
                     text = row.name,
                     modifier = if (selected) {
                         Modifier.combinedClickable(
-                                indication = null,
-                                interactionSource = null,
-                                onDoubleClick = onDoubleClick,
-                            ) {
-                                editing = true
-                            }
+                            indication = null,
+                            interactionSource = null,
+                            onDoubleClick = onDoubleClick,
+                        ) {
+                            editing = true
+                        }
                     } else {
                         Modifier
                     },
@@ -910,31 +912,46 @@ private fun FileGridContent(
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
     val inlineBounds = LocalInlineRenameBounds.current
-    val rowBounds = remember { mutableStateMapOf<String, Rect>() }
     var gridCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
     var dragAnchorId by remember { mutableStateOf<String?>(null) }
+    var dragAnchorIndex by remember { mutableStateOf<Int?>(null) }
     var dragging by remember { mutableStateOf(false) }
     val isDragging = dragging
     val density = LocalDensity.current
     val scrollBarTouchWidth = with(density) { 28.dp.toPx() }
 
+    fun gridIndexAt(rootPoint: Offset): Int? {
+        val origin = gridCoordinates?.boundsInRoot()?.topLeft ?: return null
+        val visible = gridState.layoutInfo.visibleItemsInfo
+            .filter { it.index in pane.entries.indices }
+        if (visible.isEmpty()) return null
+        val hit = visible.firstOrNull { info ->
+            val left = origin.x + info.offset.x
+            val top = origin.y + info.offset.y
+            rootPoint.x in left..(left + info.size.width) &&
+                    rootPoint.y in top..(top + info.size.height)
+        }
+        if (hit != null) return hit.index
+        // 指针在空白处时取最近的可见项，滚动后索引会随内容移动。
+        return visible.minByOrNull { info ->
+            val cy = origin.y + info.offset.y + info.size.height / 2f
+            kotlin.math.abs(cy - rootPoint.y)
+        }?.index
+    }
+
     fun updateGridSelection() {
-        val start = dragStart ?: return
+        val anchor = dragAnchorIndex ?: return
         val end = dragEnd ?: return
-        val rect = Rect(
-            left = min(start.x, end.x),
-            top = min(start.y, end.y),
-            right = max(start.x, end.x),
-            bottom = max(start.y, end.y),
+        val current = gridIndexAt(end) ?: return
+        val from = min(anchor, current)
+        val to = max(anchor, current)
+        currentOnSelectionChange(
+            pane.entries.subList(from, to + 1).map { it.id }.toSet(),
+            dragAnchorId ?: pane.entries.getOrNull(anchor)?.id,
         )
-        val selected = rowBounds
-            .filterValues { bounds -> bounds.overlaps(rect) }
-            .keys
-            .toSet()
-        currentOnSelectionChange(selected, dragAnchorId ?: selected.firstOrNull())
     }
 
     LaunchedEffect(isDragging) {
@@ -950,6 +967,7 @@ private fun FileGridContent(
                     pointer.y < edge -> -maxStep * ((edge - pointer.y) / edge).coerceIn(0f, 1f)
                     pointer.y > height - edge ->
                         maxStep * ((pointer.y - (height - edge)) / edge).coerceIn(0f, 1f)
+
                     else -> 0f
                 }
                 if (delta != 0f) gridState.scrollBy(delta)
@@ -1011,24 +1029,22 @@ private fun FileGridContent(
                         }
                         val startRoot = coordinates?.localToRoot(down.position) ?: down.position
                         if (inlineBounds?.value?.contains(startRoot) == true) continue
-                        val anchor = rowBounds.entries.firstOrNull {
-                            it.value.contains(startRoot)
-                        }?.key ?: rowBounds.minByOrNull { (_, bounds) ->
-                            kotlin.math.abs(bounds.center.y - startRoot.y)
-                        }?.key
+                        val anchorIndex = gridIndexAt(startRoot)
+                        val anchor = pane.entries.getOrNull(anchorIndex ?: -1)?.id
                         var active = false
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull() ?: break
                             if (event.type == PointerEventType.Scroll) {
                                 if (active) updateGridSelection()
                                 continue
                             }
+                            val change = event.changes.firstOrNull() ?: break
                             val point = coordinates?.localToRoot(change.position) ?: change.position
                             if (!active && (point - startRoot).getDistance() > viewConfiguration.touchSlop) {
                                 active = true
                                 dragging = true
                                 dragAnchorId = anchor
+                                dragAnchorIndex = anchorIndex
                                 dragStart = startRoot
                             }
                             if (active) {
@@ -1046,6 +1062,7 @@ private fun FileGridContent(
                         dragEnd = null
                         dragPointerLocal = null
                         dragAnchorId = null
+                        dragAnchorIndex = null
                     }
                 }
             }
@@ -1063,8 +1080,15 @@ private fun FileGridContent(
             gridItems(pane.entries, key = { it.id }) { row ->
                 FileGridItem(
                     row = row,
+                    paneId = pane.id,
                     selected = row.id in pane.selectedIds,
                     startInlineRename = pane.inlineRenameEntryId == row.id,
+                    canTransferToOtherPane = canTransferToOtherPane,
+                    canMoveToOtherPane = canMoveToOtherPane,
+                    canTrash = canTrash,
+                    showContextMenu = pane.contextMenuEntryId == row.id,
+                    onDismissContextMenu = onContextMenuDismiss,
+                    onContextAction = { action -> onContextAction(row.entry, action) },
                     onClick = {
                         val modifiers = windowInfo.keyboardModifiers
                         val mode = when {
@@ -1081,9 +1105,6 @@ private fun FileGridContent(
                     },
                     onInlineRename = { name -> onInlineRename(row.entry, name) },
                     onInlineRenameStarted = onInlineRenameStarted,
-                    onBoundsChanged = { rect ->
-                        if (rect == null) rowBounds.remove(row.id) else rowBounds[row.id] = rect
-                    },
                 )
             }
             if (pane.isLoadingMore) {
@@ -1129,36 +1150,26 @@ private fun FileGridContent(
             }
         }
 
-        val contextEntry = pane.contextMenuEntryId
-            ?.let { id -> pane.entries.firstOrNull { it.id == id } }
-        if (contextEntry != null) {
-            FileGridContextMenu(
-                paneId = pane.id,
-                entry = contextEntry,
-                canTransferToOtherPane = canTransferToOtherPane,
-                canMoveToOtherPane = canMoveToOtherPane,
-                canTrash = canTrash,
-                onDismiss = onContextMenuDismiss,
-                onAction = { action ->
-                    onContextAction(contextEntry.entry, action)
-                    onContextMenuDismiss()
-                },
-            )
-        }
     }
 }
 
 @Composable
 private fun FileGridItem(
     row: FileRowUi,
+    paneId: PaneId,
     selected: Boolean,
     startInlineRename: Boolean,
+    canTransferToOtherPane: Boolean,
+    canMoveToOtherPane: Boolean,
+    canTrash: Boolean,
+    showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onSecondaryClick: () -> Unit,
+    onDismissContextMenu: () -> Unit,
+    onContextAction: (FileContextAction) -> Unit,
     onInlineRename: (String) -> Unit,
     onInlineRenameStarted: () -> Unit,
-    onBoundsChanged: (Rect?) -> Unit,
 ) {
     val color = if (selected) {
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
@@ -1183,7 +1194,6 @@ private fun FileGridItem(
 
     DisposableEffect(row.id) {
         onDispose {
-            onBoundsChanged(null)
             if (editing) inlineBounds?.value = null
         }
     }
@@ -1213,151 +1223,165 @@ private fun FileGridItem(
         focusRequester.requestFocus()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 124.dp)
-            .squircleClip(12.dp)
-            .background(color)
-            .alpha(if (row.entry.isHidden) 0.45f else 1f)
-            .onGloballyPositioned {
-                itemCoordinates = it
-                onBoundsChanged(it.boundsInRoot())
-            }
-            .pointerInput(editing) {
-                if (!editing) return@pointerInput
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (event.type != PointerEventType.Press) continue
-                        val point = event.changes.firstOrNull()?.position ?: continue
-                        val root = itemCoordinates?.localToRoot(point) ?: point
-                        val bounds = inlineBounds?.value
-                        if (bounds == null || !bounds.contains(root)) {
-                            // 编辑中点击非输入框区域只提交，不能在同一次点击里重新进入编辑。
-                            suppressNextClick = true
+    Box {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(156.dp)
+                .squircleClip(12.dp)
+                .background(color)
+                .alpha(if (row.entry.isHidden) 0.45f else 1f)
+                .onGloballyPositioned { itemCoordinates = it }
+                .pointerInput(editing) {
+                    if (!editing) return@pointerInput
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type != PointerEventType.Press) continue
+                            val point = event.changes.firstOrNull()?.position ?: continue
+                            val root = itemCoordinates?.localToRoot(point) ?: point
+                            val bounds = inlineBounds?.value
+                            if (bounds == null || !bounds.contains(root)) {
+                                // 编辑中点击非输入框区域只提交，不能在同一次点击里重新进入编辑。
+                                suppressNextClick = true
+                            }
                         }
                     }
                 }
-            }
-            .combinedClickable(
-                onClick = {
-                    if (suppressNextClick) {
-                        suppressNextClick = false
-                        commitInlineRename()
-                    } else if (editing) {
-                        commitInlineRename()
-                    } else {
-                        focusManager.clearFocus()
-                        if (selected) editing = true else onClick()
-                    }
-                },
-                onDoubleClick = onDoubleClick,
-            )
-            .pointerInput(onSecondaryClick, editing) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (
-                            !editing &&
-                            event.type == PointerEventType.Press &&
-                            event.buttons.isSecondaryPressed
-                        ) {
-                            event.changes.forEach { it.consume() }
-                            onSecondaryClick()
-                        }
-                    }
-                }
-            }
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (row.thumbnailModel != null) {
-            AsyncImage(
-                model = row.thumbnailModel,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp).squircleClip(12.dp),
-                placeholder = painterResource(row.icon),
-                error = painterResource(row.icon),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Image(
-                painter = painterResource(row.icon),
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        if (editing) {
-            BasicTextField(
-                state = editState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onGloballyPositioned { coordinates ->
-                        if (editing) inlineBounds?.value = coordinates.boundsInRoot()
-                    }
-                    .onFocusChanged { focusState ->
-                        if (!editing) return@onFocusChanged
-                        if (focusState.isFocused) {
-                            editFieldWasFocused = true
-                        } else if (editFieldWasFocused) {
+                .combinedClickable(
+                    onClick = {
+                        if (suppressNextClick) {
+                            suppressNextClick = false
                             commitInlineRename()
-                        }
-                    }
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                        } else if (editing) {
                             commitInlineRename()
-                            true
                         } else {
-                            false
+                            focusManager.clearFocus()
+                            if (selected) editing = true else onClick()
+                        }
+                    },
+                    onDoubleClick = onDoubleClick,
+                )
+                .pointerInput(onSecondaryClick, editing) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (
+                                !editing &&
+                                event.type == PointerEventType.Press &&
+                                event.buttons.isSecondaryPressed
+                            ) {
+                                event.changes.forEach { it.consume() }
+                                onSecondaryClick()
+                            }
                         }
                     }
-                    .background(
-                        color = MiuixTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(6.dp),
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                textStyle = MiuixTheme.textStyles.footnote1.copy(
-                    fontWeight = FontWeight.Medium,
+                }
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            if (row.thumbnailModel != null) {
+                AsyncImage(
+                    model = row.thumbnailModel,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp).squircleClip(12.dp),
+                    placeholder = painterResource(row.icon),
+                    error = painterResource(row.icon),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Image(
+                    painter = painterResource(row.icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            if (editing) {
+                BasicTextField(
+                    state = editState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onGloballyPositioned { coordinates ->
+                            if (editing) inlineBounds?.value = coordinates.boundsInRoot()
+                        }
+                        .onFocusChanged { focusState ->
+                            if (!editing) return@onFocusChanged
+                            if (focusState.isFocused) {
+                                editFieldWasFocused = true
+                            } else if (editFieldWasFocused) {
+                                commitInlineRename()
+                            }
+                        }
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                                commitInlineRename()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        .background(
+                            color = MiuixTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp),
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    textStyle = MiuixTheme.textStyles.footnote1.copy(
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        color = MiuixTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                    lineLimits = TextFieldLineLimits.MultiLine(),
+                )
+            } else {
+                Text(
+                    text = row.name,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
+                    style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurface,
-                ),
-                cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
-                lineLimits = TextFieldLineLimits.MultiLine(),
-            )
-        } else {
-            Text(
-                text = row.name,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = if (selected) {
-                    Modifier.combinedClickable(
-                        indication = null,
-                        interactionSource = null,
-                        onDoubleClick = onDoubleClick,
-                    ) {
-                        editing = true
-                    }
-                } else {
-                    Modifier
-                }.fillMaxWidth(),
-            )
+                    modifier = if (selected) {
+                        Modifier.combinedClickable(
+                            indication = null,
+                            interactionSource = null,
+                            onDoubleClick = onDoubleClick,
+                        ) {
+                            editing = true
+                        }
+                    } else {
+                        Modifier
+                    }.fillMaxWidth(),
+                )
+            }
+            if (!row.summary.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = row.summary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
         }
-        if (!row.summary.isNullOrBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = row.summary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+
+        if (showContextMenu) {
+            FileGridContextMenu(
+                paneId = paneId,
+                entry = row,
+                canTransferToOtherPane = canTransferToOtherPane,
+                canMoveToOtherPane = canMoveToOtherPane,
+                canTrash = canTrash,
+                onDismiss = onDismissContextMenu,
+                onAction = { action ->
+                    onContextAction(action)
+                    onDismissContextMenu()
+                },
             )
         }
     }
@@ -1394,9 +1418,13 @@ private fun FileGridContextMenu(
     )
 
     val entries = buildList {
-        add(DropdownEntry(items = listOf(
-            DropdownItem(text = infoLabel, onClick = { onAction(FileContextAction.ViewInfo) })
-        )))
+        add(
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(text = infoLabel, onClick = { onAction(FileContextAction.ViewInfo) })
+                )
+            )
+        )
         if (isLocal) {
             add(DropdownEntry(items = buildList {
                 if (canTransferToOtherPane) {
@@ -1412,21 +1440,25 @@ private fun FileGridContextMenu(
                 add(DropdownItem(text = renameLabel, onClick = { onAction(FileContextAction.Rename) }))
                 add(DropdownItem(text = compressLabel, onClick = { onAction(FileContextAction.Compress) }))
             }))
-            add(DropdownEntry(items = listOf(
-                DropdownItem(
-                    text = servicesLabel,
-                    children = listOf(
+            add(
+                DropdownEntry(
+                    items = listOf(
                         DropdownItem(
-                            text = terminalTabLabel,
-                            onClick = { onAction(FileContextAction.TerminalTab) },
-                        ),
-                        DropdownItem(
-                            text = terminalWindowLabel,
-                            onClick = { onAction(FileContextAction.TerminalWindow) },
-                        ),
-                    ),
+                            text = servicesLabel,
+                            children = listOf(
+                                DropdownItem(
+                                    text = terminalTabLabel,
+                                    onClick = { onAction(FileContextAction.TerminalTab) },
+                                ),
+                                DropdownItem(
+                                    text = terminalWindowLabel,
+                                    onClick = { onAction(FileContextAction.TerminalWindow) },
+                                ),
+                            ),
+                        )
+                    )
                 )
-            )))
+            )
         }
     }
 
