@@ -122,4 +122,6 @@ Dockhand 目前支持简体中文和 English (US)。欢迎母语使用者帮助�
 
 ## 许可证
 
-Copyright © 2026 lumkit. All rights reserved.
+本项目基于 [Apache License 2.0](LICENSE) 开源。
+
+Copyright 2026 lumkit.
