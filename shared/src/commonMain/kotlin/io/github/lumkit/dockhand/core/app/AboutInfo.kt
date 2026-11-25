@@ -86,6 +86,14 @@ val OPEN_SOURCE_LIBRARIES = listOf(
         url = "https://github.com/Kotlin/kotlinx.serialization",
     ),
     OpenSourceLibrary(
+        name = "zip4j",
+        version = "2.11.5",
+        description = "ZIP 压缩与 AES 加密库，用于创建压缩文件。",
+        descriptionEn = "ZIP compression and AES encryption library used for archives.",
+        author = "Srikanth Lingala",
+        url = "https://github.com/srikanth-lingala/zip4j",
+    ),
+    OpenSourceLibrary(
         name = "mtp-rs",
         version = "0.38",
         description = "Rust MTP 实现，用于 Android 设备文件传输。",

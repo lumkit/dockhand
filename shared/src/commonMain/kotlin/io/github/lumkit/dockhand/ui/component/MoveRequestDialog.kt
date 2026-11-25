@@ -54,6 +54,10 @@ fun MoveRequestDialog(
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            BackgroundTaskRow(
+                checked = request.background,
+                onCheckedChange = onBackgroundChange,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

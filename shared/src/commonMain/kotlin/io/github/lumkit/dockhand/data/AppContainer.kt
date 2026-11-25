@@ -1,6 +1,8 @@
 package io.github.lumkit.dockhand.data
 
 import androidx.compose.runtime.Composable
+import io.github.lumkit.dockhand.core.archive.ArchiveService
+import io.github.lumkit.dockhand.core.archive.NoopArchiveService
 import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
@@ -22,6 +24,7 @@ class AppContainer(
     val terminalLauncher: TerminalLauncher = NoopTerminalLauncher,
     val taskNotifier: TaskNotifier = NoopTaskNotifier,
     val cacheManager: CacheManager = NoopCacheManager,
+    val archiveService: ArchiveService = NoopArchiveService,
     private val onClose: () -> Unit = {},
 ) {
     private var closed = false

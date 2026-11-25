@@ -66,6 +66,7 @@ import io.github.lumkit.dockhand.shortcut.ShortcutRegistry
 import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
 import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
+import io.github.lumkit.dockhand.ui.component.CompressRequestDialog
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
@@ -169,6 +170,7 @@ fun HomeScreen() {
             settings = container.settings,
             terminalLauncher = container.terminalLauncher,
             cacheManager = container.cacheManager,
+            archiveService = container.archiveService,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -197,6 +199,7 @@ fun HomeScreen() {
         onShortcutMove = homeViewModel::onShortcutMove,
         onShortcutDelete = homeViewModel::onShortcutDelete,
         onShortcutRename = homeViewModel::onShortcutRename,
+        onShortcutCompress = homeViewModel::onShortcutCompress,
         onShortcutTrash = homeViewModel::onShortcutTrash,
         onExtendSelectionUp = homeViewModel::onExtendSelectionUp,
         onExtendSelectionDown = homeViewModel::onExtendSelectionDown,
@@ -234,6 +237,16 @@ fun HomeScreen() {
         onRenameRequestBackgroundChange = homeViewModel::onRenameRequestBackgroundChange,
         onRenameRequestDismiss = homeViewModel::onRenameRequestDismiss,
         onRenameRequestConfirm = homeViewModel::onRenameRequestConfirm,
+        onCompressRequestNameChange = homeViewModel::onCompressRequestNameChange,
+        onCompressRequestLevelChange = homeViewModel::onCompressRequestLevelChange,
+        onCompressRequestPasswordChange = homeViewModel::onCompressRequestPasswordChange,
+        onCompressRequestSplitChange = homeViewModel::onCompressRequestSplitChange,
+        onCompressRequestSeparateChange = homeViewModel::onCompressRequestSeparateChange,
+        onCompressRequestDeleteSourceChange = homeViewModel::onCompressRequestDeleteSourceChange,
+        onCompressRequestToOtherPaneChange = homeViewModel::onCompressRequestToOtherPaneChange,
+        onCompressRequestBackgroundChange = homeViewModel::onCompressRequestBackgroundChange,
+        onCompressRequestDismiss = homeViewModel::onCompressRequestDismiss,
+        onCompressRequestConfirm = homeViewModel::onCompressRequestConfirm,
         onTrashRequestBackgroundChange = homeViewModel::onTrashRequestBackgroundChange,
         onTrashRequestDismiss = homeViewModel::onTrashRequestDismiss,
         onTrashRequestConfirm = homeViewModel::onTrashRequestConfirm,
@@ -291,6 +304,7 @@ private fun HomeScreenContent(
     onShortcutMove: () -> Boolean,
     onShortcutDelete: () -> Boolean,
     onShortcutRename: () -> Boolean,
+    onShortcutCompress: () -> Boolean,
     onShortcutTrash: () -> Boolean,
     onExtendSelectionUp: () -> Boolean,
     onExtendSelectionDown: () -> Boolean,
@@ -328,6 +342,16 @@ private fun HomeScreenContent(
     onRenameRequestBackgroundChange: (Boolean) -> Unit,
     onRenameRequestDismiss: () -> Unit,
     onRenameRequestConfirm: () -> Unit,
+    onCompressRequestNameChange: (String) -> Unit,
+    onCompressRequestLevelChange: (io.github.lumkit.dockhand.core.archive.CompressionLevel) -> Unit,
+    onCompressRequestPasswordChange: (String) -> Unit,
+    onCompressRequestSplitChange: (String) -> Unit,
+    onCompressRequestSeparateChange: (Boolean) -> Unit,
+    onCompressRequestDeleteSourceChange: (Boolean) -> Unit,
+    onCompressRequestToOtherPaneChange: (Boolean) -> Unit,
+    onCompressRequestBackgroundChange: (Boolean) -> Unit,
+    onCompressRequestDismiss: () -> Unit,
+    onCompressRequestConfirm: () -> Unit,
     onTrashRequestBackgroundChange: (Boolean) -> Unit,
     onTrashRequestDismiss: () -> Unit,
     onTrashRequestConfirm: () -> Unit,
@@ -378,6 +402,7 @@ private fun HomeScreenContent(
     val currentShortcutMove by rememberUpdatedState(onShortcutMove)
     val currentShortcutDelete by rememberUpdatedState(onShortcutDelete)
     val currentShortcutRename by rememberUpdatedState(onShortcutRename)
+    val currentShortcutCompress by rememberUpdatedState(onShortcutCompress)
     val currentShortcutTrash by rememberUpdatedState(onShortcutTrash)
     val currentExtendUp by rememberUpdatedState(onExtendSelectionUp)
     val currentExtendDown by rememberUpdatedState(onExtendSelectionDown)
@@ -392,6 +417,7 @@ private fun HomeScreenContent(
                     currentUiState.moveRequest != null ||
                     currentUiState.deleteRequest != null ||
                     currentUiState.renameRequest != null ||
+                    currentUiState.compressRequest != null ||
                     currentUiState.trashRequest != null
             if (modalOpen) {
                 false
@@ -416,6 +442,7 @@ private fun HomeScreenContent(
                     ShortcutAction.Move -> currentShortcutMove()
                     ShortcutAction.Delete -> currentShortcutDelete()
                     ShortcutAction.Rename -> currentShortcutRename()
+                    ShortcutAction.Compress -> currentShortcutCompress()
                     ShortcutAction.Trash -> currentShortcutTrash()
                     ShortcutAction.ExtendSelectionUp -> currentExtendUp()
                     ShortcutAction.ExtendSelectionDown -> currentExtendDown()
@@ -655,6 +682,20 @@ private fun HomeScreenContent(
                     onBackgroundChange = onRenameRequestBackgroundChange,
                     onDismiss = onRenameRequestDismiss,
                     onConfirm = onRenameRequestConfirm,
+                )
+
+                CompressRequestDialog(
+                    request = uiState.compressRequest,
+                    onNameChange = onCompressRequestNameChange,
+                    onLevelChange = onCompressRequestLevelChange,
+                    onPasswordChange = onCompressRequestPasswordChange,
+                    onSplitChange = onCompressRequestSplitChange,
+                    onSeparateChange = onCompressRequestSeparateChange,
+                    onDeleteSourceChange = onCompressRequestDeleteSourceChange,
+                    onToOtherPaneChange = onCompressRequestToOtherPaneChange,
+                    onBackgroundChange = onCompressRequestBackgroundChange,
+                    onDismissRequest = onCompressRequestDismiss,
+                    onConfirm = onCompressRequestConfirm,
                 )
 
                 TrashRequestDialog(

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.map
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
+import io.github.lumkit.dockhand.domain.model.TaskPreferences
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.WindowSize
@@ -42,6 +43,10 @@ internal object SettingsKeys {
     val KeyColor = intPreferencesKey("key_color")
     val ShowHiddenItems = booleanPreferencesKey("show_hidden_items")
     val AppLanguage = stringPreferencesKey("app_language")
+    val TaskBackground = booleanPreferencesKey("task_background")
+    val CompressSeparateArchives = booleanPreferencesKey("compress_separate_archives")
+    val CompressDeleteSource = booleanPreferencesKey("compress_delete_source")
+    val CompressToOtherPane = booleanPreferencesKey("compress_to_other_pane")
     val FileLayoutMode = stringPreferencesKey("file_layout_mode")
     val FileSortMode = stringPreferencesKey("file_sort_mode")
 
@@ -164,6 +169,33 @@ class SettingsRepository(
 
     suspend fun setLanguage(language: AppLanguage) {
         dataStore.edit { prefs -> prefs[SettingsKeys.AppLanguage] = language.name }
+    }
+
+    val taskPreferences: Flow<TaskPreferences> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            TaskPreferences(
+                background = prefs[SettingsKeys.TaskBackground] ?: false,
+                compressSeparateArchives = prefs[SettingsKeys.CompressSeparateArchives] ?: false,
+                compressDeleteSource = prefs[SettingsKeys.CompressDeleteSource] ?: false,
+                compressToOtherPane = prefs[SettingsKeys.CompressToOtherPane] ?: false,
+            )
+        }
+
+    suspend fun setTaskBackground(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.TaskBackground] = enabled }
+    }
+
+    suspend fun setCompressSeparateArchives(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.CompressSeparateArchives] = enabled }
+    }
+
+    suspend fun setCompressDeleteSource(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.CompressDeleteSource] = enabled }
+    }
+
+    suspend fun setCompressToOtherPane(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.CompressToOtherPane] = enabled }
     }
 
     val fileLayoutMode: Flow<FileLayoutMode> = dataStore.data

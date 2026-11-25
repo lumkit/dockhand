@@ -71,6 +71,10 @@ fun RenameRequestDialog(
                 modifier = Modifier.fillMaxWidth(),
                 lineLimits = TextFieldLineLimits.SingleLine,
             )
+            BackgroundTaskRow(
+                checked = request.background,
+                onCheckedChange = onBackgroundChange,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -46,6 +46,7 @@ kotlin {
             implementation(libs.androidx.sqlite.bundled)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.kotlinx.serializationJson)
+            implementation(libs.zip4j)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

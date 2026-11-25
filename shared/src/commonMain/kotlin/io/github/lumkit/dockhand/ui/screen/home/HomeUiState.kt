@@ -10,8 +10,10 @@ import io.github.lumkit.dockhand.shortcut.DefaultShortcutBindings
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
+import io.github.lumkit.dockhand.domain.model.TaskPreferences
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FileSortMode
@@ -120,6 +122,20 @@ data class RenameRequestState(
 )
 
 @Immutable
+data class CompressRequestState(
+    val entry: FileEntry,
+    val entries: List<FileEntry> = listOf(entry),
+    val archiveName: String = "",
+    val level: CompressionLevel = CompressionLevel.Normal,
+    val password: String = "",
+    val splitSizeMb: String = "",
+    val separateArchives: Boolean = false,
+    val deleteSource: Boolean = false,
+    val toOtherPane: Boolean = false,
+    val background: Boolean = false,
+)
+
+@Immutable
 data class TrashRequestState(
     val entry: FileEntry,
     val background: Boolean = false,
@@ -145,6 +161,7 @@ data class HomeUiState(
     val fileLayoutMode: FileLayoutMode = FileLayoutMode.List,
     val fileSortMode: FileSortMode = FileSortMode.NameAsc,
     val cacheBreakdown: CacheBreakdown = CacheBreakdown(),
+    val taskPreferences: TaskPreferences = TaskPreferences(),
     val language: AppLanguage = AppLanguage.System,
     val shortcuts: Map<ShortcutAction, List<ShortcutKey>> =
         DefaultShortcutBindings.mapValues { listOf(it.value) },
@@ -170,6 +187,7 @@ data class HomeUiState(
     val moveRequest: MoveRequestState? = null,
     val deleteRequest: DeleteRequestState? = null,
     val renameRequest: RenameRequestState? = null,
+    val compressRequest: CompressRequestState? = null,
     val trashRequest: TrashRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),

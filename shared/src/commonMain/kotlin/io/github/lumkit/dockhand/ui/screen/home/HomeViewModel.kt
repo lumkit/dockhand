@@ -5,6 +5,11 @@ import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.core.archive.ArchiveService
+import io.github.lumkit.dockhand.core.archive.CompressCallbacks
+import io.github.lumkit.dockhand.core.archive.CompressRequest
+import io.github.lumkit.dockhand.core.archive.CompressionLevel
+import io.github.lumkit.dockhand.core.archive.NoopArchiveService
 import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
@@ -33,6 +38,10 @@ import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.cache_clear_pending
+import dockhand.shared.generated.resources.compress_name_empty
+import dockhand.shared.generated.resources.task_compress_detail
+import dockhand.shared.generated.resources.task_compress_title
+import dockhand.shared.generated.resources.task_compress_title_multiple
 import dockhand.shared.generated.resources.error_name_empty
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import dockhand.shared.generated.resources.error_name_invalid
@@ -90,6 +99,7 @@ class HomeViewModel(
     private val settings: SettingsRepository? = null,
     private val terminalLauncher: TerminalLauncher? = null,
     private val cacheManager: CacheManager = NoopCacheManager,
+    private val archiveService: ArchiveService = NoopArchiveService,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -168,6 +178,7 @@ class HomeViewModel(
         title: String,
         detail: String?,
         showDialog: Boolean = true,
+        background: Boolean = false,
         isBatch: Boolean = false,
         itemNames: List<String> = emptyList(),
         itemSizes: List<Long?> = emptyList(),
@@ -177,7 +188,7 @@ class HomeViewModel(
         taskId = taskManager.start(
             title = title,
             detail = detail,
-            background = false,
+            background = background,
             isBatch = isBatch,
             itemNames = itemNames,
             itemSizes = itemSizes,
@@ -193,6 +204,7 @@ class HomeViewModel(
         }
         if (
             showDialog &&
+            !background &&
             taskManager.tasks.value.any {
                 it.id == taskId &&
                     (it.state == io.github.lumkit.dockhand.task.TaskState.Running ||
@@ -259,6 +271,15 @@ class HomeViewModel(
                 .catch { }
                 .collect { shortcuts ->
                     _state.update { it.copy(shortcuts = shortcuts) }
+                }
+        }
+    }
+    private val taskPreferencesJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.taskPreferences
+                .catch { }
+                .collect { preferences ->
+                    _state.update { it.copy(taskPreferences = preferences) }
                 }
         }
     }
@@ -554,6 +575,121 @@ class HomeViewModel(
         }
     }
 
+    private fun updateCompressRequest(
+        transform: (CompressRequestState) -> CompressRequestState,
+    ) {
+        _state.update { state ->
+            val request = state.compressRequest ?: return@update state
+            state.copy(compressRequest = transform(request))
+        }
+    }
+
+    fun onCompressRequestNameChange(name: String) {
+        updateCompressRequest { it.copy(archiveName = name) }
+    }
+
+    fun onCompressRequestLevelChange(level: CompressionLevel) {
+        updateCompressRequest { it.copy(level = level) }
+    }
+
+    fun onCompressRequestPasswordChange(password: String) {
+        updateCompressRequest { it.copy(password = password) }
+    }
+
+    fun onCompressRequestSplitChange(split: String) {
+        if (split.isEmpty() || split.all { it.isDigit() }) {
+            updateCompressRequest { it.copy(splitSizeMb = split) }
+        }
+    }
+
+    fun onCompressRequestSeparateChange(enabled: Boolean) {
+        updateCompressRequest { it.copy(separateArchives = enabled) }
+        scope.launch { settings?.setCompressSeparateArchives(enabled) }
+    }
+
+    fun onCompressRequestDeleteSourceChange(enabled: Boolean) {
+        updateCompressRequest { it.copy(deleteSource = enabled) }
+        scope.launch { settings?.setCompressDeleteSource(enabled) }
+    }
+
+    fun onCompressRequestToOtherPaneChange(enabled: Boolean) {
+        updateCompressRequest { it.copy(toOtherPane = enabled) }
+        scope.launch { settings?.setCompressToOtherPane(enabled) }
+    }
+
+    fun onCompressRequestBackgroundChange(enabled: Boolean) {
+        updateCompressRequest { it.copy(background = enabled) }
+        persistBackground(enabled)
+    }
+
+    private fun persistBackground(enabled: Boolean) {
+        _state.update {
+            it.copy(taskPreferences = it.taskPreferences.copy(background = enabled))
+        }
+        scope.launch { settings?.setTaskBackground(enabled) }
+    }
+
+    fun onCompressRequestDismiss() {
+        _state.update { it.copy(compressRequest = null) }
+    }
+
+    fun onCompressRequestConfirm() {
+        val request = _state.value.compressRequest ?: return
+        val entries = request.entries
+        if (entries.isEmpty()) return
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        val destination = if (request.toOtherPane) {
+            _state.value.pane(paneId.other).location
+        } else {
+            pane.location
+        }
+        if (destination == null) {
+            setOperationError("目标目录不可用")
+            return
+        }
+        val name = request.archiveName.trim()
+        if (name.isEmpty()) {
+            scope.launch { setOperationError(getString(Res.string.compress_name_empty)) }
+            return
+        }
+        _state.update { it.copy(compressRequest = null) }
+        scope.launch {
+            val title = if (entries.size > 1) {
+                getString(Res.string.task_compress_title_multiple, entries.size)
+            } else {
+                getString(Res.string.task_compress_title, entries.first().name)
+            }
+            val detail = getString(Res.string.task_compress_detail, destination.displayPath())
+            startForegroundTask(
+                title = title,
+                detail = detail,
+                background = request.background,
+                isBatch = entries.size > 1,
+                itemNames = entries.map { it.name },
+                itemSizes = entries.map { it.size },
+            ) {
+                archiveService.compress(
+                    CompressRequest(
+                        entries = entries,
+                        destination = destination,
+                        archiveName = name,
+                        level = request.level,
+                        password = request.password,
+                        splitSizeMb = request.splitSizeMb.trim().toLongOrNull()?.takeIf { it > 0 },
+                        separateArchives = request.separateArchives,
+                        deleteSource = request.deleteSource,
+                    ),
+                    CompressCallbacks(
+                        onProgress = { completed, total -> reportOverall(completed, total) },
+                        onBytes = { completed, total -> reportCurrent(completed, total) },
+                        isCancelled = { isCancelled },
+                    ),
+                )
+            }
+        }
+    }
+
     fun onClearCache() {
         cacheManager.markClearPending()
         scope.launch {
@@ -771,6 +907,7 @@ class HomeViewModel(
                     renameRequest = RenameRequestState(
                         entry = entries.first(),
                         newName = baseName,
+                        background = it.taskPreferences.background,
                         entries = entries,
                     )
                 )
@@ -854,6 +991,14 @@ class HomeViewModel(
                 }
             }
         }
+        return true
+    }
+
+    fun onShortcutCompress(): Boolean {
+        val paneId = _state.value.focusedPane
+        val entries = _state.value.pane(paneId).selectedEntries
+        val entry = entries.firstOrNull() ?: return false
+        onEntryContextAction(paneId, entry, FileContextAction.Compress)
         return true
     }
 
@@ -1058,6 +1203,7 @@ class HomeViewModel(
                             copyRequest = CopyRequestState(
                                 entry = entry,
                                 destination = destination,
+                                background = it.taskPreferences.background,
                                 entries = targets,
                             )
                         )
@@ -1074,6 +1220,7 @@ class HomeViewModel(
                             moveRequest = MoveRequestState(
                                 entry = entry,
                                 destination = destination,
+                                background = it.taskPreferences.background,
                                 entries = targets,
                             )
                         )
@@ -1082,7 +1229,13 @@ class HomeViewModel(
             }
             FileContextAction.Delete -> {
                 _state.update {
-                    it.copy(deleteRequest = DeleteRequestState(entry = entry, entries = targets))
+                    it.copy(
+                        deleteRequest = DeleteRequestState(
+                            entry = entry,
+                            background = it.taskPreferences.background,
+                            entries = targets,
+                        )
+                    )
                 }
             }
             FileContextAction.Rename -> {
@@ -1095,14 +1248,51 @@ class HomeViewModel(
                             } else {
                                 entry.name
                             },
+                            background = it.taskPreferences.background,
                             entries = targets,
+                        )
+                    )
+                }
+            }
+            FileContextAction.Compress -> {
+                val base = if (entry.isDirectory) {
+                    entry.name
+                } else {
+                    entry.name.substringBeforeLast('.', entry.name).ifBlank { entry.name }
+                }
+                val defaultName = if (targets.size > 1) {
+                    _state.value.pane(_state.value.focusedPane).location
+                        ?.path
+                        ?.trimEnd('/')
+                        ?.substringAfterLast('/')
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "Archive"
+                } else {
+                    base
+                }
+                _state.update {
+                    it.copy(
+                        compressRequest = CompressRequestState(
+                            entry = entry,
+                            entries = targets,
+                            archiveName = defaultName,
+                            separateArchives = it.taskPreferences.compressSeparateArchives,
+                            deleteSource = it.taskPreferences.compressDeleteSource,
+                            toOtherPane = it.taskPreferences.compressToOtherPane,
+                            background = it.taskPreferences.background,
                         )
                     )
                 }
             }
             FileContextAction.Trash -> {
                 _state.update {
-                    it.copy(trashRequest = TrashRequestState(entry = entry, entries = targets))
+                    it.copy(
+                        trashRequest = TrashRequestState(
+                            entry = entry,
+                            background = it.taskPreferences.background,
+                            entries = targets,
+                        )
+                    )
                 }
             }
             FileContextAction.TerminalTab -> openTerminal(entry, newWindow = false)
@@ -1150,6 +1340,7 @@ class HomeViewModel(
         _state.update { state ->
             state.copy(trashRequest = state.trashRequest?.copy(background = background))
         }
+        persistBackground(background)
     }
 
     fun onTrashRequestDismiss() {
@@ -1170,6 +1361,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = request.background,
                 isBatch = request.entries.size > 1,
                 itemNames = request.entries.map { it.name },
             ) {
@@ -1199,6 +1391,7 @@ class HomeViewModel(
         _state.update { state ->
             state.copy(renameRequest = state.renameRequest?.copy(background = background))
         }
+        persistBackground(background)
     }
 
     fun onRenameRequestDismiss() {
@@ -1211,7 +1404,7 @@ class HomeViewModel(
         if (newName.isEmpty()) return
         if (request.entries.size > 1) {
             _state.update { it.copy(renameRequest = null) }
-            startBatchRenameTask(request.entries, newName)
+            startBatchRenameTask(request.entries, newName, background = request.background)
             return
         }
         if (newName == request.entry.name) {
@@ -1219,10 +1412,10 @@ class HomeViewModel(
             return
         }
         _state.update { it.copy(renameRequest = null) }
-        startRenameTask(request.entry, newName, showDialog = true)
+        startRenameTask(request.entry, newName, showDialog = true, background = request.background)
     }
 
-    private fun startBatchRenameTask(entries: List<FileEntry>, baseName: String) {
+    private fun startBatchRenameTask(entries: List<FileEntry>, baseName: String, background: Boolean) {
         scope.launch {
             val title = getString(Res.string.task_rename_title_multiple, entries.size)
             val detail = getString(Res.string.task_rename_detail_multiple)
@@ -1230,6 +1423,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = background,
                 isBatch = true,
                 itemNames = entries.map { it.name },
             ) {
@@ -1253,10 +1447,15 @@ class HomeViewModel(
     fun onInlineRename(entry: FileEntry, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isEmpty() || trimmed == entry.name) return
-        startRenameTask(entry, trimmed, showDialog = false)
+        startRenameTask(entry, trimmed, showDialog = false, background = false)
     }
 
-    private fun startRenameTask(entry: FileEntry, newName: String, showDialog: Boolean) {
+    private fun startRenameTask(
+        entry: FileEntry,
+        newName: String,
+        showDialog: Boolean,
+        background: Boolean,
+    ) {
         applyOptimisticRename(entry, newName)
         scope.launch {
             val title = getString(Res.string.task_rename_title, entry.name)
@@ -1265,6 +1464,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = background,
                 showDialog = showDialog,
             ) {
                 files.renameWithProgress(
@@ -1311,6 +1511,7 @@ class HomeViewModel(
         _state.update { state ->
             state.copy(deleteRequest = state.deleteRequest?.copy(background = background))
         }
+        persistBackground(background)
     }
 
     fun onDeleteRequestDismiss() {
@@ -1331,6 +1532,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = request.background,
                 isBatch = request.entries.size > 1,
                 itemNames = request.entries.map { it.name },
             ) {
@@ -1354,6 +1556,7 @@ class HomeViewModel(
         _state.update { state ->
             state.copy(moveRequest = state.moveRequest?.copy(background = background))
         }
+        persistBackground(background)
     }
 
     fun onMoveRequestDismiss() {
@@ -1375,6 +1578,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = request.background,
                 isBatch = request.entries.size > 1,
                 itemNames = request.entries.map { it.name },
                 itemSizes = request.entries.map { it.size },
@@ -1402,6 +1606,7 @@ class HomeViewModel(
         _state.update { state ->
             state.copy(copyRequest = state.copyRequest?.copy(background = background))
         }
+        persistBackground(background)
     }
 
     fun onCopyRequestDismiss() {
@@ -1423,6 +1628,7 @@ class HomeViewModel(
             startForegroundTask(
                 title = title,
                 detail = detail,
+                background = request.background,
                 isBatch = request.entries.size > 1,
                 itemNames = request.entries.map { it.name },
                 itemSizes = request.entries.map { it.size },

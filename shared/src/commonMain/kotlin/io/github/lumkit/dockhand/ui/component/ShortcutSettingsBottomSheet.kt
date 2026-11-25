@@ -40,6 +40,7 @@ import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.shortcut_action_clear_selection
 import dockhand.shared.generated.resources.shortcut_action_context_menu
 import dockhand.shared.generated.resources.shortcut_action_copy
+import dockhand.shared.generated.resources.shortcut_action_compress
 import dockhand.shared.generated.resources.shortcut_action_delete
 import dockhand.shared.generated.resources.shortcut_action_move
 import dockhand.shared.generated.resources.shortcut_action_next
@@ -317,6 +318,7 @@ private fun ShortcutAction.label(): String = when (this) {
     ShortcutAction.Move -> stringResource(Res.string.shortcut_action_move)
     ShortcutAction.Delete -> stringResource(Res.string.shortcut_action_delete)
     ShortcutAction.Rename -> stringResource(Res.string.shortcut_action_rename)
+    ShortcutAction.Compress -> stringResource(Res.string.shortcut_action_compress)
     ShortcutAction.Trash -> stringResource(Res.string.shortcut_action_trash)
     ShortcutAction.ExtendSelectionUp -> stringResource(Res.string.shortcut_action_extend_up)
     ShortcutAction.ExtendSelectionDown -> stringResource(Res.string.shortcut_action_extend_down)
