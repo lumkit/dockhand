@@ -9,6 +9,7 @@ enum class FileContextAction {
     Delete,
     Rename,
     Compress,
+    Extract,
     TerminalTab,
     TerminalWindow,
 }

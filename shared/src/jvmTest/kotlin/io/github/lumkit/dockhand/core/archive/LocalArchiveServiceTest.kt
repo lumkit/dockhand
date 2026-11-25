@@ -55,6 +55,55 @@ class LocalArchiveServiceTest {
     }
 
     @Test
+    fun extractsZipIntoSubfolder() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-extract").toFile()
+        try {
+            val sourceDir = root.resolve("source").apply { mkdirs() }
+            val outputDir = root.resolve("output").apply { mkdirs() }
+            val file = sourceDir.resolve("note.txt").apply { writeText("hello") }
+            val source = FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local)
+            val entry = FileEntry(
+                id = file.path,
+                name = file.name,
+                location = FileLocation(source, file.path),
+                isDirectory = false,
+                size = file.length(),
+            )
+            val service = LocalArchiveService()
+            service.compress(
+                CompressRequest(
+                    entries = listOf(entry),
+                    destination = FileLocation(source, outputDir.path),
+                    archiveName = "bundle",
+                ),
+                CompressCallbacks(),
+            )
+            val archive = outputDir.resolve("bundle.zip")
+            val archiveEntry = FileEntry(
+                id = archive.path,
+                name = archive.name,
+                location = FileLocation(source, archive.path),
+                isDirectory = false,
+                size = archive.length(),
+            )
+
+            service.extract(
+                ExtractRequest(
+                    archive = archiveEntry,
+                    destinationDirectory = FileLocation(source, outputDir.path),
+                    createSubfolder = true,
+                    subfolderName = "unpacked",
+                ),
+                ExtractCallbacks(),
+            )
+
+            assertEquals("hello", outputDir.resolve("unpacked/note.txt").readText())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun createsTarGzArchive() = runBlocking {
         val root = Files.createTempDirectory("dockhand-targz").toFile()
         try {

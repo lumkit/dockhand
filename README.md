@@ -25,6 +25,7 @@ Browse, compare, and transfer files between two panes, and manage Android device
 
 - Copy, move, rename, delete, and move to Trash
 - Create ZIP, 7z, TAR, TAR.GZ, TAR.XZ, TAR.BZ2, TAR.ZST, GZIP, XZ, and ZSTD archives
+- Extract those formats by double-clicking or from the context menu
 - Optional passwords for ZIP/7z and split archives for ZIP
 - Batch operations for multiple selections
 - Batch rename with predictable numbered names

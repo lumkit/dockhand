@@ -67,6 +67,8 @@ import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
 import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
 import io.github.lumkit.dockhand.ui.component.CompressRequestDialog
+import io.github.lumkit.dockhand.ui.component.ExtractPasswordDialog
+import io.github.lumkit.dockhand.ui.component.ExtractRequestDialog
 import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
 import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
 import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
@@ -248,6 +250,16 @@ fun HomeScreen() {
         onCompressRequestBackgroundChange = homeViewModel::onCompressRequestBackgroundChange,
         onCompressRequestDismiss = homeViewModel::onCompressRequestDismiss,
         onCompressRequestConfirm = homeViewModel::onCompressRequestConfirm,
+        onExtractRequestModeChange = homeViewModel::onExtractRequestModeChange,
+        onExtractRequestFolderNameChange = homeViewModel::onExtractRequestFolderNameChange,
+        onExtractRequestToOtherPaneChange = homeViewModel::onExtractRequestToOtherPaneChange,
+        onExtractRequestDeleteSourceChange = homeViewModel::onExtractRequestDeleteSourceChange,
+        onExtractRequestBackgroundChange = homeViewModel::onExtractRequestBackgroundChange,
+        onExtractRequestDismiss = homeViewModel::onExtractRequestDismiss,
+        onExtractRequestConfirm = homeViewModel::onExtractRequestConfirm,
+        onExtractPasswordChange = homeViewModel::onExtractPasswordChange,
+        onExtractPasswordDismiss = homeViewModel::onExtractPasswordDismiss,
+        onExtractPasswordConfirm = homeViewModel::onExtractPasswordConfirm,
         onTrashRequestBackgroundChange = homeViewModel::onTrashRequestBackgroundChange,
         onTrashRequestDismiss = homeViewModel::onTrashRequestDismiss,
         onTrashRequestConfirm = homeViewModel::onTrashRequestConfirm,
@@ -354,6 +366,16 @@ private fun HomeScreenContent(
     onCompressRequestBackgroundChange: (Boolean) -> Unit,
     onCompressRequestDismiss: () -> Unit,
     onCompressRequestConfirm: () -> Unit,
+    onExtractRequestModeChange: (io.github.lumkit.dockhand.ui.screen.home.ExtractDestinationMode) -> Unit,
+    onExtractRequestFolderNameChange: (String) -> Unit,
+    onExtractRequestToOtherPaneChange: (Boolean) -> Unit,
+    onExtractRequestDeleteSourceChange: (Boolean) -> Unit,
+    onExtractRequestBackgroundChange: (Boolean) -> Unit,
+    onExtractRequestDismiss: () -> Unit,
+    onExtractRequestConfirm: () -> Unit,
+    onExtractPasswordChange: (String) -> Unit,
+    onExtractPasswordDismiss: () -> Unit,
+    onExtractPasswordConfirm: () -> Unit,
     onTrashRequestBackgroundChange: (Boolean) -> Unit,
     onTrashRequestDismiss: () -> Unit,
     onTrashRequestConfirm: () -> Unit,
@@ -420,6 +442,8 @@ private fun HomeScreenContent(
                     currentUiState.deleteRequest != null ||
                     currentUiState.renameRequest != null ||
                     currentUiState.compressRequest != null ||
+                    currentUiState.extractRequest != null ||
+                    currentUiState.extractPasswordRequest != null ||
                     currentUiState.trashRequest != null
             if (modalOpen) {
                 false
@@ -684,6 +708,24 @@ private fun HomeScreenContent(
                     onBackgroundChange = onRenameRequestBackgroundChange,
                     onDismiss = onRenameRequestDismiss,
                     onConfirm = onRenameRequestConfirm,
+                )
+
+                ExtractRequestDialog(
+                    request = uiState.extractRequest,
+                    onModeChange = onExtractRequestModeChange,
+                    onFolderNameChange = onExtractRequestFolderNameChange,
+                    onToOtherPaneChange = onExtractRequestToOtherPaneChange,
+                    onDeleteSourceChange = onExtractRequestDeleteSourceChange,
+                    onBackgroundChange = onExtractRequestBackgroundChange,
+                    onDismissRequest = onExtractRequestDismiss,
+                    onConfirm = onExtractRequestConfirm,
+                )
+
+                ExtractPasswordDialog(
+                    request = uiState.extractPasswordRequest,
+                    onPasswordChange = onExtractPasswordChange,
+                    onDismissRequest = onExtractPasswordDismiss,
+                    onConfirm = onExtractPasswordConfirm,
                 )
 
                 CompressRequestDialog(

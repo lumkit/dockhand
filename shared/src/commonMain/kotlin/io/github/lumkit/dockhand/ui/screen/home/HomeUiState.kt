@@ -122,6 +122,29 @@ data class RenameRequestState(
     val entries: List<FileEntry> = listOf(entry),
 )
 
+enum class ExtractDestinationMode {
+    CurrentDirectory,
+    Folder,
+}
+
+@Immutable
+data class ExtractRequestState(
+    val entry: FileEntry,
+    val mode: ExtractDestinationMode = ExtractDestinationMode.CurrentDirectory,
+    val folderName: String = "",
+    val toOtherPane: Boolean = false,
+    val deleteSource: Boolean = false,
+    val background: Boolean = false,
+)
+
+@Immutable
+data class ExtractPasswordState(
+    val request: io.github.lumkit.dockhand.core.archive.ExtractRequest,
+    val archiveName: String,
+    val background: Boolean = false,
+    val password: String = "",
+)
+
 @Immutable
 data class CompressRequestState(
     val entry: FileEntry,
@@ -190,6 +213,8 @@ data class HomeUiState(
     val deleteRequest: DeleteRequestState? = null,
     val renameRequest: RenameRequestState? = null,
     val compressRequest: CompressRequestState? = null,
+    val extractRequest: ExtractRequestState? = null,
+    val extractPasswordRequest: ExtractPasswordState? = null,
     val trashRequest: TrashRequestState? = null,
     val leftPane: FilePaneState = FilePaneState(PaneId.Left),
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),

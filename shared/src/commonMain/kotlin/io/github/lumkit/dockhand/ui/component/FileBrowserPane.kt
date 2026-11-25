@@ -90,6 +90,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_compress
+import dockhand.shared.generated.resources.action_extract
 import dockhand.shared.generated.resources.action_copy_to_left
 import dockhand.shared.generated.resources.action_copy_to_right
 import dockhand.shared.generated.resources.action_delete
@@ -108,6 +109,7 @@ import dockhand.shared.generated.resources.text_empty_folder
 import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
+import io.github.lumkit.dockhand.core.archive.archiveFormatForName
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
@@ -622,6 +624,8 @@ private fun FileEntryRow(
     val deleteLabel = stringResource(Res.string.action_delete)
     val renameLabel = stringResource(Res.string.action_rename)
     val compressLabel = stringResource(Res.string.action_compress)
+    val extractLabel = stringResource(Res.string.action_extract)
+    val isArchive = archiveFormatForName(row.name) != null
     val servicesLabel = stringResource(Res.string.action_services)
     val terminalTabLabel = stringResource(
         if (row.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
@@ -714,6 +718,9 @@ private fun FileEntryRow(
                 }
                 add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
                 add(DropdownItem(text = renameLabel, onClick = { dispatch(FileContextAction.Rename) }))
+                if (isArchive) {
+                    add(DropdownItem(text = extractLabel, onClick = { dispatch(FileContextAction.Extract) }))
+                }
                 add(DropdownItem(text = compressLabel, onClick = { dispatch(FileContextAction.Compress) }))
             }
             add(DropdownEntry(items = fileActions))
@@ -1487,6 +1494,8 @@ private fun FileGridContextMenu(
     val deleteLabel = stringResource(Res.string.action_delete)
     val renameLabel = stringResource(Res.string.action_rename)
     val compressLabel = stringResource(Res.string.action_compress)
+    val extractLabel = stringResource(Res.string.action_extract)
+    val isArchive = archiveFormatForName(entry.name) != null
     val servicesLabel = stringResource(Res.string.action_services)
     val infoLabel = stringResource(Res.string.action_view_info)
     val terminalTabLabel = stringResource(
@@ -1517,6 +1526,9 @@ private fun FileGridContextMenu(
                 }
                 add(DropdownItem(text = deleteLabel, onClick = { onAction(FileContextAction.Delete) }))
                 add(DropdownItem(text = renameLabel, onClick = { onAction(FileContextAction.Rename) }))
+                if (isArchive) {
+                    add(DropdownItem(text = extractLabel, onClick = { onAction(FileContextAction.Extract) }))
+                }
                 add(DropdownItem(text = compressLabel, onClick = { onAction(FileContextAction.Compress) }))
             }))
             add(

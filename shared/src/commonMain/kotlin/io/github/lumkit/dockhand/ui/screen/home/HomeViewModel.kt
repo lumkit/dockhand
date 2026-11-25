@@ -8,6 +8,10 @@ import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.archive.ArchiveFormat
 import io.github.lumkit.dockhand.core.archive.ArchiveService
 import io.github.lumkit.dockhand.core.archive.CompressCallbacks
+import io.github.lumkit.dockhand.core.archive.ExtractCallbacks
+import io.github.lumkit.dockhand.core.archive.ExtractRequest
+import io.github.lumkit.dockhand.core.archive.archiveBaseName
+import io.github.lumkit.dockhand.core.archive.archiveFormatForName
 import io.github.lumkit.dockhand.core.archive.CompressRequest
 import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.archive.NoopArchiveService
@@ -42,6 +46,9 @@ import dockhand.shared.generated.resources.cache_clear_pending
 import dockhand.shared.generated.resources.compress_multiple_single_file
 import dockhand.shared.generated.resources.compress_name_empty
 import dockhand.shared.generated.resources.compress_single_file_only
+import dockhand.shared.generated.resources.extract_name_empty
+import dockhand.shared.generated.resources.task_extract_detail
+import dockhand.shared.generated.resources.task_extract_title
 import dockhand.shared.generated.resources.task_compress_detail
 import dockhand.shared.generated.resources.task_compress_title
 import dockhand.shared.generated.resources.task_compress_title_multiple
@@ -584,6 +591,121 @@ class HomeViewModel(
         _state.update { state ->
             val request = state.compressRequest ?: return@update state
             state.copy(compressRequest = transform(request))
+        }
+    }
+
+    private fun updateExtractRequest(
+        transform: (ExtractRequestState) -> ExtractRequestState,
+    ) {
+        _state.update { state ->
+            val request = state.extractRequest ?: return@update state
+            state.copy(extractRequest = transform(request))
+        }
+    }
+
+    fun onExtractRequestModeChange(mode: ExtractDestinationMode) {
+        updateExtractRequest { it.copy(mode = mode) }
+    }
+
+    fun onExtractRequestFolderNameChange(name: String) {
+        updateExtractRequest { it.copy(folderName = name) }
+    }
+
+    fun onExtractRequestToOtherPaneChange(enabled: Boolean) {
+        updateExtractRequest { it.copy(toOtherPane = enabled) }
+    }
+
+    fun onExtractRequestDeleteSourceChange(enabled: Boolean) {
+        updateExtractRequest { it.copy(deleteSource = enabled) }
+    }
+
+    fun onExtractRequestBackgroundChange(enabled: Boolean) {
+        updateExtractRequest { it.copy(background = enabled) }
+        persistBackground(enabled)
+    }
+
+    fun onExtractRequestDismiss() {
+        _state.update { it.copy(extractRequest = null) }
+    }
+
+    fun onExtractPasswordChange(password: String) {
+        _state.update { state ->
+            state.copy(extractPasswordRequest = state.extractPasswordRequest?.copy(password = password))
+        }
+    }
+
+    fun onExtractPasswordDismiss() {
+        _state.update { it.copy(extractPasswordRequest = null) }
+    }
+
+    fun onExtractPasswordConfirm() {
+        val state = _state.value.extractPasswordRequest ?: return
+        _state.update { it.copy(extractPasswordRequest = null) }
+        startExtractTask(state.request.copy(password = state.password), state.background)
+    }
+
+    fun onExtractRequestConfirm() {
+        val request = _state.value.extractRequest ?: return
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        val destination = if (request.toOtherPane) {
+            _state.value.pane(paneId.other).location
+        } else {
+            pane.location
+        }
+        if (destination == null) {
+            setOperationError("目标目录不可用")
+            return
+        }
+        if (request.mode == ExtractDestinationMode.Folder && request.folderName.trim().isEmpty()) {
+            scope.launch { setOperationError(getString(Res.string.extract_name_empty)) }
+            return
+        }
+        val extractRequest = ExtractRequest(
+            archive = request.entry,
+            destinationDirectory = destination,
+            createSubfolder = request.mode == ExtractDestinationMode.Folder,
+            subfolderName = request.folderName,
+            deleteSource = request.deleteSource,
+        )
+        _state.update { it.copy(extractRequest = null) }
+        scope.launch {
+            if (archiveService.isPasswordProtected(request.entry)) {
+                _state.update {
+                    it.copy(
+                        extractPasswordRequest = ExtractPasswordState(
+                            request = extractRequest,
+                            archiveName = request.entry.name,
+                            background = request.background,
+                        )
+                    )
+                }
+            } else {
+                startExtractTask(extractRequest, request.background)
+            }
+        }
+    }
+
+    private fun startExtractTask(request: ExtractRequest, background: Boolean) {
+        scope.launch {
+            val title = getString(Res.string.task_extract_title, request.archive.name)
+            val detail = getString(Res.string.task_extract_detail, request.destinationDirectory.displayPath())
+            startForegroundTask(
+                title = title,
+                detail = detail,
+                background = background,
+                itemNames = listOf(request.archive.name),
+                itemSizes = listOf(request.archive.size),
+            ) {
+                archiveService.extract(
+                    request,
+                    ExtractCallbacks(
+                        onProgress = { completed, total -> reportOverall(completed, total) },
+                        onBytes = { completed, total -> reportCurrent(completed, total) },
+                        isCancelled = { isCancelled },
+                    ),
+                )
+            }
         }
     }
 
@@ -1174,8 +1296,23 @@ class HomeViewModel(
         selectEntry(paneId, entry)
         if (entry.isDirectory) {
             navigate(paneId, entry.location)
+        } else if (archiveFormatForName(entry.name) != null) {
+            openExtractRequest(entry)
         }
-        // TODO: 文件双击打开由后续的打开方式/预览窗口接入。
+        // 其他文件双击打开由后续的打开方式/预览窗口接入。
+    }
+
+    private fun openExtractRequest(entry: FileEntry) {
+        val base = archiveBaseName(entry.name)
+        _state.update {
+            it.copy(
+                extractRequest = ExtractRequestState(
+                    entry = entry,
+                    folderName = base,
+                    background = it.taskPreferences.background,
+                )
+            )
+        }
     }
 
     /**
@@ -1276,6 +1413,13 @@ class HomeViewModel(
                             entries = targets,
                         )
                     )
+                }
+            }
+            FileContextAction.Extract -> {
+                if (archiveFormatForName(entry.name) == null) {
+                    setOperationError("不支持的压缩格式")
+                } else {
+                    openExtractRequest(entry)
                 }
             }
             FileContextAction.Compress -> {

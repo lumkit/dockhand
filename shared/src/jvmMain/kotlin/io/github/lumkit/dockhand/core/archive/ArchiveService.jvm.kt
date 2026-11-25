@@ -1,6 +1,7 @@
 package io.github.lumkit.dockhand.core.archive
 
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
+import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -11,17 +12,26 @@ import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.CompressionLevel as ZipCompressionLevel
 import net.lingala.zip4j.model.enums.CompressionMethod
 import net.lingala.zip4j.model.enums.EncryptionMethod
+import org.apache.commons.compress.PasswordRequiredException
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.compressors.gzip.GzipParameters
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
+import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -96,6 +106,222 @@ class LocalArchiveService : ArchiveService {
                 throw error
             }
         }
+
+    override suspend fun extract(request: ExtractRequest, callbacks: ExtractCallbacks) =
+        withContext(Dispatchers.IO) {
+            val archiveEntry = request.archive
+            if (archiveEntry.location.source.kind != FileSourceKind.Local) {
+                throw FileBrowserException("暂不支持解压 MTP 文件")
+            }
+            val archive = File(archiveEntry.location.path)
+            if (!archive.isFile) throw FileBrowserException("压缩包不存在")
+            val format = archiveFormatForName(archive.name)
+                ?: throw FileBrowserException("不支持的压缩格式")
+            val destination = File(request.destinationDirectory.path)
+            if (!destination.isDirectory) throw FileBrowserException("目标目录不存在")
+            val root = if (request.createSubfolder) {
+                val name = sanitizeFolderName(
+                    request.subfolderName.ifBlank { archiveBaseName(archive.name) }
+                )
+                uniqueDirectory(destination, name).apply { mkdirs() }
+            } else {
+                destination
+            }
+            var completedFiles = 0L
+            var completedBytes = 0L
+            fun report(size: Long) {
+                completedFiles++
+                completedBytes += size.coerceAtLeast(0)
+                callbacks.onProgress(completedFiles, null)
+                callbacks.onBytes(completedBytes, archive.length().coerceAtLeast(1))
+            }
+            try {
+                when (format) {
+                    ArchiveFormat.Zip -> extractZip(archive, root, request.password, callbacks, ::report)
+                    ArchiveFormat.SevenZ -> extractSevenZ(archive, root, request.password, callbacks, ::report)
+                    ArchiveFormat.Tar,
+                    ArchiveFormat.TarGz,
+                    ArchiveFormat.TarXz,
+                    ArchiveFormat.TarBz2,
+                    ArchiveFormat.TarZst,
+                    -> extractTar(archive, root, format, callbacks, ::report)
+                    ArchiveFormat.Gzip,
+                    ArchiveFormat.Xz,
+                    ArchiveFormat.Zstd,
+                    -> extractSingleStream(archive, root, format, callbacks, ::report)
+                }
+                if (request.deleteSource) archive.delete()
+            } catch (error: Throwable) {
+                throw error
+            }
+        }
+
+    override suspend fun isPasswordProtected(archive: FileEntry): Boolean =
+        withContext(Dispatchers.IO) {
+            if (archive.location.source.kind != FileSourceKind.Local) return@withContext false
+            val file = File(archive.location.path)
+            when (archiveFormatForName(file.name)) {
+                ArchiveFormat.Zip -> ZipFile(file).isEncrypted
+                ArchiveFormat.SevenZ -> try {
+                    SevenZFile(file).use { it.nextEntry }
+                    false
+                } catch (_: PasswordRequiredException) {
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+                else -> false
+            }
+        }
+
+    private fun extractZip(
+        archive: File,
+        root: File,
+        password: String,
+        callbacks: ExtractCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val zip = ZipFile(archive)
+        if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
+        zip.fileHeaders.forEach { header ->
+            if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+            val target = safeTarget(root, header.fileName)
+            if (header.isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                zip.extractFile(header, target.parentFile.absolutePath, target.name)
+                report(header.uncompressedSize)
+            }
+        }
+    }
+
+    private fun extractSevenZ(
+        archive: File,
+        root: File,
+        password: String,
+        callbacks: ExtractCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val passwordChars = password.takeIf { it.isNotEmpty() }?.toCharArray()
+        SevenZFile(archive, passwordChars).use { seven ->
+            var entry = seven.nextEntry
+            while (entry != null) {
+                if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                val target = safeTarget(root, entry.name)
+                if (entry.isDirectory) {
+                    target.mkdirs()
+                } else {
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                            val read = seven.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                    report(entry.size)
+                }
+                entry = seven.nextEntry
+            }
+        }
+    }
+
+    private fun extractTar(
+        archive: File,
+        root: File,
+        format: ArchiveFormat,
+        callbacks: ExtractCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val fileInput = BufferedInputStream(FileInputStream(archive))
+        val decompressed = when (format) {
+            ArchiveFormat.TarGz -> GzipCompressorInputStream(fileInput)
+            ArchiveFormat.TarXz -> XZCompressorInputStream(fileInput)
+            ArchiveFormat.TarBz2 -> BZip2CompressorInputStream(fileInput)
+            ArchiveFormat.TarZst -> ZstdInputStream(fileInput)
+            else -> fileInput
+        }
+        TarArchiveInputStream(decompressed).use { tar ->
+            var entry = tar.nextEntry
+            while (entry != null) {
+                if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                val target = safeTarget(root, entry.name)
+                if (entry.isDirectory) {
+                    target.mkdirs()
+                } else {
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { output -> tar.copyTo(output) }
+                    report(entry.size)
+                }
+                entry = tar.nextEntry
+            }
+        }
+    }
+
+    private fun extractSingleStream(
+        archive: File,
+        root: File,
+        format: ArchiveFormat,
+        callbacks: ExtractCallbacks,
+        report: (Long) -> Unit,
+    ) {
+        val baseName = when (format) {
+            ArchiveFormat.Gzip -> archive.name.removeSuffix(".gz")
+            ArchiveFormat.Xz -> archive.name.removeSuffix(".xz")
+            ArchiveFormat.Zstd -> archive.name.removeSuffix(".zst")
+            else -> archive.name
+        }.ifBlank { "archive" }
+        val target = safeTarget(root, baseName)
+        target.parentFile?.mkdirs()
+        val fileInput = BufferedInputStream(FileInputStream(archive))
+        val input: InputStream = when (format) {
+            ArchiveFormat.Gzip -> GzipCompressorInputStream(fileInput)
+            ArchiveFormat.Xz -> XZCompressorInputStream(fileInput)
+            ArchiveFormat.Zstd -> ZstdInputStream(fileInput)
+            else -> fileInput
+        }
+        input.use { source ->
+            target.outputStream().use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var total = 0L
+                while (true) {
+                    if (callbacks.isCancelled()) throw CancellationException("解压已取消")
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    total += read
+                    callbacks.onBytes(total, archive.length().coerceAtLeast(1))
+                }
+                report(total)
+            }
+        }
+    }
+
+    private fun safeTarget(root: File, entryName: String): File {
+        val normalized = entryName.replace('\\', '/').trimStart('/')
+        val target = File(root, normalized).canonicalFile
+        val rootPath = root.canonicalFile
+        if (target != rootPath && !target.path.startsWith(rootPath.path + File.separator)) {
+            throw FileBrowserException("压缩包包含非法路径：" + entryName)
+        }
+        return target
+    }
+
+    private fun sanitizeFolderName(name: String): String =
+        name.trim().replace('/', '_').replace('\\', '_').ifBlank { "archive" }
+
+    private fun uniqueDirectory(destination: File, baseName: String): File {
+        var target = File(destination, baseName)
+        var index = 1
+        while (target.exists()) {
+            target = File(destination, baseName + " (" + index + ")")
+            index++
+        }
+        return target
+    }
 
     private fun writeZip(job: Job, request: CompressRequest, callbacks: CompressCallbacks, report: (Long) -> Unit) {
         val params = ZipParameters().apply {
