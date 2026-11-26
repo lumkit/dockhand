@@ -438,8 +438,9 @@ private fun HomeScreenContent(
     val currentExtendLeft by rememberUpdatedState(onExtendSelectionLeft)
     val currentExtendRight by rememberUpdatedState(onExtendSelectionRight)
     val currentShortcuts by rememberUpdatedState(shortcuts)
-    DisposableEffect(Unit) {
-        ShortcutDispatcher.setHandler { event ->
+    val shortcutHandlerOwner = remember { Any() }
+    DisposableEffect(shortcutHandlerOwner) {
+        ShortcutDispatcher.setHandler(shortcutHandlerOwner) { event ->
             val modalOpen = inlineRenameBounds.value != null ||
                     currentUiState.activeTaskId != null ||
                     currentUiState.copyRequest != null ||
@@ -484,7 +485,7 @@ private fun HomeScreenContent(
                 }
             }
         }
-        onDispose { ShortcutDispatcher.setHandler(null) }
+        onDispose { ShortcutDispatcher.clearHandler(shortcutHandlerOwner) }
     }
 
     LaunchedEffect(uiState.snackbarMessage, uiState.snackbarCanRetry) {

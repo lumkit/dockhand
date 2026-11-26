@@ -209,8 +209,9 @@ private fun ShortcutCaptureDialog(
         withFrameNanos { }
         focusRequester.requestFocus()
     }
-    DisposableEffect(action) {
-        ShortcutDispatcher.setCaptureHandler { event ->
+    val captureOwner = remember(action) { Any() }
+    DisposableEffect(captureOwner) {
+        ShortcutDispatcher.setCaptureHandler(captureOwner) { event ->
             if (event.type != KeyEventType.KeyDown || event.key.isModifierKey()) {
                 false
             } else {
@@ -224,7 +225,7 @@ private fun ShortcutCaptureDialog(
                 true
             }
         }
-        onDispose { ShortcutDispatcher.setCaptureHandler(null) }
+        onDispose { ShortcutDispatcher.clearCaptureHandler(captureOwner) }
     }
 
     OverlayDialog(

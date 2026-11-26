@@ -1,9 +1,18 @@
 package io.github.lumkit.dockhand
 
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.awt.ComposeWindow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
@@ -21,6 +30,8 @@ import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.window.MiuixWindow
 import top.yukonga.miuix.kmp.window.MiuixWindowBackgroundType
 import top.yukonga.miuix.kmp.window.MiuixWindowProperties
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 
 /**
  * 窗口装饰交给 miuix-window：
@@ -80,6 +91,48 @@ fun main() = application {
             maximizeOrRestoreButtonEnabled = false,
         ),
     ) {
-        App(container)
+        val window = window
+        val focusRequester = remember { FocusRequester() }
+        val windowInfo = LocalWindowInfo.current
+
+        DisposableEffect(window) {
+            val listener = object : WindowAdapter() {
+                override fun windowActivated(event: WindowEvent?) {
+                    restoreWindowFocus(window, focusRequester)
+                }
+
+                override fun windowDeiconified(event: WindowEvent?) {
+                    restoreWindowFocus(window, focusRequester)
+                }
+
+                override fun windowGainedFocus(event: WindowEvent?) {
+                    restoreWindowFocus(window, focusRequester)
+                }
+            }
+            window.addWindowFocusListener(listener)
+            onDispose { window.removeWindowFocusListener(listener) }
+        }
+
+        LaunchedEffect(windowInfo.isWindowFocused) {
+            if (windowInfo.isWindowFocused) {
+                restoreWindowFocus(window, focusRequester)
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable(),
+        ) {
+            App(container)
+        }
     }
+}
+
+private fun restoreWindowFocus(window: ComposeWindow, focusRequester: FocusRequester) {
+    if (!window.isActive) return
+    window.requestFocus()
+    window.contentPane?.requestFocusInWindow()
+    runCatching { focusRequester.requestFocus() }
 }
