@@ -33,6 +33,13 @@ Browse, compare, and transfer files between two panes, and manage Android device
 - System notifications when background tasks finish
 - Automatic refresh of both panes after operations
 
+### Drag and drop
+
+- Drop files or folders from other apps onto either pane to copy or move them into that folder
+- The target pane shows an overlay with the destination and pending action
+- Long-press selected items and drag them to Finder, another app, or the opposite pane
+- Copy and move behavior follows the drop target and the modifier keys
+
 ### Selection and keyboard
 
 - Single click, Command-click, and Shift-click selection
@@ -72,6 +79,12 @@ Browse, compare, and transfer files between two panes, and manage Android device
 - Hidden item visibility
 - Configurable startup behavior
 - Cache size display and deferred cache cleanup
+
+### Updates
+
+- Checks GitHub Releases for a newer version shortly after launch
+- Shows a badge and the release notes when an update is available
+- Opens the download page or lets you ignore a specific version
 
 ## Performance
 
@@ -130,6 +143,7 @@ Found a bug or have a feature request?
 - No account is required.
 - Your files stay on your Mac or connected device.
 - Dockhand does not upload your files.
+- Update checks request public release metadata from GitHub Releases; no file contents or account details are sent.
 
 ## License
 
