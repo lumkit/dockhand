@@ -726,8 +726,8 @@ class HomeViewModelTest {
     fun updateCheckPublishesNewerReleaseAndIgnoreClearsBadge() = runBlocking {
         val fixture = Fixture()
         val update = AppUpdate(
-            version = "0.1.0",
-            tagName = "v0.1.0",
+            version = "9.9.9",
+            tagName = "v9.9.9",
             name = "Release",
             body = "notes",
             pageUrl = "https://example.com/release",
