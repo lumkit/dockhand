@@ -10,18 +10,24 @@ import io.github.lumkit.dockhand.domain.model.FileSource
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
+import io.github.lumkit.dockhand.ui.component.ExternalDropAction
 import io.github.lumkit.dockhand.ui.component.FileContextAction
 import io.github.lumkit.dockhand.ui.component.SelectionMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HomeViewModelTest {
@@ -495,6 +501,203 @@ class HomeViewModelTest {
         assertEquals(fixture.documents.path, viewModel.state.value.leftPane.location?.path)
     }
 
+    private fun droppedFile(name: String, parent: FileLocation): FileEntry = FileEntry(
+        id = parent.path + "/" + name,
+        name = name,
+        location = FileLocation(parent.source, parent.path + "/" + name),
+        isDirectory = false,
+        size = 1,
+    )
+
+    private suspend fun waitUntil(condition: () -> Boolean) {
+        withTimeout(5_000) {
+            while (!condition()) delay(10)
+        }
+    }
+
+    @Test
+    fun externalDropCopyStartsCopyTaskDirectly() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val dropped = droppedFile("drop.txt", fixture.home)
+        fixture.externalEntries[dropped.location.path] = dropped
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf(dropped.location.path),
+            action = ExternalDropAction.Copy,
+        )
+
+        waitUntil { fixture.copyCalls.isNotEmpty() }
+        val call = fixture.copyCalls.single()
+        assertEquals(listOf("drop.txt"), call.entries.map { it.name })
+        assertEquals(fixture.desktop, call.destination)
+        assertFalse(call.overwrite)
+        assertNull(viewModel.state.value.copyRequest)
+    }
+
+    @Test
+    fun externalDropMoveStartsMoveTaskDirectly() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val dropped = droppedFile("drop.txt", fixture.home)
+        fixture.externalEntries[dropped.location.path] = dropped
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf(dropped.location.path),
+            action = ExternalDropAction.Move,
+        )
+
+        waitUntil { fixture.moveCalls.isNotEmpty() }
+        val call = fixture.moveCalls.single()
+        assertEquals(listOf("drop.txt"), call.entries.map { it.name })
+        assertEquals(fixture.desktop, call.destination)
+        assertFalse(call.overwrite)
+        assertTrue(fixture.copyCalls.isEmpty())
+        assertNull(viewModel.state.value.copyRequest)
+    }
+
+    @Test
+    fun externalDropWithoutActionShowsCopyDialog() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val dropped = droppedFile("drop.txt", fixture.home)
+        fixture.externalEntries[dropped.location.path] = dropped
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf(dropped.location.path),
+            action = null,
+        )
+
+        waitUntil { viewModel.state.value.copyRequest != null }
+        val request = viewModel.state.value.copyRequest!!
+        assertEquals("drop.txt", request.entry.name)
+        assertEquals(fixture.desktop, request.destination)
+        assertEquals(listOf("drop.txt"), request.entries.map { it.name })
+        assertTrue(fixture.copyCalls.isEmpty())
+        assertTrue(fixture.moveCalls.isEmpty())
+    }
+
+    @Test
+    fun externalDropLinkFallsBackToCopyDialog() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val dropped = droppedFile("drop.txt", fixture.home)
+        fixture.externalEntries[dropped.location.path] = dropped
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf(dropped.location.path),
+            action = ExternalDropAction.Link,
+        )
+
+        waitUntil { viewModel.state.value.copyRequest != null }
+        assertEquals("drop.txt", viewModel.state.value.copyRequest?.entry?.name)
+        assertTrue(fixture.copyCalls.isEmpty())
+        assertTrue(fixture.moveCalls.isEmpty())
+    }
+
+    @Test
+    fun externalDropWithNoResolvedEntriesDoesNothing() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf("/tmp/missing.txt"),
+            action = ExternalDropAction.Copy,
+        )
+
+        waitUntil { fixture.externalResolveCalls.isNotEmpty() }
+        delay(30)
+        assertTrue(fixture.copyCalls.isEmpty())
+        assertTrue(fixture.moveCalls.isEmpty())
+        assertNull(viewModel.state.value.copyRequest)
+    }
+
+    @Test
+    fun externalDropWithoutDestinationIsIgnored() = runBlocking {
+        val repository = object : FileBrowserRepository {
+            override fun observePlaces(): Flow<List<FilePlace>> = flowOf(emptyList())
+
+            override fun observeChanges(location: FileLocation): Flow<Unit> = emptyFlow()
+
+            override suspend fun list(location: FileLocation): List<FileEntry> = emptyList()
+
+            override suspend fun createDirectory(parent: FileLocation, name: String) = Unit
+
+            override suspend fun createFile(parent: FileLocation, name: String) = Unit
+
+            override suspend fun copy(
+                entries: List<FileEntry>,
+                destinationDirectory: FileLocation,
+                overwrite: Boolean,
+            ) = Unit
+
+            override suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> =
+                error("没有目标目录时不应该解析拖入项")
+        }
+        val viewModel = HomeViewModel(
+            files = repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        assertNull(viewModel.state.value.leftPane.location)
+
+        viewModel.onExternalFilesDropped(
+            paneId = PaneId.Left,
+            paths = listOf("/tmp/drop.txt"),
+            action = ExternalDropAction.Copy,
+        )
+        delay(30)
+
+        assertNull(viewModel.state.value.copyRequest)
+    }
+
+    @Test
+    fun skipsDirectoryDroppedIntoItselfOrDescendant() {
+        val source = FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local)
+        val directory = FileEntry(
+            id = "/tmp/outer",
+            name = "outer",
+            location = FileLocation(source, "/tmp/outer"),
+            isDirectory = true,
+        )
+
+        assertTrue(shouldSkipForDestination(directory, FileLocation(source, "/tmp/outer")))
+        assertTrue(shouldSkipForDestination(directory, FileLocation(source, "/tmp/outer/sub")))
+        assertFalse(shouldSkipForDestination(directory, FileLocation(source, "/tmp/outer2")))
+        assertFalse(shouldSkipForDestination(directory, FileLocation(source, "/tmp")))
+        assertFalse(
+            shouldSkipForDestination(
+                directory.copy(isDirectory = false),
+                FileLocation(source, "/tmp/outer/sub"),
+            )
+        )
+    }
+
     class Fixture {
         val source = FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local)
         val root = FileLocation(source, "/")
@@ -507,6 +710,10 @@ class HomeViewModelTest {
         val createdFiles = mutableListOf<Pair<FileLocation, String>>()
         val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val listCalls = mutableMapOf<String, Int>()
+        val externalEntries = linkedMapOf<String, FileEntry>()
+        val externalResolveCalls = mutableListOf<List<String>>()
+        val copyCalls = mutableListOf<CopyCall>()
+        val moveCalls = mutableListOf<MoveCall>()
 
         val documentsEntry = dir("Documents", documents)
         val readme = file("readme.txt", home)
@@ -551,7 +758,50 @@ class HomeViewModelTest {
                 destinationDirectory: FileLocation,
                 overwrite: Boolean,
             ) = Unit
+
+            override suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> {
+                externalResolveCalls += paths
+                return paths.mapNotNull { externalEntries[it] }
+            }
+
+            override suspend fun copyWithProgress(
+                entries: List<FileEntry>,
+                destinationDirectory: FileLocation,
+                overwrite: Boolean,
+                onProgress: (Long?, Long?) -> Unit,
+                onBytes: (Long, Long) -> Unit,
+                onWaiting: (String?) -> Unit,
+                isCancelled: () -> Boolean,
+            ) {
+                copyCalls += CopyCall(entries, destinationDirectory, overwrite)
+                onProgress(entries.size.toLong(), entries.size.toLong())
+            }
+
+            override suspend fun moveWithProgress(
+                entries: List<FileEntry>,
+                destinationDirectory: FileLocation,
+                overwrite: Boolean,
+                onProgress: (Long?, Long?) -> Unit,
+                onBytes: (Long, Long) -> Unit,
+                onWaiting: (String?) -> Unit,
+                isCancelled: () -> Boolean,
+            ) {
+                moveCalls += MoveCall(entries, destinationDirectory, overwrite)
+                onProgress(entries.size.toLong(), entries.size.toLong())
+            }
         }
+
+        data class CopyCall(
+            val entries: List<FileEntry>,
+            val destination: FileLocation,
+            val overwrite: Boolean,
+        )
+
+        data class MoveCall(
+            val entries: List<FileEntry>,
+            val destination: FileLocation,
+            val overwrite: Boolean,
+        )
 
         private fun dir(name: String, location: FileLocation) = FileEntry(
             id = location.path,

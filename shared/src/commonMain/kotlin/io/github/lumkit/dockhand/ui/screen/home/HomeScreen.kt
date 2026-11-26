@@ -55,7 +55,10 @@ import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileSortMode
+import io.github.lumkit.dockhand.ui.component.ExternalDropAction
+import io.github.lumkit.dockhand.ui.component.ExternalDropBridge
 import io.github.lumkit.dockhand.ui.component.FileContextAction
+import io.github.lumkit.dockhand.ui.component.LocalExternalDropController
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.shortcut.DefaultShortcutRegistry
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
@@ -180,6 +183,20 @@ fun HomeScreen() {
     }
     val uiState by homeViewModel.state.collectAsState()
     val tasks by homeViewModel.tasks.collectAsState()
+
+    val externalDropController = LocalExternalDropController.current
+    DisposableEffect(externalDropController) {
+        externalDropController?.bridge = object : ExternalDropBridge {
+            override fun onPaneFocused(paneId: PaneId) {
+                homeViewModel.onPaneFocus(paneId)
+            }
+
+            override fun onDrop(paneId: PaneId, paths: List<String>, action: ExternalDropAction?) {
+                homeViewModel.onExternalFilesDropped(paneId, paths, action)
+            }
+        }
+        onDispose { externalDropController?.bridge = null }
+    }
 
     LaunchedEffect(uiState.language) {
         homeViewModel.onLanguageChanged()

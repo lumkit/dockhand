@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -22,6 +23,9 @@ import androidx.compose.ui.window.rememberWindowState
 import io.github.lumkit.dockhand.data.createAppContainer
 import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
 import io.github.lumkit.dockhand.ui.appLogoPainter
+import io.github.lumkit.dockhand.ui.component.ExternalDropController
+import io.github.lumkit.dockhand.ui.component.ExternalFileDropHost
+import io.github.lumkit.dockhand.ui.component.LocalExternalDropController
 import io.github.lumkit.dockhand.domain.model.WindowSize
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -42,6 +46,7 @@ import java.awt.event.WindowEvent
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() = application {
     val container = remember { createAppContainer() }
+    val externalDropController = remember { ExternalDropController() }
     DisposableEffect(container) {
         onDispose {
             container.close()
@@ -95,6 +100,11 @@ fun main() = application {
         val focusRequester = remember { FocusRequester() }
         val windowInfo = LocalWindowInfo.current
 
+        DisposableEffect(window, externalDropController) {
+            ExternalFileDropHost.install(window, externalDropController)
+            onDispose { ExternalFileDropHost.uninstall(window, externalDropController) }
+        }
+
         DisposableEffect(window) {
             val listener = object : WindowAdapter() {
                 override fun windowActivated(event: WindowEvent?) {
@@ -119,13 +129,15 @@ fun main() = application {
             }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .focusable(),
-        ) {
-            App(container)
+        CompositionLocalProvider(LocalExternalDropController provides externalDropController) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .focusable(),
+            ) {
+                App(container)
+            }
         }
     }
 }

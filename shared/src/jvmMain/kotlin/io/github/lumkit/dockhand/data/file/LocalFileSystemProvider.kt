@@ -114,6 +114,16 @@ class LocalFileSystemProvider(
         entries.sortedWith(ENTRY_ORDER)
     }
 
+    override suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> =
+        withContext(Dispatchers.IO) {
+            paths.distinct().mapNotNull { raw ->
+                val path = runCatching { Path.of(raw).toAbsolutePath().normalize() }.getOrNull()
+                    ?: return@mapNotNull null
+                // 用户显式拖入的隐藏项也要接收；列表视图的隐藏过滤仍由 includeHidden 的默认值控制。
+                readEntry(path, includeHidden = true)
+            }
+        }
+
     override suspend fun info(entry: FileEntry): FileInfo = withContext(Dispatchers.IO) {
         ensureLocal(entry.location)
         val path = entry.location.toLocalPath()
@@ -662,10 +672,10 @@ class LocalFileSystemProvider(
         }
     }
 
-    private fun readEntry(path: Path): FileEntry? {
+    private fun readEntry(path: Path, includeHidden: Boolean = showHiddenItems): FileEntry? {
         val name = path.fileName?.toString() ?: return null
         val hidden = name.startsWith(".")
-        if (hidden && !showHiddenItems) return null
+        if (hidden && !includeHidden) return null
 
         val attributes = runCatching {
             Files.readAttributes(path, BasicFileAttributes::class.java)

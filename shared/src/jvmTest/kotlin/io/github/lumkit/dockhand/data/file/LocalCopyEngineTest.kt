@@ -224,4 +224,43 @@ class LocalCopyEngineTest {
             }
         }
     }
+
+    @Test
+    fun copyingAnExistingCopyUsesTheNextNumber() = runBlocking {
+        val root = Files.createTempDirectory("dockhand-copy-number")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            Files.writeString(home.resolve("note_副本.txt"), "hello")
+            val destination = Files.createDirectories(home.resolve("destination"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            val repository = DefaultFileBrowserRepository(listOf(provider))
+            val sourceLocation = FileLocation(
+                FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local),
+                home.toString(),
+            )
+            val destinationLocation = sourceLocation.copy(path = destination.toString())
+            val entry = provider.list(sourceLocation).first { it.name == "note_副本.txt" }
+
+            repository.copyWithProgress(
+                entries = listOf(entry),
+                destinationDirectory = destinationLocation,
+            )
+            repository.copyWithProgress(
+                entries = listOf(entry),
+                destinationDirectory = destinationLocation,
+            )
+
+            // 源名本身带 _副本 时，第二次复制应该得到 note_副本1，而不是 note_副本_副本。
+            assertTrue(Files.exists(destination.resolve("note_副本.txt")))
+            assertTrue(Files.exists(destination.resolve("note_副本1.txt")))
+            assertFalse(Files.exists(destination.resolve("note_副本_副本.txt")))
+        } finally {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
 }

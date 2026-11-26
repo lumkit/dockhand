@@ -40,6 +40,7 @@ import io.github.lumkit.dockhand.task.NoopTaskNotifier
 import io.github.lumkit.dockhand.task.TaskContext
 import io.github.lumkit.dockhand.task.TaskManager
 import io.github.lumkit.dockhand.task.TaskNotifier
+import io.github.lumkit.dockhand.ui.component.ExternalDropAction
 import io.github.lumkit.dockhand.ui.component.FileContextAction
 import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
@@ -73,6 +74,7 @@ import dockhand.shared.generated.resources.task_trash_detail
 import dockhand.shared.generated.resources.task_trash_title
 import dockhand.shared.generated.resources.task_trash_title_multiple
 import dockhand.shared.generated.resources.task_waiting_message
+import dockhand.shared.generated.resources.text_drop_skip_self
 import dockhand.shared.generated.resources.text_item_count
 import dockhand.shared.generated.resources.text_read_failed
 import kotlinx.coroutines.CancellationException
@@ -228,6 +230,86 @@ class HomeViewModel(
             _state.update { it.copy(activeTaskId = taskId) }
         }
     }
+    /** 直接启动复制任务；确认框和外部拖入共用。 */
+    private suspend fun startCopyTask(
+        entries: List<FileEntry>,
+        destination: FileLocation,
+        background: Boolean,
+    ) {
+        if (entries.isEmpty()) return
+        val title = if (entries.size > 1) {
+            getString(Res.string.task_copy_title_multiple, entries.size)
+        } else {
+            getString(Res.string.task_copy_title, entries.first().name)
+        }
+        val detail = getString(Res.string.task_copy_destination, destination.displayPath())
+        val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+        startForegroundTask(
+            title = title,
+            detail = detail,
+            background = background,
+            isBatch = entries.size > 1,
+            itemNames = entries.map { it.name },
+            itemSizes = entries.map { it.size },
+        ) {
+            files.copyWithProgress(
+                entries = entries,
+                destinationDirectory = destination,
+                overwrite = false,
+                onProgress = { completed, total -> reportOverall(completed, total) },
+                onBytes = { completed, total -> reportCurrent(completed, total) },
+                onWaiting = { deviceName ->
+                    if (deviceName == null) {
+                        running()
+                    } else {
+                        waiting(waitingTemplate.replace("%s", deviceName))
+                    }
+                },
+                isCancelled = { isCancelled },
+            )
+        }
+    }
+
+    /** 直接启动移动任务；确认框和外部拖入共用。 */
+    private suspend fun startMoveTask(
+        entries: List<FileEntry>,
+        destination: FileLocation,
+        background: Boolean,
+    ) {
+        if (entries.isEmpty()) return
+        val title = if (entries.size > 1) {
+            getString(Res.string.task_move_title_multiple, entries.size)
+        } else {
+            getString(Res.string.task_move_title, entries.first().name)
+        }
+        val detail = getString(Res.string.task_copy_destination, destination.displayPath())
+        val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
+        startForegroundTask(
+            title = title,
+            detail = detail,
+            background = background,
+            isBatch = entries.size > 1,
+            itemNames = entries.map { it.name },
+            itemSizes = entries.map { it.size },
+        ) {
+            files.moveWithProgress(
+                entries = entries,
+                destinationDirectory = destination,
+                overwrite = false,
+                onProgress = { completed, total -> reportOverall(completed, total) },
+                onBytes = { completed, total -> reportCurrent(completed, total) },
+                onWaiting = { deviceName ->
+                    if (deviceName == null) {
+                        running()
+                    } else {
+                        waiting(waitingTemplate.replace("%s", deviceName))
+                    }
+                },
+                isCancelled = { isCancelled },
+            )
+        }
+    }
+
     private var snackbarRetryAction: (() -> Unit)? = null
 
     fun onSnackbarShown() {
@@ -1816,40 +1898,7 @@ class HomeViewModel(
     fun onMoveRequestConfirm() {
         val request = _state.value.moveRequest ?: return
         _state.update { it.copy(moveRequest = null) }
-        scope.launch {
-            val title = if (request.entries.size > 1) {
-                getString(Res.string.task_move_title_multiple, request.entries.size)
-            } else {
-                getString(Res.string.task_move_title, request.entry.name)
-            }
-            val destinationLabel = request.destination.displayPath()
-            val detail = getString(Res.string.task_copy_destination, destinationLabel)
-            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            startForegroundTask(
-                title = title,
-                detail = detail,
-                background = request.background,
-                isBatch = request.entries.size > 1,
-                itemNames = request.entries.map { it.name },
-                itemSizes = request.entries.map { it.size },
-            ) {
-                files.moveWithProgress(
-                    entries = request.entries,
-                    destinationDirectory = request.destination,
-                    overwrite = false,
-                    onProgress = { completed, total -> reportOverall(completed, total) },
-                    onBytes = { completed, total -> reportCurrent(completed, total) },
-                    onWaiting = { deviceName ->
-                        if (deviceName == null) {
-                            running()
-                        } else {
-                            waiting(waitingTemplate.replace("%s", deviceName))
-                        }
-                    },
-                    isCancelled = { isCancelled },
-                )
-            }
-        }
+        scope.launch { startMoveTask(request.entries, request.destination, request.background) }
     }
 
     fun onCopyRequestBackgroundChange(background: Boolean) {
@@ -1866,38 +1915,45 @@ class HomeViewModel(
     fun onCopyRequestConfirm() {
         val request = _state.value.copyRequest ?: return
         _state.update { it.copy(copyRequest = null) }
+        scope.launch { startCopyTask(request.entries, request.destination, request.background) }
+    }
+
+    /**
+     * 外部文件拖入：有明确动作时直接复制/移动，没有明确动作时弹复制确认框。
+     *
+     * 目标面板在 drop 的这一刻从 state 读取，不依赖组合快照。
+     */
+    fun onExternalFilesDropped(paneId: PaneId, paths: List<String>, action: ExternalDropAction?) {
+        if (paths.isEmpty()) return
+        val destination = _state.value.pane(paneId).location ?: return
         scope.launch {
-            val title = if (request.entries.size > 1) {
-                getString(Res.string.task_copy_title_multiple, request.entries.size)
-            } else {
-                getString(Res.string.task_copy_title, request.entry.name)
+            val resolved = files.entriesForLocalPaths(paths)
+            val entries = resolved.filterNot { shouldSkipForDestination(it, destination) }
+            if (entries.size != resolved.size) {
+                snackbarRetryAction = null
+                _state.update {
+                    it.copy(
+                        snackbarMessage = getString(Res.string.text_drop_skip_self),
+                        snackbarCanRetry = false,
+                    )
+                }
             }
-            val destinationLabel = request.destination.displayPath()
-            val detail = getString(Res.string.task_copy_destination, destinationLabel)
-            val waitingTemplate = getString(Res.string.task_waiting_message, "%s")
-            startForegroundTask(
-                title = title,
-                detail = detail,
-                background = request.background,
-                isBatch = request.entries.size > 1,
-                itemNames = request.entries.map { it.name },
-                itemSizes = request.entries.map { it.size },
-            ) {
-                files.copyWithProgress(
-                    entries = request.entries,
-                    destinationDirectory = request.destination,
-                    overwrite = false,
-                    onProgress = { completed, total -> reportOverall(completed, total) },
-                    onBytes = { completed, total -> reportCurrent(completed, total) },
-                    onWaiting = { deviceName ->
-                        if (deviceName == null) {
-                            running()
-                        } else {
-                            waiting(waitingTemplate.replace("%s", deviceName))
-                        }
-                    },
-                    isCancelled = { isCancelled },
-                )
+            if (entries.isEmpty()) return@launch
+            val background = _state.value.taskPreferences.background
+            when (action) {
+                ExternalDropAction.Copy -> startCopyTask(entries, destination, background)
+                ExternalDropAction.Move -> startMoveTask(entries, destination, background)
+                // Link 没有对应的业务操作；与无动作一样回到复制确认框。
+                ExternalDropAction.Link, null -> _state.update { state ->
+                    state.copy(
+                        copyRequest = CopyRequestState(
+                            entry = entries.first(),
+                            destination = destination,
+                            background = background,
+                            entries = entries,
+                        )
+                    )
+                }
             }
         }
     }
@@ -2480,4 +2536,23 @@ class HomeViewModel(
     private companion object {
         const val PAGE_SIZE = 300
     }
+}
+
+/**
+ * 目录不能复制/移动到自身内部：目标是源目录的后代时跳过该项。
+ *
+ * 只做本地路径的轻量前缀判断；符号链接等边界由 provider 的复制保护兜底。
+ */
+internal fun shouldSkipForDestination(entry: FileEntry, destination: FileLocation): Boolean {
+    if (!entry.isDirectory) return false
+    if (entry.location.source.kind != FileSourceKind.Local) return false
+    if (destination.source.kind != FileSourceKind.Local) return false
+    val sourcePath = entry.location.path.trimEnd('/')
+    if (sourcePath.isEmpty()) return false
+    val destinationPath = destination.path.trimEnd('/')
+    // 目标就是源目录本身时也会把副本建到源目录内部，同样要跳过。
+    if (destinationPath == sourcePath) return true
+    return destinationPath.length > sourcePath.length &&
+        destinationPath.startsWith(sourcePath) &&
+        destinationPath[sourcePath.length] == '/'
 }

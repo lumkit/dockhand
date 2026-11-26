@@ -42,6 +42,9 @@ interface FileBrowserRepository {
 
     suspend fun info(entry: FileEntry): FileInfo = entry.toBasicFileInfo()
 
+    /** 把外部本地绝对路径转换成列表行；默认不支持，返回空列表。 */
+    suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> = emptyList()
+
     suspend fun usage(entry: FileEntry): FileUsage? = null
 
     fun observeChanges(location: FileLocation): Flow<Unit>
@@ -190,6 +193,11 @@ class DefaultFileBrowserRepository(
 
     override suspend fun info(entry: FileEntry): FileInfo =
         providerFor(entry.location.source).info(entry)
+
+    override suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> =
+        providers.firstOrNull { it.kind == FileSourceKind.Local }
+            ?.entriesForLocalPaths(paths)
+            .orEmpty()
 
     override suspend fun usage(entry: FileEntry): FileUsage? =
         providerFor(entry.location.source).usage(entry)
@@ -538,24 +546,10 @@ class DefaultFileBrowserRepository(
         if (!destinationProvider.exists(FileLocation(destinationParent.source, joinPath(destinationParent.path, sourceName)))) {
             return sourceName
         }
-        val lastDot = sourceName.lastIndexOf('.')
-        val extension = if (!isDirectory && lastDot > 0) {
-            sourceName.substring(lastDot + 1).takeIf { it.isNotEmpty() }
-        } else {
-            null
-        }
-        val stem = if (extension != null) sourceName.substring(0, lastDot) else sourceName
-        var index = 0
+        val plan = planCopyName(sourceName, isDirectory)
+        var index = plan.startIndex
         while (true) {
-            val suffix = if (index == 0) "_副本" else "_副本$index"
-            val candidate = buildString {
-                append(stem)
-                append(suffix)
-                extension?.let {
-                    append('.')
-                    append(it)
-                }
-            }
+            val candidate = plan.candidate(index)
             val location = FileLocation(destinationParent.source, joinPath(destinationParent.path, candidate))
             if (!destinationProvider.exists(location)) return candidate
             index++
@@ -575,4 +569,61 @@ class DefaultFileBrowserRepository(
     private fun providerFor(source: FileSource): FileSystemProvider =
         providers.firstOrNull { it.supports(source) }
             ?: throw FileBrowserException("没有可用的文件后端：${source.name}")
+}
+
+private val COPY_NAME_SUFFIX = Regex("_副本(\\d*)\\z")
+
+/** 复制目标名的拆分结果：[baseStem] + `_副本[N]` + [extension]。 */
+internal data class CopyNamePlan(
+    val baseStem: String,
+    val extension: String?,
+    val startIndex: Int,
+) {
+    /** 第 [index] 个候选名：0 → `base_副本.ext`，1 → `base_副本1.ext`，… */
+    fun candidate(index: Int): String = buildString {
+        append(baseStem)
+        append(if (index == 0) "_副本" else "_副本$index")
+        extension?.let {
+            append('.')
+            append(it)
+        }
+    }
+}
+
+/**
+ * 计算复制目标名的起点。
+ *
+ * 源名已经带 `_副本` / `_副本N` 时先剥掉后缀，从已有序号的下一个数字开始，
+ * 避免重复复制或拖入同一目录时出现 `name_副本_副本`。
+ *
+ * 例：
+ *  - `a.txt` → 基础名 `a`，从 `a_副本.txt` 开始；
+ *  - `a_副本.txt` → 基础名 `a`，从 `a_副本1.txt` 开始；
+ *  - `a_副本2.txt` → 基础名 `a`，从 `a_副本3.txt` 开始。
+ */
+internal fun planCopyName(sourceName: String, isDirectory: Boolean): CopyNamePlan {
+    val lastDot = sourceName.lastIndexOf('.')
+    val extension = if (!isDirectory && lastDot > 0) {
+        sourceName.substring(lastDot + 1).takeIf { it.isNotEmpty() }
+    } else {
+        null
+    }
+    var base = if (extension != null) sourceName.substring(0, lastDot) else sourceName
+
+    // 取最右侧那段 _副本 / _副本N 的数字作为“当前序号”，更早的叠加后缀一并剥掉。
+    var matchedIndex: Int? = null
+    while (true) {
+        val match = COPY_NAME_SUFFIX.find(base) ?: break
+        if (matchedIndex == null) {
+            matchedIndex = match.groupValues[1].toIntOrNull() ?: 0
+        }
+        base = base.substring(0, match.range.first)
+        if (base.isEmpty()) break
+    }
+
+    return CopyNamePlan(
+        baseStem = base,
+        extension = extension,
+        startIndex = matchedIndex?.plus(1) ?: 0,
+    )
 }

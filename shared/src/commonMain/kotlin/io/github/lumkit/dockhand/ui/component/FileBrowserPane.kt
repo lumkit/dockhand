@@ -120,6 +120,7 @@ import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
 import io.github.lumkit.dockhand.domain.model.FileEntry
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
+import io.github.lumkit.dockhand.domain.model.displayPath
 import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
@@ -202,7 +203,9 @@ fun FileBrowserPane(
     val currentLayoutMode by rememberUpdatedState(layoutMode)
     val listState = rememberLazyListState()
     val inlineRenameBounds = LocalInlineRenameBounds.current
-    val scrollBarTouchWidth = with(LocalDensity.current) { 28.dp.toPx() }
+    val externalDrop = LocalExternalDropController.current
+    val density = LocalDensity.current
+    val scrollBarTouchWidth = with(density) { 28.dp.toPx() }
     var listCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
@@ -250,6 +253,10 @@ fun FileBrowserPane(
         onContextMenuDismiss()
     }
 
+    DisposableEffect(pane.id, externalDrop) {
+        onDispose { externalDrop?.removePaneBounds(pane.id) }
+    }
+
     Box(
         modifier = modifier
             // 初始 pass 只观察、不消费，滚动条拖动也会先切到当前面板。
@@ -270,6 +277,20 @@ fun FileBrowserPane(
                         currentOnFocus()
                         onSelectionClear()
                     }
+                )
+            }
+            // 外部拖拽用 AWT 逻辑坐标命中面板，这里统一换算成同一坐标空间。
+            .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInRoot()
+                val scale = density.density
+                externalDrop?.updatePaneBounds(
+                    pane.id,
+                    Rect(
+                        left = bounds.left / scale,
+                        top = bounds.top / scale,
+                        right = bounds.right / scale,
+                        bottom = bounds.bottom / scale,
+                    ),
                 )
             }
     ) {
@@ -594,6 +615,17 @@ fun FileBrowserPane(
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                         )
                     )
+            )
+        }
+
+        val dropHover = externalDrop?.hover?.takeIf { it.paneId == pane.id }
+        if (dropHover != null) {
+            ExternalDropOverlay(
+                action = dropHover.action,
+                destinationPath = pane.location?.displayPath(),
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(2.dp),
             )
         }
     }

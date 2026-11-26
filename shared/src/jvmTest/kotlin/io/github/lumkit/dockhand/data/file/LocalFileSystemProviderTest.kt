@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand.data.file
 import io.github.lumkit.dockhand.domain.model.FileBrowserException
 import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
+import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -57,6 +58,42 @@ class LocalFileSystemProviderTest {
             provider.setShowHiddenItems(true)
             val withHidden = provider.list(homePlace.location)
             assertTrue(withHidden.any { it.name == ".hidden" && it.isHidden })
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun entriesForLocalPathsKeepsHiddenAndDropsMissing(): Unit = runBlocking {
+        val root = Files.createTempDirectory("dockhand-drop")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val note = home.resolve("note.txt").also { Files.writeString(it, "hello") }
+            val hidden = home.resolve(".hidden").also { Files.writeString(it, "hidden") }
+            val folder = Files.createDirectories(home.resolve("folder"))
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+
+            val entries = provider.entriesForLocalPaths(
+                listOf(
+                    note.toString(),
+                    hidden.toString(),
+                    folder.toString(),
+                    home.resolve("missing.txt").toString(),
+                    note.toString(),
+                ),
+            )
+
+            assertEquals(listOf("note.txt", ".hidden", "folder"), entries.map { it.name })
+            assertTrue(entries.first { it.name == ".hidden" }.isHidden)
+            assertTrue(entries.first { it.name == "folder" }.isDirectory)
+            assertTrue(entries.all { it.location.source.kind == FileSourceKind.Local })
+            assertEquals(
+                listOf(note, hidden, folder).map { it.toAbsolutePath().normalize().toString() },
+                entries.map { it.location.path },
+            )
         } finally {
             root.toFile().deleteRecursively()
         }

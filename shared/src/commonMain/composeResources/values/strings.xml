@@ -105,6 +105,13 @@
     <string name="text_read_failed">读取失败</string>
     <string name="text_retry">重试</string>
     <string name="text_loading_more">加载更多…</string>
+
+    <!-- 外部文件拖入 -->
+    <string name="text_drop_copy">松手复制到当前目录</string>
+    <string name="text_drop_move">松手移动到当前目录</string>
+    <string name="text_drop_unknown">松手后确认复制到当前目录</string>
+    <string name="text_drop_unavailable">目标目录不可用</string>
+    <string name="text_drop_skip_self">不能把文件夹复制或移动到自身内部</string>
     <string name="action_copy_path">复制路径</string>
     <string name="copy_dialog_title">复制项目</string>
     <string name="move_dialog_title">移动项目</string>

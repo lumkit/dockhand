@@ -112,6 +112,13 @@ Changes take effect after restart.</string>
     <string name="text_read_failed">Failed to read</string>
     <string name="text_retry">Retry</string>
     <string name="text_loading_more">Loading more…</string>
+
+    <!-- External file drop -->
+    <string name="text_drop_copy">Drop to copy to this folder</string>
+    <string name="text_drop_move">Drop to move to this folder</string>
+    <string name="text_drop_unknown">Drop to confirm copying to this folder</string>
+    <string name="text_drop_unavailable">Target folder is unavailable</string>
+    <string name="text_drop_skip_self">Cannot copy or move a folder into itself</string>
     <string name="action_copy_path">Copy path</string>
     <string name="copy_dialog_title">Copy items</string>
     <string name="move_dialog_title">Move items</string>

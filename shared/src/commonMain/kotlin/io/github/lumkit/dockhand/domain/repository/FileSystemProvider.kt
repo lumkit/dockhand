@@ -53,6 +53,14 @@ interface FileSystemProvider {
         )
     }
 
+    /**
+     * 把外部本地绝对路径转换成列表行（拖入文件/文件夹）。
+     *
+     * 实现方负责在 IO 线程读取属性；默认不支持，返回空列表。
+     * 与 [list] 不同，显式拖入的隐藏项也要返回。
+     */
+    suspend fun entriesForLocalPaths(paths: List<String>): List<FileEntry> = emptyList()
+
     /** 读取详细属性；默认只返回 [FileEntry] 已有信息。 */
     suspend fun info(entry: FileEntry): FileInfo = entry.toBasicFileInfo()
 
