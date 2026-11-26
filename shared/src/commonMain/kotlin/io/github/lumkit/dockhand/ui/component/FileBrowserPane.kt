@@ -153,6 +153,11 @@ import kotlin.math.min
 
 private const val INACTIVE_PANE_ALPHA = 0.55f
 
+/** 网格视图的固定尺寸；框选命中计算需要和实际布局保持一致。 */
+private val GRID_ITEM_MIN_WIDTH = 112.dp
+private val GRID_ITEM_HEIGHT = 156.dp
+private val GRID_ITEM_SPACING = 6.dp
+
 /**
  * 一个文件浏览面板。
  *
@@ -986,62 +991,92 @@ private fun FileGridContent(
     val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+    val currentEntries by rememberUpdatedState(pane.entries)
     val inlineBounds = LocalInlineRenameBounds.current
     var gridCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var dragStart by remember { mutableStateOf<Offset?>(null) }
-    var dragEnd by remember { mutableStateOf<Offset?>(null) }
-    var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
-    var dragAnchorId by remember { mutableStateOf<String?>(null) }
-    var dragAnchorIndex by remember { mutableStateOf<Int?>(null) }
-    var dragging by remember { mutableStateOf(false) }
-    val isDragging = dragging
+    /** 正在进行的框选；非空即表示按住鼠标拖动中。 */
+    var marquee by remember { mutableStateOf<GridMarquee?>(null) }
+    val isMarqueeActive = marquee != null
     val density = LocalDensity.current
     val scrollBarTouchWidth = with(density) { 28.dp.toPx() }
+    val currentGridSpacingPx by rememberUpdatedState(with(density) { GRID_ITEM_SPACING.toPx() })
+    val edgeScrollThresholdPx = with(density) { 36.dp.toPx() }
+    val edgeScrollStepPx = with(density) { 28.dp.toPx() }
 
-    fun gridIndexAt(rootPoint: Offset): Int? {
+    /** 把根坐标换算成网格单元；只做坐标转换，命中计算在 [resolveGridCell] 里。 */
+    fun gridCellAt(rootPoint: Offset): GridCell? {
+        val entries = currentEntries
+        if (entries.isEmpty()) return null
         val origin = gridCoordinates?.boundsInRoot()?.topLeft ?: return null
-        val visible = gridState.layoutInfo.visibleItemsInfo
-            .filter { it.index in pane.entries.indices }
-        if (visible.isEmpty()) return null
-        val hit = visible.firstOrNull { info ->
-            val left = origin.x + info.offset.x
-            val top = origin.y + info.offset.y
-            rootPoint.x in left..(left + info.size.width) &&
-                    rootPoint.y in top..(top + info.size.height)
-        }
-        if (hit != null) return hit.index
-        // 指针在空白处时取最近的可见项，滚动后索引会随内容移动。
-        return visible.minByOrNull { info ->
-            val cy = origin.y + info.offset.y + info.size.height / 2f
-            kotlin.math.abs(cy - rootPoint.y)
-        }?.index
-    }
-
-    fun updateGridSelection() {
-        val anchor = dragAnchorIndex ?: return
-        val end = dragEnd ?: return
-        val current = gridIndexAt(end) ?: return
-        val from = min(anchor, current)
-        val to = max(anchor, current)
-        currentOnSelectionChange(
-            pane.entries.subList(from, to + 1).map { it.id }.toSet(),
-            dragAnchorId ?: pane.entries.getOrNull(anchor)?.id,
+        val layoutInfo = gridState.layoutInfo
+        // row/column 为 -1 表示正在动画退场的条目，不参与命中计算。
+        val visible = layoutInfo.visibleItemsInfo
+            .filter { it.index in entries.indices && it.row >= 0 && it.column >= 0 }
+            .map { info ->
+                GridVisibleItem(
+                    row = info.row,
+                    column = info.column,
+                    offsetX = info.offset.x.toFloat(),
+                    offsetY = info.offset.y.toFloat(),
+                    width = info.size.width.toFloat(),
+                    height = info.size.height.toFloat(),
+                )
+            }
+        return resolveGridCell(
+            x = rootPoint.x - origin.x,
+            y = rootPoint.y - origin.y,
+            items = visible,
+            columns = layoutInfo.maxSpan,
+            rowSpacing = layoutInfo.mainAxisItemSpacing.toFloat(),
+            columnSpacing = currentGridSpacingPx,
         )
     }
 
-    LaunchedEffect(isDragging) {
-        if (!isDragging) return@LaunchedEffect
-        val edge = with(density) { 36.dp.toPx() }
-        val maxStep = with(density) { 28.dp.toPx() }
+    /** 用当前选框重算选区；选框缩小时跑出选框的条目会重新变为未选中。 */
+    fun applyGridMarquee(session: GridMarquee) {
+        val entries = currentEntries
+        if (entries.isEmpty()) return
+        val cell = gridCellAt(session.current) ?: return
+        val columns = gridState.layoutInfo.maxSpan.coerceAtLeast(1)
+        val anchorColumn = session.anchor.column.coerceIn(0, columns - 1)
+        val indices = marqueeItemIndices(
+            anchorRow = session.anchor.row,
+            anchorColumn = anchorColumn,
+            pointerRow = cell.row,
+            pointerColumn = cell.column,
+            columns = columns,
+            itemCount = entries.size,
+        )
+        val selected = buildSet(indices.size) { indices.forEach { add(entries[it].id) } }
+        val anchorIndex = (session.anchor.row * columns + anchorColumn)
+            .coerceIn(0, entries.lastIndex)
+        currentOnSelectionChange(selected, entries[anchorIndex].id)
+    }
+
+    // 拖动期间逐帧刷新：跟随指针移动，也跟随列表滚动继续扩选或回退反选。
+    LaunchedEffect(isMarqueeActive) {
+        if (!isMarqueeActive) return@LaunchedEffect
         while (true) {
-            updateGridSelection()
-            val pointer = dragPointerLocal
-            val height = gridCoordinates?.size?.height
-            if (pointer != null && height != null) {
+            val session = marquee ?: break
+            applyGridMarquee(session)
+            // 指针贴近上下边缘时自动滚动；滚动后指针落到新的行上，选区随之扩张。
+            val bounds = gridCoordinates?.boundsInRoot()
+            if (bounds != null) {
+                val pointerY = session.current.y - bounds.top
                 val delta = when {
-                    pointer.y < edge -> -maxStep * ((edge - pointer.y) / edge).coerceIn(0f, 1f)
-                    pointer.y > height - edge ->
-                        maxStep * ((pointer.y - (height - edge)) / edge).coerceIn(0f, 1f)
+                    pointerY < edgeScrollThresholdPx -> {
+                        val intensity = ((edgeScrollThresholdPx - pointerY) / edgeScrollThresholdPx)
+                            .coerceIn(0f, 1f)
+                        -edgeScrollStepPx * intensity
+                    }
+
+                    pointerY > bounds.height - edgeScrollThresholdPx -> {
+                        val intensity = (
+                                (pointerY - (bounds.height - edgeScrollThresholdPx)) /
+                                        edgeScrollThresholdPx
+                                ).coerceIn(0f, 1f)
+                        edgeScrollStepPx * intensity
+                    }
 
                     else -> 0f
                 }
@@ -1090,9 +1125,8 @@ private fun FileGridContent(
     }
 
     LaunchedEffect(gridState) {
-        snapshotFlow {
-            gridState.layoutInfo.visibleItemsInfo.map { it.offset.x }.distinct().size
-        }
+        // maxSpan 是网格的权威列数；用可见条目推断列数在条目不足一行时会偏小。
+        snapshotFlow { gridState.layoutInfo.maxSpan }
             .distinctUntilChanged()
             .collect { columns ->
                 if (columns > 0) onGridColumnsChanged(columns)
@@ -1144,57 +1178,52 @@ private fun FileGridContent(
                         val coordinates = gridCoordinates
                         val width = coordinates?.size?.width
                         if (width != null && down.position.x >= width - scrollBarTouchWidth) {
+                            // 右侧拖动条自行处理拖动，框选不能抢事件。
                             continue
                         }
-                        val startRoot = coordinates?.localToRoot(down.position) ?: down.position
-                        if (inlineBounds?.value?.contains(startRoot) == true) continue
-                        val anchorIndex = gridIndexAt(startRoot)
-                        val anchor = pane.entries.getOrNull(anchorIndex ?: -1)?.id
-                        var active = false
+                        val pressRoot = coordinates?.localToRoot(down.position) ?: down.position
+                        if (inlineBounds?.value?.contains(pressRoot) == true) {
+                            // 行内重命名输入框内部的拖动用于选择文字，不能启动框选。
+                            continue
+                        }
+                        val anchor = gridCellAt(pressRoot) ?: continue
+
+                        var session: GridMarquee? = null
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.type == PointerEventType.Scroll) {
-                                if (active) updateGridSelection()
+                                // 滚轮交给列表自己滚动，选区由逐帧循环跟随内容移动。
                                 continue
                             }
                             val change = event.changes.firstOrNull() ?: break
                             val point = coordinates?.localToRoot(change.position) ?: change.position
-                            if (!active && (point - startRoot).getDistance() > viewConfiguration.touchSlop) {
-                                active = true
-                                dragging = true
-                                dragAnchorId = anchor
-                                dragAnchorIndex = anchorIndex
-                                dragStart = startRoot
+                            if (session == null && (point - pressRoot).getDistance() > viewConfiguration.touchSlop) {
+                                session = GridMarquee(start = pressRoot, current = point, anchor = anchor)
+                                marquee = session
                             }
-                            if (active) {
-                                dragEnd = point
-                                dragPointerLocal = change.position
-                                updateGridSelection()
-                                if (event.type != PointerEventType.Scroll) {
-                                    event.changes.forEach { it.consume() }
-                                }
+                            val active = session
+                            if (active != null) {
+                                session = active.copy(current = point)
+                                marquee = session
+                                applyGridMarquee(session)
+                                event.changes.forEach { it.consume() }
                             }
                             if (!change.pressed) break
                         }
-                        dragging = false
-                        dragStart = null
-                        dragEnd = null
-                        dragPointerLocal = null
-                        dragAnchorId = null
-                        dragAnchorIndex = null
+                        marquee = null
                     }
                 }
             }
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(112.dp),
+            columns = GridCells.Adaptive(GRID_ITEM_MIN_WIDTH),
             state = gridState,
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScrollBar(gridState),
             contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(GRID_ITEM_SPACING),
+            verticalArrangement = Arrangement.spacedBy(GRID_ITEM_SPACING),
         ) {
             gridItems(pane.entries, key = { it.id }) { row ->
                 FileGridItem(
@@ -1245,27 +1274,34 @@ private fun FileGridContent(
             }
         }
 
-        val marqueeStart = dragStart
-        val marqueeEnd = dragEnd
-        if (marqueeStart != null && marqueeEnd != null) {
-            val origin = gridCoordinates?.boundsInRoot()?.topLeft ?: Offset.Zero
-            val left = min(marqueeStart.x, marqueeEnd.x) - origin.x
-            val top = min(marqueeStart.y, marqueeEnd.y) - origin.y
-            val width = max(marqueeStart.x, marqueeEnd.x) - min(marqueeStart.x, marqueeEnd.x)
-            val height = max(marqueeStart.y, marqueeEnd.y) - min(marqueeStart.y, marqueeEnd.y)
-            val color = MiuixTheme.colorScheme.primary
-            Canvas(modifier = Modifier.matchParentSize()) {
-                drawRect(
-                    color = color.copy(alpha = 0.12f),
-                    topLeft = Offset(left, top),
-                    size = Size(width, height),
-                )
-                drawRect(
-                    color = color,
-                    topLeft = Offset(left, top),
-                    size = Size(width, height),
-                    style = Stroke(width = 1.dp.toPx()),
-                )
+        // 选框固定在指针按下的屏幕位置，内容滚动时画框不动，选区照常随滚动扩张。
+        val session = marquee
+        val bounds = gridCoordinates?.boundsInRoot()
+        if (session != null && bounds != null) {
+            val start = session.start - bounds.topLeft
+            val end = session.current - bounds.topLeft
+            // 夹紧到网格区域，指针拖到窗口外时选框不会画到面板之外。
+            val left = min(start.x, end.x).coerceIn(0f, bounds.width)
+            val top = min(start.y, end.y).coerceIn(0f, bounds.height)
+            val right = max(start.x, end.x).coerceIn(0f, bounds.width)
+            val bottom = max(start.y, end.y).coerceIn(0f, bounds.height)
+            val width = right - left
+            val height = bottom - top
+            if (width > 0f && height > 0f) {
+                val color = MiuixTheme.colorScheme.primary
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawRect(
+                        color = color.copy(alpha = 0.12f),
+                        topLeft = Offset(left, top),
+                        size = Size(width, height),
+                    )
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(left, top),
+                        size = Size(width, height),
+                        style = Stroke(width = 1.dp.toPx()),
+                    )
+                }
             }
         }
 
@@ -1346,7 +1382,7 @@ private fun FileGridItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(156.dp)
+                .height(GRID_ITEM_HEIGHT)
                 .squircleClip(12.dp)
                 .background(color)
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
