@@ -192,6 +192,7 @@ fun FileBrowserPane(
     onGridColumnsChanged: (Int) -> Unit = {},
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
+    onDragMoveOut: (List<FileEntry>) -> Unit = {},
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
 ) {
@@ -211,6 +212,7 @@ fun FileBrowserPane(
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     var dragPointerLocal by remember { mutableStateOf<Offset?>(null) }
     var dragAnchorIndex by remember { mutableStateOf<Int?>(null) }
+    val longPressDragArmed = remember { LongPressDragState() }
 
     fun rowIndexAt(localPoint: Offset): Int? {
         if (currentEntries.isEmpty()) return null
@@ -344,6 +346,10 @@ fun FileBrowserPane(
                                     val change = event.changes.firstOrNull() ?: break
                                     val point = coordinates?.localToRoot(change.position) ?: change.position
                                     if (!dragging && (point - start).getDistance() > touchSlop) {
+                                        if (longPressDragArmed.armed) {
+                                            // 长按已进入拖出准备，交给条目启动文件拖拽；本次按下不再框选。
+                                            break
+                                        }
                                         dragging = true
                                         dragAnchorIndex = rowIndexAt(down.position)
                                         dragStart = start
@@ -411,6 +417,9 @@ fun FileBrowserPane(
                                     onInlineRename = onInlineRename,
                                     onInlineRenameStarted = onInlineRenameStarted,
                                     onGridColumnsChanged = onGridColumnsChanged,
+                                    onDragMoveOut = onDragMoveOut,
+                                    longPressDragArmed = longPressDragArmed,
+                                    onLongPressArmedChanged = { longPressDragArmed.armed = it },
                                 )
                             } else {
                                 val edgeScrollThreshold = with(LocalDensity.current) { 36.dp.toPx() }
@@ -529,6 +538,14 @@ fun FileBrowserPane(
                                             onInlineRename = { name -> onInlineRename(row.entry, name) },
                                             startInlineRename = pane.inlineRenameEntryId == row.id,
                                             onInlineRenameStarted = onInlineRenameStarted,
+                                            selectedEntries = pane.selectedEntries,
+                                            onSelectForDrag = {
+                                                onEntryClick(row.entry, SelectionMode.Replace)
+                                            },
+                                            onLongPressArmedChanged = {
+                                                longPressDragArmed.armed = it
+                                            },
+                                            onDragMoveOut = onDragMoveOut,
                                             showContextMenu = pane.contextMenuEntryId == row.id,
                                             onClick = {
                                                 val modifiers = windowInfo.keyboardModifiers
@@ -642,6 +659,10 @@ private fun FileEntryRow(
     onInlineRename: (String) -> Unit,
     startInlineRename: Boolean,
     onInlineRenameStarted: () -> Unit,
+    selectedEntries: List<FileEntry>,
+    onSelectForDrag: () -> Unit,
+    onLongPressArmedChanged: (Boolean) -> Unit,
+    onDragMoveOut: (List<FileEntry>) -> Unit,
     showContextMenu: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -656,6 +677,12 @@ private fun FileEntryRow(
     }
 
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
+    val density = LocalDensity.current
+    val previewSizePx = with(density) { 80.dp.roundToPx() }
+    val iconPainter = painterResource(row.icon)
+    LaunchedEffect(row.icon, previewSizePx) {
+        DragPreviewCache.putIcon(row.icon, iconPainter, previewSizePx)
+    }
     val focusManager = LocalFocusManager.current
     val infoLabel = stringResource(Res.string.action_view_info)
     val openLabel = stringResource(Res.string.action_open)
@@ -688,6 +715,7 @@ private fun FileEntryRow(
     }
 
     var editing by remember(row.id) { mutableStateOf(false) }
+    var suppressClickAfterDrag by remember(row.id) { mutableStateOf(false) }
     var editFieldWasFocused by remember(row.id) { mutableStateOf(false) }
     val editState = rememberTextFieldState(row.name)
     val focusRequester = remember { FocusRequester() }
@@ -853,6 +881,29 @@ private fun FileEntryRow(
         }
     }
 
+    val dragSource = Modifier.longPressDragSource(
+        enabled = !editing && isLocal,
+        onPress = {
+            suppressClickAfterDrag = false
+            onLongPressArmedChanged(false)
+        },
+        onLongPressArmed = { onLongPressArmedChanged(true) },
+        onDragStart = {
+            onLongPressArmedChanged(false)
+            val entries = dragOutEntries(row.entry, selected, selectedEntries)
+            if (!selected && entries.isNotEmpty()) onSelectForDrag()
+            suppressClickAfterDrag = startFileDragOut(
+                entries = entries,
+                sourcePane = paneId,
+                thumbnails = DragPreviewCache.thumbnailSnapshot(entries.map { it.location.path }),
+                icons = DragPreviewCache.iconSnapshot(entries),
+                density = density.density,
+                onMoveCompleted = onDragMoveOut,
+            )
+        },
+        onCancelled = { onLongPressArmedChanged(false) },
+    )
+
     Box {
         BasicComponent(
             modifier = Modifier
@@ -863,12 +914,16 @@ private fun FileEntryRow(
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
                 .combinedClickable(
                     onClick = {
-                        if (editing) {
-                            commitInlineRename()
+                        if (suppressClickAfterDrag) {
+                            suppressClickAfterDrag = false
                         } else {
-                            focusManager.clearFocus()
+                            if (editing) {
+                                commitInlineRename()
+                            } else {
+                                focusManager.clearFocus()
+                            }
+                            onClick()
                         }
-                        onClick()
                     },
                     onDoubleClick = onDoubleClick,
                 )
@@ -886,10 +941,12 @@ private fun FileEntryRow(
                             }
                         }
                     }
-                },
+                }
+                .then(dragSource),
             startAction = {
                 if (row.thumbnailModel != null) {
-                    var isError by remember(row) { mutableStateOf(true) }
+                    // 初始就用 Crop：占位图标是方形，不会裁切；同时保证 onSuccess 缓存的是裁切后的缩略图。
+                    var isError by remember(row) { mutableStateOf(false) }
 
                     AsyncImage(
                         model = row.thumbnailModel,
@@ -897,15 +954,18 @@ private fun FileEntryRow(
                         modifier = Modifier
                             .size(36.dp)
                             .squircleClip(8.dp),
-                        placeholder = painterResource(row.icon),
-                        error = painterResource(row.icon),
+                        placeholder = iconPainter,
+                        error = iconPainter,
                         contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
                         onError = { isError = true },
-                        onSuccess = { isError = false },
+                        onSuccess = { state ->
+                            isError = false
+                            DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
+                        },
                     )
                 } else {
                     Image(
-                        painter = painterResource(row.icon),
+                        painter = iconPainter,
                         contentDescription = null,
                         modifier = Modifier.size(36.dp),
                     )
@@ -1015,6 +1075,9 @@ private fun FileGridContent(
     onInlineRename: (FileEntry, String) -> Unit,
     onInlineRenameStarted: () -> Unit,
     onGridColumnsChanged: (Int) -> Unit,
+    onDragMoveOut: (List<FileEntry>) -> Unit,
+    longPressDragArmed: LongPressDragState,
+    onLongPressArmedChanged: (Boolean) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
     val windowInfo = LocalWindowInfo.current
@@ -1230,6 +1293,10 @@ private fun FileGridContent(
                             val change = event.changes.firstOrNull() ?: break
                             val point = coordinates?.localToRoot(change.position) ?: change.position
                             if (session == null && (point - pressRoot).getDistance() > viewConfiguration.touchSlop) {
+                                if (longPressDragArmed.armed) {
+                                    // 长按已进入拖出准备，交给条目启动文件拖拽；本次按下不再框选。
+                                    break
+                                }
                                 session = GridMarquee(start = pressRoot, current = point, anchor = anchor)
                                 marquee = session
                             }
@@ -1285,6 +1352,10 @@ private fun FileGridContent(
                     },
                     onInlineRename = { name -> onInlineRename(row.entry, name) },
                     onInlineRenameStarted = onInlineRenameStarted,
+                    selectedEntries = pane.selectedEntries,
+                    onSelectForDrag = { onEntryClick(row.entry, SelectionMode.Replace) },
+                    onLongPressArmedChanged = onLongPressArmedChanged,
+                    onDragMoveOut = onDragMoveOut,
                 )
             }
             if (pane.isLoadingMore) {
@@ -1357,6 +1428,10 @@ private fun FileGridItem(
     onContextAction: (FileContextAction) -> Unit,
     onInlineRename: (String) -> Unit,
     onInlineRenameStarted: () -> Unit,
+    selectedEntries: List<FileEntry>,
+    onSelectForDrag: () -> Unit,
+    onLongPressArmedChanged: (Boolean) -> Unit,
+    onDragMoveOut: (List<FileEntry>) -> Unit,
 ) {
     val color = if (selected) {
         MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
@@ -1365,8 +1440,16 @@ private fun FileGridItem(
     }
     val focusManager = LocalFocusManager.current
     val inlineBounds = LocalInlineRenameBounds.current
+    val isLocal = row.entry.location.source.kind == FileSourceKind.Local
+    val density = LocalDensity.current
+    val previewSizePx = with(density) { 80.dp.roundToPx() }
+    val iconPainter = painterResource(row.icon)
+    LaunchedEffect(row.icon, previewSizePx) {
+        DragPreviewCache.putIcon(row.icon, iconPainter, previewSizePx)
+    }
     var editing by remember(row.id) { mutableStateOf(false) }
     var suppressNextClick by remember(row.id) { mutableStateOf(false) }
+    var suppressClickAfterDrag by remember(row.id) { mutableStateOf(false) }
     var itemCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var editFieldWasFocused by remember(row.id) { mutableStateOf(false) }
     val editState = rememberTextFieldState(row.name)
@@ -1410,6 +1493,29 @@ private fun FileGridItem(
         focusRequester.requestFocus()
     }
 
+    val dragSource = Modifier.longPressDragSource(
+        enabled = !editing && isLocal,
+        onPress = {
+            suppressClickAfterDrag = false
+            onLongPressArmedChanged(false)
+        },
+        onLongPressArmed = { onLongPressArmedChanged(true) },
+        onDragStart = {
+            onLongPressArmedChanged(false)
+            val entries = dragOutEntries(row.entry, selected, selectedEntries)
+            if (!selected && entries.isNotEmpty()) onSelectForDrag()
+            suppressClickAfterDrag = startFileDragOut(
+                entries = entries,
+                sourcePane = paneId,
+                thumbnails = DragPreviewCache.thumbnailSnapshot(entries.map { it.location.path }),
+                icons = DragPreviewCache.iconSnapshot(entries),
+                density = density.density,
+                onMoveCompleted = onDragMoveOut,
+            )
+        },
+        onCancelled = { onLongPressArmedChanged(false) },
+    )
+
     Box {
         Column(
             modifier = Modifier
@@ -1440,6 +1546,8 @@ private fun FileGridItem(
                         if (suppressNextClick) {
                             suppressNextClick = false
                             commitInlineRename()
+                        } else if (suppressClickAfterDrag) {
+                            suppressClickAfterDrag = false
                         } else if (editing) {
                             commitInlineRename()
                         } else {
@@ -1464,6 +1572,7 @@ private fun FileGridItem(
                         }
                     }
                 }
+                .then(dragSource)
                 .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -1475,15 +1584,18 @@ private fun FileGridItem(
                     model = row.thumbnailModel,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp).squircleClip(12.dp),
-                    placeholder = painterResource(row.icon),
-                    error = painterResource(row.icon),
+                    placeholder = iconPainter,
+                    error = iconPainter,
                     contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
                     onError = { isError = true },
-                    onSuccess = { isError = false },
+                    onSuccess = { state ->
+                        isError = false
+                        DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
+                    },
                 )
             } else {
                 Image(
-                    painter = painterResource(row.icon),
+                    painter = iconPainter,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
                 )

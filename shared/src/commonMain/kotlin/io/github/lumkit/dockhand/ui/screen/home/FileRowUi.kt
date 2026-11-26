@@ -110,7 +110,7 @@ private fun FileEntry.thumbnailModel(): Any? {
 }
 
 /** 图标在构建行数据时决定，LazyColumn 内不再做扩展名判断。 */
-private fun FileEntry.fileIcon(): DrawableResource {
+internal fun FileEntry.fileIcon(): DrawableResource {
     if (isDirectory) return Res.drawable.ic_file_folder
     if (archiveFormatForName(name) != null) return Res.drawable.ic_file_zip
     return when (extension?.lowercase()) {

@@ -24,6 +24,7 @@ import io.github.lumkit.dockhand.data.createAppContainer
 import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
 import io.github.lumkit.dockhand.ui.appLogoPainter
 import io.github.lumkit.dockhand.ui.component.ExternalDropController
+import io.github.lumkit.dockhand.ui.component.ExternalFileDragHost
 import io.github.lumkit.dockhand.ui.component.ExternalFileDropHost
 import io.github.lumkit.dockhand.ui.component.LocalExternalDropController
 import io.github.lumkit.dockhand.domain.model.WindowSize
@@ -102,7 +103,11 @@ fun main() = application {
 
         DisposableEffect(window, externalDropController) {
             ExternalFileDropHost.install(window, externalDropController)
-            onDispose { ExternalFileDropHost.uninstall(window, externalDropController) }
+            ExternalFileDragHost.install(window)
+            onDispose {
+                ExternalFileDragHost.uninstall(window)
+                ExternalFileDropHost.uninstall(window, externalDropController)
+            }
         }
 
         DisposableEffect(window) {

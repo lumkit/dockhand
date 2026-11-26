@@ -698,6 +698,28 @@ class HomeViewModelTest {
         )
     }
 
+    @Test
+    fun externalMoveOutDeletesOnlyLocalSources() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val mtpSource = FileSource("mtp:1", "Pixel", FileSourceKind.Mtp)
+        val mtp = FileEntry(
+            id = "/DCIM/photo.jpg",
+            name = "photo.jpg",
+            location = FileLocation(mtpSource, "/DCIM/photo.jpg"),
+            isDirectory = false,
+        )
+
+        viewModel.onEntriesMovedOut(listOf(fixture.readme, mtp))
+
+        waitUntil { fixture.deleteCalls.isNotEmpty() }
+        assertEquals(listOf(fixture.readme), fixture.deleteCalls.single())
+    }
+
     class Fixture {
         val source = FileSource(FileSource.LOCAL_ID, "本机", FileSourceKind.Local)
         val root = FileLocation(source, "/")
@@ -714,6 +736,7 @@ class HomeViewModelTest {
         val externalResolveCalls = mutableListOf<List<String>>()
         val copyCalls = mutableListOf<CopyCall>()
         val moveCalls = mutableListOf<MoveCall>()
+        val deleteCalls = mutableListOf<List<FileEntry>>()
 
         val documentsEntry = dir("Documents", documents)
         val readme = file("readme.txt", home)
@@ -787,6 +810,16 @@ class HomeViewModelTest {
                 isCancelled: () -> Boolean,
             ) {
                 moveCalls += MoveCall(entries, destinationDirectory, overwrite)
+                onProgress(entries.size.toLong(), entries.size.toLong())
+            }
+
+            override suspend fun deleteWithProgress(
+                entries: List<FileEntry>,
+                onProgress: (Long?, Long?) -> Unit,
+                onWaiting: (String?) -> Unit,
+                isCancelled: () -> Boolean,
+            ) {
+                deleteCalls += entries
                 onProgress(entries.size.toLong(), entries.size.toLong())
             }
         }

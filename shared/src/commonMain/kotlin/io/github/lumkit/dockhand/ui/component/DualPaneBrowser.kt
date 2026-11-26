@@ -36,6 +36,7 @@ fun DualPaneBrowser(
     onGridColumnsChanged: (PaneId, Int) -> Unit,
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onInlineRename: (PaneId, FileEntry, String) -> Unit,
+    onDragMoveOut: (List<FileEntry>) -> Unit = {},
     onRetry: (PaneId) -> Unit,
     onLoadMore: (PaneId) -> Unit,
     onBack: (PaneId) -> Unit,
@@ -103,6 +104,7 @@ fun DualPaneBrowser(
                     onEntryContextAction(PaneId.Left, entry, action)
                 },
                 onInlineRename = { entry, name -> onInlineRename(PaneId.Left, entry, name) },
+                onDragMoveOut = onDragMoveOut,
                 onRetry = { onRetry(PaneId.Left) },
                 onLoadMore = { onLoadMore(PaneId.Left) },
                 canTransferToOtherPane = leftCanTransfer,
@@ -134,6 +136,7 @@ fun DualPaneBrowser(
                     onEntryContextAction(PaneId.Right, entry, action)
                 },
                 onInlineRename = { entry, name -> onInlineRename(PaneId.Right, entry, name) },
+                onDragMoveOut = onDragMoveOut,
                 onRetry = { onRetry(PaneId.Right) },
                 onLoadMore = { onLoadMore(PaneId.Right) },
                 canTransferToOtherPane = rightCanTransfer,

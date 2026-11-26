@@ -91,6 +91,10 @@ object ExternalFileDropHost {
         return true
     }
 
+    /** 供拖出宿主复用同一个 Compose 根组件。 */
+    internal fun composeDndComponent(window: ComposeWindow): JComponent? =
+        findDropTargetComponent(window.contentPane)
+
     private fun findDropTargetComponent(container: Container): JComponent? {
         container.components.forEach { child ->
             if (child is JComponent && child.dropTarget != null) return child
@@ -123,9 +127,19 @@ private class ExternalFileDropListener(
     }
 
     override fun drop(dtde: DropTargetDropEvent) {
+        // 只要 drop 落在本窗口，就说明这是应用内拖拽；源侧的 exportDone 不能再删源文件，
+        // 是否移动由 ViewModel 的任务决定（macOS 可能把 COPY 误报成 MOVE）。
+        ExternalFileDragHost.markInternalDrop()
         val position = dtde.location.toLogicalOffset()
+        val targetPane = controller.paneAt(position)
+        val sourcePane = ExternalFileDragHost.activeDragSourcePane()
+        if (sourcePane != null && targetPane == sourcePane) {
+            // 本窗口内松开不触发：源面板不是投放目标。
+            dtde.rejectDrop()
+            return
+        }
         val supported = dtde.transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)
-        if (!supported || controller.paneAt(position) == null) {
+        if (!supported || targetPane == null) {
             dtde.rejectDrop()
             return
         }
@@ -142,8 +156,17 @@ private class ExternalFileDropListener(
     }
 
     private fun updateHover(dtde: DropTargetDragEvent) {
+        val position = dtde.location.toLogicalOffset()
+        val targetPane = controller.paneAt(position)
+        val sourcePane = ExternalFileDragHost.activeDragSourcePane()
+        if (sourcePane != null && targetPane == sourcePane) {
+            // 源面板不接收本次拖出，松手不产生动作。
+            controller.onDragExited()
+            dtde.rejectDrag()
+            return
+        }
         val handled = controller.onDragMoved(
-            position = dtde.location.toLogicalOffset(),
+            position = position,
             action = externalDropActionOf(dtde.dropAction),
         )
         if (handled) {

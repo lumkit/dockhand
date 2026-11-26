@@ -310,6 +310,38 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * 外部程序以 MOVE 完成拖拽后清理源文件。
+     *
+     * 目标程序已经接管数据；面板内部投放不会走到这里，移动由面板投放的任务完成。
+     * 删除走后台任务，失败或取消时源文件保留，目标程序里的副本不受影响。
+     */
+    fun onEntriesMovedOut(entries: List<FileEntry>) {
+        val local = entries.filter { it.location.source.kind == FileSourceKind.Local }
+        if (local.isEmpty()) return
+        scope.launch {
+            val title = if (local.size > 1) {
+                getString(Res.string.task_move_title_multiple, local.size)
+            } else {
+                getString(Res.string.task_move_title, local.first().name)
+            }
+            startBackgroundTask(
+                title = title,
+                detail = null,
+                isBatch = local.size > 1,
+                itemNames = local.map { it.name },
+                itemSizes = local.map { it.size },
+            ) {
+                files.deleteWithProgress(
+                    entries = local,
+                    onProgress = { completed, total -> reportOverall(completed, total) },
+                    onWaiting = {},
+                    isCancelled = { isCancelled },
+                )
+            }
+        }
+    }
+
     private var snackbarRetryAction: (() -> Unit)? = null
 
     fun onSnackbarShown() {
