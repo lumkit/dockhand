@@ -2,11 +2,13 @@ package io.github.lumkit.dockhand.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
@@ -29,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import io.github.lumkit.dockhand.core.app.APP_VERSION
 import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.app.PROJECT_URL
+import io.github.lumkit.dockhand.core.update.AppUpdate
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
@@ -38,6 +44,12 @@ import dockhand.shared.generated.resources.about_project
 import dockhand.shared.generated.resources.about_section
 import dockhand.shared.generated.resources.about_version
 import dockhand.shared.generated.resources.appearance_section
+import dockhand.shared.generated.resources.update_available
+import dockhand.shared.generated.resources.update_dialog_title
+import dockhand.shared.generated.resources.update_download
+import dockhand.shared.generated.resources.update_ignore
+import dockhand.shared.generated.resources.update_latest
+import dockhand.shared.generated.resources.update_notes_empty
 import dockhand.shared.generated.resources.language_en_us
 import dockhand.shared.generated.resources.language_system
 import dockhand.shared.generated.resources.language_zh_cn
@@ -98,6 +110,8 @@ import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
@@ -113,6 +127,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -146,6 +161,11 @@ fun SettingsBottomSheet(
     onRestoreWindowSizeChange: (Boolean) -> Unit,
     cacheBreakdown: CacheBreakdown,
     onClearCache: () -> Unit,
+    latestUpdate: AppUpdate?,
+    ignoredUpdateVersion: String?,
+    updateScrollVersion: String?,
+    onIgnoreUpdate: (String) -> Unit,
+    onUpdateScrollShown: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val localPlaces = remember(places) {
@@ -163,178 +183,268 @@ fun SettingsBottomSheet(
     var dialogColor by remember { mutableStateOf(keyColor) }
     val themeModes = ColorSchemeMode.entries
     val scrollState = rememberScrollState()
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val latestVersionMessage = stringResource(Res.string.update_latest)
+    val emptyNotesMessage = stringResource(Res.string.update_notes_empty)
+    val update = latestUpdate
+
+    // 有新版本且未忽略时，打开设置自动滚动到版本选项；一个版本只滚动一次。
+    LaunchedEffect(show, update?.version, ignoredUpdateVersion, updateScrollVersion) {
+        val release = update ?: return@LaunchedEffect
+        if (!show || ignoredUpdateVersion == release.version) return@LaunchedEffect
+        if (updateScrollVersion == release.version) return@LaunchedEffect
+        var attempts = 0
+        while (scrollState.maxValue == 0 && attempts < 10) {
+            withFrameNanos { }
+            attempts++
+        }
+        scrollState.animateScrollTo(scrollState.maxValue)
+        onUpdateScrollShown(release.version)
+    }
+
     OverlayBottomSheet(
         show = show,
         modifier = modifier,
         title = stringResource(Res.string.text_settings),
         onDismissRequest = onDismissRequest,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(scrollState)
-                .verticalScrollBar(scrollState)
-                .padding(16.dp),
-        ) {
-            SmallTitle(stringResource(Res.string.appearance_section))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.secondaryContainer,
-                ),
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .verticalScrollBar(scrollState)
+                    .padding(16.dp),
             ) {
-                OverlayDropdownPreference(
-                    items = AppLanguage.entries.map { appLanguageLabel(it) },
-                    selectedIndex = AppLanguage.entries.indexOf(language).coerceAtLeast(0),
-                    title = stringResource(Res.string.settings_language),
-                    summary = stringResource(Res.string.settings_language_summary),
-                    onSelectedIndexChange = { onLanguageChange(AppLanguage.entries[it]) },
-                )
-                OverlayDropdownPreference(
-                    items = themeModes.map { themeModeLabel(it) },
-                    selectedIndex = colorSchemeMode.ordinal,
-                    title = stringResource(Res.string.theme_mode),
-                    summary = stringResource(Res.string.theme_mode_summary),
-                    onSelectedIndexChange = { onColorSchemeModeChange(themeModes[it]) },
-                )
-                AnimatedVisibility(visible = colorSchemeMode >= ColorSchemeMode.MonetSystem) {
-                    ArrowPreference(
-                        title = stringResource(Res.string.main_color),
-                        summary = keyColor.toHexString(),
-                        endActions = {
-                            Surface(
-                                modifier = Modifier.size(32.dp)
-                                    .squircleClip(12.dp),
-                                color = keyColor,
-                            ) {}
+                SmallTitle(stringResource(Res.string.appearance_section))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                    ),
+                ) {
+                    OverlayDropdownPreference(
+                        items = AppLanguage.entries.map { appLanguageLabel(it) },
+                        selectedIndex = AppLanguage.entries.indexOf(language).coerceAtLeast(0),
+                        title = stringResource(Res.string.settings_language),
+                        summary = stringResource(Res.string.settings_language_summary),
+                        onSelectedIndexChange = { onLanguageChange(AppLanguage.entries[it]) },
+                    )
+                    OverlayDropdownPreference(
+                        items = themeModes.map { themeModeLabel(it) },
+                        selectedIndex = colorSchemeMode.ordinal,
+                        title = stringResource(Res.string.theme_mode),
+                        summary = stringResource(Res.string.theme_mode_summary),
+                        onSelectedIndexChange = { onColorSchemeModeChange(themeModes[it]) },
+                    )
+                    AnimatedVisibility(visible = colorSchemeMode >= ColorSchemeMode.MonetSystem) {
+                        ArrowPreference(
+                            title = stringResource(Res.string.main_color),
+                            summary = keyColor.toHexString(),
+                            endActions = {
+                                Surface(
+                                    modifier = Modifier.size(32.dp)
+                                        .squircleClip(12.dp),
+                                    color = keyColor,
+                                ) {}
+                            },
+                            onClick = {
+                                dialogColor = keyColor
+                                showColorDialog = true
+                            },
+                        )
+                    }
+
+                    SliderPreference(
+                        value = scale,
+                        onValueChange = { scale = it },
+                        onValueChangeFinished = {
+                            onInterfaceScaleChange((scale * 100).roundToInt())
                         },
+                        title = stringResource(Res.string.interface_scale),
+                        summary = stringResource(Res.string.interface_scale_summary),
+                        valueRange = 0.8f..1.1f,
+                        showKeyPoints = true,
+                        keyPoints = listOf(0.8f, 0.9f, 1.0f, 1.1f),
+                        endActions = {
+                            Text(text = "${(scale * 100).roundToInt()}%")
+                        },
+                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                         onClick = {
-                            dialogColor = keyColor
-                            showColorDialog = true
+                            scaleInput.setTextAndPlaceCursorAtEnd(
+                                (scale * 100).roundToInt().toString()
+                            )
+                            showScaleDialog = true
                         },
                     )
                 }
 
-                SliderPreference(
-                    value = scale,
-                    onValueChange = { scale = it },
-                    onValueChangeFinished = {
-                        onInterfaceScaleChange((scale * 100).roundToInt())
-                    },
-                    title = stringResource(Res.string.interface_scale),
-                    summary = stringResource(Res.string.interface_scale_summary),
-                    valueRange = 0.8f..1.1f,
-                    showKeyPoints = true,
-                    keyPoints = listOf(0.8f, 0.9f, 1.0f, 1.1f),
-                    endActions = {
-                        Text(text = "${(scale * 100).roundToInt()}%")
-                    },
-                    hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                    onClick = {
-                        scaleInput.setTextAndPlaceCursorAtEnd(
-                            (scale * 100).roundToInt().toString()
-                        )
-                        showScaleDialog = true
-                    },
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-            SmallTitle(stringResource(Res.string.framework_section))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                SwitchPreference(
-                    checked = showHiddenItems,
-                    onCheckedChange = onShowHiddenItemsChange,
-                    title = stringResource(Res.string.settings_show_hidden_items),
-                    summary = stringResource(Res.string.settings_show_hidden_items_summary),
+                Spacer(Modifier.height(16.dp))
+                SmallTitle(stringResource(Res.string.framework_section))
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                ArrowPreference(
-                    title = stringResource(Res.string.shortcut_settings),
-                    summary = stringResource(Res.string.shortcut_settings_summary),
-                    onClick = { showShortcutSheet = true },
-                )
-                ArrowPreference(
-                    title = stringResource(Res.string.settings_clear_cache),
-                    summary = stringResource(
-                        Res.string.settings_clear_cache_summary,
-                        formatFileSize(cacheBreakdown.totalBytes),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
                     ),
-                    onClick = { showCacheDialog = true },
-                )
-            }
+                ) {
+                    SwitchPreference(
+                        checked = showHiddenItems,
+                        onCheckedChange = onShowHiddenItemsChange,
+                        title = stringResource(Res.string.settings_show_hidden_items),
+                        summary = stringResource(Res.string.settings_show_hidden_items_summary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ArrowPreference(
+                        title = stringResource(Res.string.shortcut_settings),
+                        summary = stringResource(Res.string.shortcut_settings_summary),
+                        onClick = { showShortcutSheet = true },
+                    )
+                    ArrowPreference(
+                        title = stringResource(Res.string.settings_clear_cache),
+                        summary = stringResource(
+                            Res.string.settings_clear_cache_summary,
+                            formatFileSize(cacheBreakdown.totalBytes),
+                        ),
+                        onClick = { showCacheDialog = true },
+                    )
+                }
 
-            Spacer(Modifier.height(16.dp))
-            SmallTitle(stringResource(Res.string.startup_section))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                OverlayDropdownMenu(
-                    entries = listOf(
-                        DropdownEntry(
-                            items = startupDropdownItems(
-                                places = localPlaces,
-                                selectedId = startupLeftPath,
-                                onSelected = onStartupLeftPathChange,
+                Spacer(Modifier.height(16.dp))
+                SmallTitle(stringResource(Res.string.startup_section))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                    ),
+                ) {
+                    OverlayDropdownMenu(
+                        entries = listOf(
+                            DropdownEntry(
+                                items = startupDropdownItems(
+                                    places = localPlaces,
+                                    selectedId = startupLeftPath,
+                                    onSelected = onStartupLeftPathChange,
+                                )
                             )
-                        )
-                    ),
-                    title = stringResource(Res.string.startup_left_path),
-                    summary = startupPathLabel(localPlaces, startupLeftPath),
-                )
-                OverlayDropdownMenu(
-                    entries = listOf(
-                        DropdownEntry(
-                            items = startupDropdownItems(
-                                places = localPlaces,
-                                selectedId = startupRightPath,
-                                onSelected = onStartupRightPathChange,
+                        ),
+                        title = stringResource(Res.string.startup_left_path),
+                        summary = startupPathLabel(localPlaces, startupLeftPath),
+                    )
+                    OverlayDropdownMenu(
+                        entries = listOf(
+                            DropdownEntry(
+                                items = startupDropdownItems(
+                                    places = localPlaces,
+                                    selectedId = startupRightPath,
+                                    onSelected = onStartupRightPathChange,
+                                )
                             )
-                        )
-                    ),
-                    title = stringResource(Res.string.startup_right_path),
-                    summary = startupPathLabel(localPlaces, startupRightPath),
-                )
-                SwitchPreference(
-                    checked = restoreWindowSize,
-                    onCheckedChange = onRestoreWindowSizeChange,
-                    title = stringResource(Res.string.settings_restore_window_size),
-                    summary = stringResource(Res.string.settings_restore_window_size_summary),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+                        ),
+                        title = stringResource(Res.string.startup_right_path),
+                        summary = startupPathLabel(localPlaces, startupRightPath),
+                    )
+                    SwitchPreference(
+                        checked = restoreWindowSize,
+                        onCheckedChange = onRestoreWindowSizeChange,
+                        title = stringResource(Res.string.settings_restore_window_size),
+                        summary = stringResource(Res.string.settings_restore_window_size_summary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
-            Spacer(Modifier.height(16.dp))
-            SmallTitle(stringResource(Res.string.about_section))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                BasicComponent(
-                    title = stringResource(Res.string.about_version),
-                    summary = APP_VERSION,
+                Spacer(Modifier.height(16.dp))
+                SmallTitle(stringResource(Res.string.about_section))
+                Card(
                     modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                    ),
+                ) {
+                    ArrowPreference(
+                        title = stringResource(Res.string.about_version),
+                        summary = APP_VERSION,
+                        endActions = {
+                            if (update != null) {
+                                Text(
+                                    text = stringResource(Res.string.update_available),
+                                    color = MiuixTheme.colorScheme.primary,
+                                )
+                            }
+                        },
+                        onClick = {
+                            if (update != null) {
+                                showUpdateDialog = true
+                            } else {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(latestVersionMessage)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ArrowPreference(
+                        title = stringResource(Res.string.about_open_source),
+                        summary = stringResource(Res.string.about_open_source_summary),
+                        onClick = { showLicensesSheet = true },
+                    )
+                    ArrowPreference(
+                        title = stringResource(Res.string.about_project),
+                        summary = PROJECT_URL,
+                        onClick = { uriHandler.openUri(PROJECT_URL) },
+                    )
+                }
+            }
+            SnackbarHost(
+                state = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            )
+        }
+    }
+
+    if (showUpdateDialog && update != null) {
+        OverlayDialog(
+            show = true,
+            title = stringResource(Res.string.update_dialog_title),
+            summary = update.name ?: update.tagName,
+            onDismissRequest = { showUpdateDialog = false },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = update.body.ifBlank { emptyNotesMessage },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
                 )
-                ArrowPreference(
-                    title = stringResource(Res.string.about_open_source),
-                    summary = stringResource(Res.string.about_open_source_summary),
-                    onClick = { showLicensesSheet = true },
-                )
-                ArrowPreference(
-                    title = stringResource(Res.string.about_project),
-                    summary = PROJECT_URL,
-                    onClick = { uriHandler.openUri(PROJECT_URL) },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            runCatching { uriHandler.openUri(update.downloadUrl) }
+                            showUpdateDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.update_download))
+                    }
+                    Button(
+                        onClick = {
+                            onIgnoreUpdate(update.version)
+                            showUpdateDialog = false
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = stringResource(Res.string.update_ignore))
+                    }
+                }
             }
         }
     }

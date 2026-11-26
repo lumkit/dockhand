@@ -10,6 +10,8 @@ import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.platform.NoopTerminalLauncher
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
+import io.github.lumkit.dockhand.core.update.NoopUpdateRepository
+import io.github.lumkit.dockhand.core.update.UpdateRepository
 import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.task.NoopTaskNotifier
@@ -28,6 +30,7 @@ class AppContainer(
     val cacheManager: CacheManager = NoopCacheManager,
     val archiveService: ArchiveService = NoopArchiveService,
     val fileOpener: FileOpener = NoopFileOpener,
+    val updates: UpdateRepository = NoopUpdateRepository,
     private val onClose: () -> Unit = {},
 ) {
     private var closed = false

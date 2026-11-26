@@ -58,6 +58,7 @@ import dockhand.shared.generated.resources.text_settings
 import dockhand.shared.generated.resources.text_storage_usage
 import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
+import io.github.lumkit.dockhand.core.update.AppUpdate
 import io.github.lumkit.dockhand.domain.model.DEFAULT_FILE_PLACE_GROUP_ORDER
 import io.github.lumkit.dockhand.domain.model.DEFAULT_MTP_SHORTCUT_ORDER
 import io.github.lumkit.dockhand.domain.model.FileLocation
@@ -70,6 +71,8 @@ import io.github.lumkit.dockhand.domain.model.orderedByIds
 import io.github.lumkit.dockhand.ui.component.SettingsBottomSheet
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import top.yukonga.miuix.kmp.basic.Badge
+import top.yukonga.miuix.kmp.basic.BadgedBox
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
@@ -138,6 +141,11 @@ fun HomeDrawerContent(
     cacheBreakdown: CacheBreakdown,
     onClearCache: () -> Unit,
     onRefreshCacheSize: () -> Unit,
+    latestUpdate: AppUpdate?,
+    ignoredUpdateVersion: String?,
+    updateScrollVersion: String?,
+    onIgnoreUpdate: (String) -> Unit,
+    onUpdateScrollShown: (String) -> Unit,
     onPlaceClick: (FilePlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -159,6 +167,7 @@ fun HomeDrawerContent(
         }
     }
     val shortcuts = remember(mtpShortcutOrder) { orderedMtpShortcuts(mtpShortcutOrder) }
+    val hasUpdateBadge = latestUpdate != null && latestUpdate.version != ignoredUpdateVersion
 
     Column(modifier = modifier) {
         LazyColumn(
@@ -268,10 +277,20 @@ fun HomeDrawerContent(
             modifier = Modifier.fillMaxWidth()
                 .padding(8.dp),
         ) {
-            Icon(
-                imageVector = MiuixIcons.Settings,
-                contentDescription = null,
-            )
+            BadgedBox(
+                badge = {
+                    if (hasUpdateBadge) {
+                        Badge {
+                            Text("1")
+                        }
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Settings,
+                    contentDescription = null,
+                )
+            }
 
             Spacer(Modifier.width(8.dp))
 
@@ -307,6 +326,11 @@ fun HomeDrawerContent(
         onShowHiddenItemsChange = onShowHiddenItemsChange,
         cacheBreakdown = cacheBreakdown,
         onClearCache = onClearCache,
+        latestUpdate = latestUpdate,
+        ignoredUpdateVersion = ignoredUpdateVersion,
+        updateScrollVersion = updateScrollVersion,
+        onIgnoreUpdate = onIgnoreUpdate,
+        onUpdateScrollShown = onUpdateScrollShown,
     )
 }
 

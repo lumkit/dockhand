@@ -35,6 +35,21 @@
 -keepclassmembers class * implements coil3.decode.Decoder$Factory { *; }
 -keepclassmembers class * implements coil3.key.Keyer { *; }
 
+# kotlinx.coroutines: ProGuard's shrinker can drop redundant direct interfaces
+# (e.g. Job from JobSupport) while keeping invokespecial default-method calls.
+# That produces a VerifyError (JobSupport.cancel) at runtime. Keep the whole
+# coroutines surface: the app, Compose/Skiko and Ktor all rely on it.
+-keep class kotlinx.coroutines.** { *; }
+
+# Ktor Client (CIO): the engine/plugins are referenced directly, but Ktor's
+# engine discovery and optional modules use service loaders and metadata.
+# Keep the client surface intact in release; our only Ktor usage is the
+# GitHub update check (HttpClient(CIO) + HttpTimeout + defaultRequest).
+-keep class io.ktor.** { *; }
+-keep class kotlinx.io.** { *; }
+-keep class org.slf4j.** { *; }
+-dontwarn io.ktor.**
+
 # JNA callback descriptors must keep their original class/type names.
 -keep class com.sun.jna.** { *; }
 

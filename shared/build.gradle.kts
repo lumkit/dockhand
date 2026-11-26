@@ -69,6 +69,8 @@ kotlin {
             implementation(libs.androidx.sqlite.bundled)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.kotlinx.serializationJson)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.cio)
             implementation(libs.zip4j)
             implementation(libs.commons.compress)
             implementation(libs.xz)

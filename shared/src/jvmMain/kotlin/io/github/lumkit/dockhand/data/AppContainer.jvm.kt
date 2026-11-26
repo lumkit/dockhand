@@ -15,6 +15,7 @@ import io.github.lumkit.dockhand.data.datastore.createSettingsDataStore
 import io.github.lumkit.dockhand.data.file.LocalFileSystemProvider
 import io.github.lumkit.dockhand.data.file.MtpFileSystemProvider
 import io.github.lumkit.dockhand.data.repository.TrashHistoryRepository
+import io.github.lumkit.dockhand.data.update.GithubUpdateRepository
 import io.github.lumkit.dockhand.domain.repository.DefaultFileBrowserRepository
 import io.github.lumkit.dockhand.task.MacTaskNotifier
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,7 @@ fun createAppContainer(): AppContainer {
         cacheManager = LocalCacheManager(dataDir),
         archiveService = LocalArchiveService(),
         fileOpener = DesktopFileOpener(),
+        updates = GithubUpdateRepository(),
         onClose = {
             scope.cancel()
             database.close()

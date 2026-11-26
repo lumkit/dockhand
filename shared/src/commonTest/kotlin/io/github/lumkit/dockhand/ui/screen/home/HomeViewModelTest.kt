@@ -9,6 +9,8 @@ import io.github.lumkit.dockhand.domain.model.FilePlaceKind
 import io.github.lumkit.dockhand.domain.model.FileSource
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
+import io.github.lumkit.dockhand.core.update.AppUpdate
+import io.github.lumkit.dockhand.core.update.UpdateRepository
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
 import io.github.lumkit.dockhand.ui.component.ExternalDropAction
 import io.github.lumkit.dockhand.ui.component.FileContextAction
@@ -718,6 +720,37 @@ class HomeViewModelTest {
 
         waitUntil { fixture.deleteCalls.isNotEmpty() }
         assertEquals(listOf(fixture.readme), fixture.deleteCalls.single())
+    }
+
+    @Test
+    fun updateCheckPublishesNewerReleaseAndIgnoreClearsBadge() = runBlocking {
+        val fixture = Fixture()
+        val update = AppUpdate(
+            version = "0.1.0",
+            tagName = "v0.1.0",
+            name = "Release",
+            body = "notes",
+            pageUrl = "https://example.com/release",
+            downloadUrl = "https://example.com/download",
+        )
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            updates = object : UpdateRepository {
+                override suspend fun latestUpdate(): AppUpdate = update
+            },
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        viewModel.checkForUpdates()
+
+        assertEquals(update, viewModel.state.value.latestUpdate)
+        assertTrue(viewModel.state.value.hasUpdateBadge)
+
+        viewModel.onIgnoreUpdate(update.version)
+
+        assertFalse(viewModel.state.value.hasUpdateBadge)
+        assertEquals(update, viewModel.state.value.latestUpdate)
     }
 
     class Fixture {

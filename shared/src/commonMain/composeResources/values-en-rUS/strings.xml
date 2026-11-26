@@ -297,4 +297,10 @@ Changes take effect after restart.</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_close">Close</string>
     <string name="action_retry">Retry</string>
+    <string name="update_available">Update available</string>
+    <string name="update_dialog_title">Update available</string>
+    <string name="update_download">Download</string>
+    <string name="update_ignore">Ignore this version</string>
+    <string name="update_latest">You're up to date</string>
+    <string name="update_notes_empty">No release notes</string>
 </resources>

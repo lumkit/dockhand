@@ -83,8 +83,9 @@ compose.desktop {
             description = "Dockhand dual-pane file browser"
             vendor = "lumkit"
             copyright = "Copyright © 2026 lumkit. All rights reserved."
-            // DataStore 的 protobuf 需要 sun.misc.Unsafe
-            modules("jdk.unsupported")
+            // DataStore 的 protobuf 需要 sun.misc.Unsafe；
+            // Ktor CIO 的 HTTPS 需要 SunEC。
+            modules("jdk.unsupported", "jdk.crypto.ec")
 
             macOS {
                 bundleID = "io.github.lumkit.dockhand"

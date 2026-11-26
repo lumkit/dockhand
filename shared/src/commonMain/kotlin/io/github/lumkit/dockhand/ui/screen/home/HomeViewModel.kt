@@ -17,6 +17,10 @@ import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.archive.NoopArchiveService
 import io.github.lumkit.dockhand.core.platform.FileOpener
 import io.github.lumkit.dockhand.core.platform.NoopFileOpener
+import io.github.lumkit.dockhand.core.app.APP_VERSION
+import io.github.lumkit.dockhand.core.update.AppUpdate
+import io.github.lumkit.dockhand.core.update.UpdateRepository
+import io.github.lumkit.dockhand.core.update.compareVersions
 import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
 import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
@@ -115,6 +119,7 @@ class HomeViewModel(
     private val cacheManager: CacheManager = NoopCacheManager,
     private val archiveService: ArchiveService = NoopArchiveService,
     private val fileOpener: FileOpener = NoopFileOpener,
+    private val updates: UpdateRepository? = null,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -456,6 +461,53 @@ class HomeViewModel(
                 }
         }
     }
+    private val ignoredUpdateVersionJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.ignoredUpdateVersion
+                .catch { }
+                .collect { version ->
+                    _state.update { it.copy(ignoredUpdateVersion = version) }
+                }
+        }
+    }
+
+    private val updateScrollVersionJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.updateScrollVersion
+                .catch { }
+                .collect { version ->
+                    _state.update { it.copy(updateScrollVersion = version) }
+                }
+        }
+    }
+
+    private val updateCheckJob: Job? = updates?.let {
+        scope.launch {
+            delay(800)
+            checkForUpdates()
+        }
+    }
+
+    /** 检查 GitHub 最新 Release；失败静默，不影响界面。 */
+    internal suspend fun checkForUpdates() {
+        val repository = updates ?: return
+        val update = runCatching { repository.latestUpdate() }.getOrNull() ?: return
+        if (compareVersions(update.version, APP_VERSION) <= 0) return
+        _state.update { it.copy(latestUpdate = update) }
+    }
+
+    /** 忽略某个版本：Badge 立即消失，版本行的更新提示仍保留。 */
+    fun onIgnoreUpdate(version: String) {
+        _state.update { it.copy(ignoredUpdateVersion = version) }
+        scope.launch { settings?.setIgnoredUpdateVersion(version) }
+    }
+
+    /** 记录已经自动滚动提示过的版本。 */
+    fun onUpdateScrollShown(version: String) {
+        _state.update { it.copy(updateScrollVersion = version) }
+        scope.launch { settings?.setUpdateScrollVersion(version) }
+    }
+
     private val startupLeftPathJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.startupPath(PaneId.Left.name)

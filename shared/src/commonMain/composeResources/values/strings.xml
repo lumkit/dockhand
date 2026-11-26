@@ -290,4 +290,10 @@
     <string name="action_cancel">取消</string>
     <string name="action_close">关闭</string>
     <string name="action_retry">重试</string>
+    <string name="update_available">有新版本</string>
+    <string name="update_dialog_title">有更新啦</string>
+    <string name="update_download">前往下载</string>
+    <string name="update_ignore">忽略此版本</string>
+    <string name="update_latest">已是最新版</string>
+    <string name="update_notes_empty">暂无更新说明</string>
 </resources>

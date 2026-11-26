@@ -13,6 +13,7 @@ import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.archive.ArchiveFormat
 import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.core.cache.CacheBreakdown
+import io.github.lumkit.dockhand.core.update.AppUpdate
 import io.github.lumkit.dockhand.domain.model.FileLayoutMode
 import io.github.lumkit.dockhand.domain.model.TaskPreferences
 import io.github.lumkit.dockhand.domain.model.FilePlace
@@ -215,6 +216,12 @@ data class HomeUiState(
     /** 系统通知不可用时的兜底提示。 */
     val snackbarMessage: String? = null,
     val snackbarCanRetry: Boolean = false,
+    /** 检测到的新版本；null 表示没有更新或检查失败。 */
+    val latestUpdate: AppUpdate? = null,
+    /** 用户已忽略的版本；只影响 Badge，不隐藏版本行的提示。 */
+    val ignoredUpdateVersion: String? = null,
+    /** 已经自动滚动提示过的版本；一个版本只滚动一次。 */
+    val updateScrollVersion: String? = null,
     val copyRequest: CopyRequestState? = null,
     val moveRequest: MoveRequestState? = null,
     val deleteRequest: DeleteRequestState? = null,
@@ -228,6 +235,12 @@ data class HomeUiState(
     val rightPane: FilePaneState = FilePaneState(PaneId.Right),
     val focusedPane: PaneId = PaneId.Left,
 ) {
+    val hasUpdate: Boolean get() = latestUpdate != null
+
+    /** 设置按钮 Badge：有新版本且未被忽略。 */
+    val hasUpdateBadge: Boolean
+        get() = latestUpdate != null && latestUpdate.version != ignoredUpdateVersion
+
     fun pane(id: PaneId): FilePaneState = when (id) {
         PaneId.Left -> leftPane
         PaneId.Right -> rightPane

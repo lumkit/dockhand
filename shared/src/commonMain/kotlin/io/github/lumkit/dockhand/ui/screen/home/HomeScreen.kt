@@ -179,6 +179,7 @@ fun HomeScreen() {
             cacheManager = container.cacheManager,
             archiveService = container.archiveService,
             fileOpener = container.fileOpener,
+            updates = container.updates,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -245,6 +246,8 @@ fun HomeScreen() {
         onSelectionClear = homeViewModel::onSelectionClear,
         onEntryContextAction = homeViewModel::onEntryContextAction,
         onDragMoveOut = homeViewModel::onEntriesMovedOut,
+        onIgnoreUpdate = homeViewModel::onIgnoreUpdate,
+        onUpdateScrollShown = homeViewModel::onUpdateScrollShown,
         onInlineRename = { _, entry, name -> homeViewModel.onInlineRename(entry, name) },
         onDismissFileInfo = homeViewModel::onDismissFileInfo,
         onCopyRequestBackgroundChange = homeViewModel::onCopyRequestBackgroundChange,
@@ -364,6 +367,8 @@ private fun HomeScreenContent(
     onEntryContextAction: (PaneId, FileEntry, FileContextAction) -> Unit,
     onInlineRename: (PaneId, FileEntry, String) -> Unit,
     onDragMoveOut: (List<FileEntry>) -> Unit,
+    onIgnoreUpdate: (String) -> Unit,
+    onUpdateScrollShown: (String) -> Unit,
     onDismissFileInfo: (Long) -> Unit,
     onCopyRequestBackgroundChange: (Boolean) -> Unit,
     onCopyRequestDismiss: () -> Unit,
@@ -618,6 +623,11 @@ private fun HomeScreenContent(
                         cacheBreakdown = uiState.cacheBreakdown,
                         onClearCache = onClearCache,
                         onRefreshCacheSize = onRefreshCacheSize,
+                        latestUpdate = uiState.latestUpdate,
+                        ignoredUpdateVersion = uiState.ignoredUpdateVersion,
+                        updateScrollVersion = uiState.updateScrollVersion,
+                        onIgnoreUpdate = onIgnoreUpdate,
+                        onUpdateScrollShown = onUpdateScrollShown,
                         onPlaceMove = onPlaceMove,
                         onMtpStorageClick = onMtpStorageClick,
                         onMtpShortcutMove = onMtpShortcutMove,

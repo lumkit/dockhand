@@ -49,6 +49,8 @@ internal object SettingsKeys {
     val CompressToOtherPane = booleanPreferencesKey("compress_to_other_pane")
     val FileLayoutMode = stringPreferencesKey("file_layout_mode")
     val FileSortMode = stringPreferencesKey("file_sort_mode")
+    val IgnoredUpdateVersion = stringPreferencesKey("ignored_update_version")
+    val UpdateScrollVersion = stringPreferencesKey("update_scroll_version")
 
     fun startupPath(pane: String): Preferences.Key<String> =
         stringPreferencesKey("startup_path_${pane.lowercase()}")
@@ -218,6 +220,24 @@ class SettingsRepository(
 
     suspend fun setFileSortMode(mode: FileSortMode) {
         dataStore.edit { prefs -> prefs[SettingsKeys.FileSortMode] = mode.name }
+    }
+
+    /** 用户忽略的版本；新版本仍然会重新提示。 */
+    val ignoredUpdateVersion: Flow<String?> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.IgnoredUpdateVersion]?.takeIf { it.isNotBlank() } }
+
+    suspend fun setIgnoredUpdateVersion(version: String) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.IgnoredUpdateVersion] = version }
+    }
+
+    /** 已经自动滚动提示过的更新版本，保证一个版本只滚动一次。 */
+    val updateScrollVersion: Flow<String?> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs -> prefs[SettingsKeys.UpdateScrollVersion]?.takeIf { it.isNotBlank() } }
+
+    suspend fun setUpdateScrollVersion(version: String) {
+        dataStore.edit { prefs -> prefs[SettingsKeys.UpdateScrollVersion] = version }
     }
 
     val shortcuts: Flow<Map<ShortcutAction, List<ShortcutKey>>> = dataStore.data
