@@ -684,36 +684,6 @@ private fun FileEntryRow(
         DragPreviewCache.putIcon(row.icon, iconPainter, previewSizePx)
     }
     val focusManager = LocalFocusManager.current
-    val infoLabel = stringResource(Res.string.action_view_info)
-    val openLabel = stringResource(Res.string.action_open)
-    val openWithLabel = stringResource(Res.string.action_open_with)
-    val openWithState = LocalOpenWithState.current
-    val openWithSelect = LocalOpenWithSelect.current
-    val copyLabel = stringResource(
-        if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
-    )
-    val moveLabel = stringResource(
-        if (paneId == PaneId.Left) Res.string.action_move_to_right else Res.string.action_move_to_left
-    )
-    val trashLabel = stringResource(Res.string.action_move_to_trash)
-    val deleteLabel = stringResource(Res.string.action_delete)
-    val renameLabel = stringResource(Res.string.action_rename)
-    val compressLabel = stringResource(Res.string.action_compress)
-    val extractLabel = stringResource(Res.string.action_extract)
-    val isArchive = archiveFormatForName(row.name) != null
-    val servicesLabel = stringResource(Res.string.action_services)
-    val terminalTabLabel = stringResource(
-        if (row.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
-    )
-    val terminalWindowLabel = stringResource(
-        if (row.isDirectory) Res.string.action_terminal_window_folder else Res.string.action_terminal_window_file
-    )
-
-    fun dispatch(action: FileContextAction) {
-        onContextAction(action)
-        onDismissContextMenu()
-    }
-
     var editing by remember(row.id) { mutableStateOf(false) }
     var suppressClickAfterDrag by remember(row.id) { mutableStateOf(false) }
     var editFieldWasFocused by remember(row.id) { mutableStateOf(false) }
@@ -757,128 +727,6 @@ private fun FileEntryRow(
             selection = TextRange(0, selectionEnd)
         }
         focusRequester.requestFocus()
-    }
-
-    val entries = buildList {
-        add(
-            DropdownEntry(
-                items = listOf(
-                    DropdownItem(
-                        text = infoLabel,
-                        onClick = { dispatch(FileContextAction.ViewInfo) },
-                    )
-                )
-            )
-        )
-
-        if (isLocal) {
-            val fileActions = buildList {
-                add(DropdownItem(text = openLabel, onClick = { dispatch(FileContextAction.Open) }))
-                if (!row.isDirectory) {
-                    val current = openWithState?.takeIf { it.entry.id == row.entry.id }
-                    val children = when {
-                        current == null || current.loading ->
-                            listOf(DropdownItem(text = stringResource(Res.string.open_with_loading), enabled = false))
-                        current.applications.isEmpty() ->
-                            listOf(DropdownItem(text = stringResource(Res.string.open_with_empty), enabled = false))
-                        else -> current.applications.map { app ->
-                            DropdownItem(
-                                text = app.name,
-                                icon = app.iconPath?.let { iconPath ->
-                                    { modifier ->
-                                        AsyncImage(
-                                            model = iconPath,
-                                            contentDescription = null,
-                                            modifier = modifier.size(24.dp),
-                                        )
-                                    }
-                                },
-                                onClick = { openWithSelect(row.entry, app) },
-                            )
-                        }
-                    }
-                    add(DropdownItem(text = openWithLabel, children = children))
-                }
-                if (canTransferToOtherPane) {
-                    add(
-                        DropdownItem(
-                            text = copyLabel,
-                            onClick = { dispatch(FileContextAction.Copy) },
-                        )
-                    )
-                    if (canMoveToOtherPane) {
-                        add(
-                            DropdownItem(
-                                text = moveLabel,
-                                onClick = { dispatch(FileContextAction.Move) },
-                            )
-                        )
-                    }
-                }
-                if (canTrash) {
-                    add(DropdownItem(text = trashLabel, onClick = { dispatch(FileContextAction.Trash) }))
-                }
-                add(DropdownItem(text = deleteLabel, onClick = { dispatch(FileContextAction.Delete) }))
-                add(DropdownItem(text = renameLabel, onClick = { dispatch(FileContextAction.Rename) }))
-                if (isArchive) {
-                    add(DropdownItem(text = extractLabel, onClick = { dispatch(FileContextAction.Extract) }))
-                }
-                add(DropdownItem(text = compressLabel, onClick = { dispatch(FileContextAction.Compress) }))
-            }
-            add(DropdownEntry(items = fileActions))
-            add(
-                DropdownEntry(
-                    items = listOf(
-                        DropdownItem(
-                            text = servicesLabel,
-                            children = listOf(
-                                DropdownItem(
-                                    text = terminalTabLabel,
-                                    onClick = { dispatch(FileContextAction.TerminalTab) },
-                                ),
-                                DropdownItem(
-                                    text = terminalWindowLabel,
-                                    onClick = { dispatch(FileContextAction.TerminalWindow) },
-                                ),
-                            ),
-                        )
-                    )
-                )
-            )
-        } else if (canTransferToOtherPane) {
-            add(
-                DropdownEntry(
-                    items = buildList {
-                        add(
-                            DropdownItem(
-                                text = copyLabel,
-                                onClick = { dispatch(FileContextAction.Copy) },
-                            )
-                        )
-                        if (canMoveToOtherPane) {
-                            add(
-                                DropdownItem(
-                                    text = moveLabel,
-                                    onClick = { dispatch(FileContextAction.Move) },
-                                )
-                            )
-                        }
-                        add(
-                            DropdownItem(
-                                text = deleteLabel,
-                                onClick = { dispatch(FileContextAction.Delete) },
-                            )
-                        )
-                        add(
-                            DropdownItem(
-                                text = renameLabel,
-                                onClick = { dispatch(FileContextAction.Rename) },
-                            )
-                        )
-                    }
-                )
-            )
-        }
     }
 
     val dragSource = Modifier.longPressDragSource(
@@ -1045,13 +893,17 @@ private fun FileEntryRow(
             )
         }
 
-        OverlayCascadingListPopup(
+        FileEntryContextMenu(
             show = showContextMenu,
-            entries = entries,
-            onDismissRequest = onDismissContextMenu,
-            alignment = when (paneId) {
-                PaneId.Left -> PopupPositionProvider.Align.End
-                PaneId.Right -> PopupPositionProvider.Align.Start
+            paneId = paneId,
+            row = row,
+            canTransferToOtherPane = canTransferToOtherPane,
+            canMoveToOtherPane = canMoveToOtherPane,
+            canTrash = canTrash,
+            onDismiss = onDismissContextMenu,
+            onAction = { action ->
+                onContextAction(action)
+                onDismissContextMenu()
             },
         )
     }
@@ -1673,34 +1525,39 @@ private fun FileGridItem(
             }
         }
 
-        if (showContextMenu) {
-            FileGridContextMenu(
-                paneId = paneId,
-                entry = row,
-                canTransferToOtherPane = canTransferToOtherPane,
-                canMoveToOtherPane = canMoveToOtherPane,
-                canTrash = canTrash,
-                onDismiss = onDismissContextMenu,
-                onAction = { action ->
-                    onContextAction(action)
-                    onDismissContextMenu()
-                },
-            )
-        }
+        FileEntryContextMenu(
+            show = showContextMenu,
+            paneId = paneId,
+            row = row,
+            canTransferToOtherPane = canTransferToOtherPane,
+            canMoveToOtherPane = canMoveToOtherPane,
+            canTrash = canTrash,
+            onDismiss = onDismissContextMenu,
+            onAction = { action ->
+                onContextAction(action)
+                onDismissContextMenu()
+            },
+        )
     }
 }
 
 @Composable
-private fun FileGridContextMenu(
+private fun FileEntryContextMenu(
+    show: Boolean,
     paneId: PaneId,
-    entry: FileRowUi,
+    row: FileRowUi,
     canTransferToOtherPane: Boolean,
     canMoveToOtherPane: Boolean,
     canTrash: Boolean,
     onDismiss: () -> Unit,
     onAction: (FileContextAction) -> Unit,
 ) {
-    val isLocal = entry.entry.location.source.kind == FileSourceKind.Local
+    val isLocal = row.entry.location.source.kind == FileSourceKind.Local
+    val infoLabel = stringResource(Res.string.action_view_info)
+    val openLabel = stringResource(Res.string.action_open)
+    val openWithLabel = stringResource(Res.string.action_open_with)
+    val openWithState = LocalOpenWithState.current
+    val openWithSelect = LocalOpenWithSelect.current
     val copyLabel = stringResource(
         if (paneId == PaneId.Left) Res.string.action_copy_to_right else Res.string.action_copy_to_left
     )
@@ -1712,33 +1569,32 @@ private fun FileGridContextMenu(
     val renameLabel = stringResource(Res.string.action_rename)
     val compressLabel = stringResource(Res.string.action_compress)
     val extractLabel = stringResource(Res.string.action_extract)
-    val isArchive = archiveFormatForName(entry.name) != null
+    val isArchive = archiveFormatForName(row.name) != null
     val servicesLabel = stringResource(Res.string.action_services)
-    val infoLabel = stringResource(Res.string.action_view_info)
-    val openLabel = stringResource(Res.string.action_open)
-    val openWithLabel = stringResource(Res.string.action_open_with)
-    val openWithState = LocalOpenWithState.current
-    val openWithSelect = LocalOpenWithSelect.current
     val terminalTabLabel = stringResource(
-        if (entry.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
+        if (row.isDirectory) Res.string.action_terminal_tab_folder else Res.string.action_terminal_tab_file
     )
     val terminalWindowLabel = stringResource(
-        if (entry.isDirectory) Res.string.action_terminal_window_folder else Res.string.action_terminal_window_file
+        if (row.isDirectory) Res.string.action_terminal_window_folder else Res.string.action_terminal_window_file
     )
 
     val entries = buildList {
         add(
             DropdownEntry(
                 items = listOf(
-                    DropdownItem(text = infoLabel, onClick = { onAction(FileContextAction.ViewInfo) })
+                    DropdownItem(
+                        text = infoLabel,
+                        onClick = { onAction(FileContextAction.ViewInfo) },
+                    )
                 )
             )
         )
+
         if (isLocal) {
-            add(DropdownEntry(items = buildList {
+            val fileActions = buildList {
                 add(DropdownItem(text = openLabel, onClick = { onAction(FileContextAction.Open) }))
-                if (!entry.isDirectory) {
-                    val current = openWithState?.takeIf { it.entry.id == entry.entry.id }
+                if (!row.isDirectory) {
+                    val current = openWithState?.takeIf { it.entry.id == row.entry.id }
                     val children = when {
                         current == null || current.loading ->
                             listOf(DropdownItem(text = stringResource(Res.string.open_with_loading), enabled = false))
@@ -1756,16 +1612,26 @@ private fun FileGridContextMenu(
                                         )
                                     }
                                 },
-                                onClick = { openWithSelect(entry.entry, app) },
+                                onClick = { openWithSelect(row.entry, app) },
                             )
                         }
                     }
                     add(DropdownItem(text = openWithLabel, children = children))
                 }
                 if (canTransferToOtherPane) {
-                    add(DropdownItem(text = copyLabel, onClick = { onAction(FileContextAction.Copy) }))
+                    add(
+                        DropdownItem(
+                            text = copyLabel,
+                            onClick = { onAction(FileContextAction.Copy) },
+                        )
+                    )
                     if (canMoveToOtherPane) {
-                        add(DropdownItem(text = moveLabel, onClick = { onAction(FileContextAction.Move) }))
+                        add(
+                            DropdownItem(
+                                text = moveLabel,
+                                onClick = { onAction(FileContextAction.Move) },
+                            )
+                        )
                     }
                 }
                 if (canTrash) {
@@ -1777,7 +1643,8 @@ private fun FileGridContextMenu(
                     add(DropdownItem(text = extractLabel, onClick = { onAction(FileContextAction.Extract) }))
                 }
                 add(DropdownItem(text = compressLabel, onClick = { onAction(FileContextAction.Compress) }))
-            }))
+            }
+            add(DropdownEntry(items = fileActions))
             add(
                 DropdownEntry(
                     items = listOf(
@@ -1797,17 +1664,53 @@ private fun FileGridContextMenu(
                     )
                 )
             )
+        } else {
+            // MTP 等非本地条目没有打开/终端等动作；复制和移动依赖另一侧面板，
+            // 删除和重命名始终可用。
+            add(
+                DropdownEntry(
+                    items = buildList {
+                        if (canTransferToOtherPane) {
+                            add(
+                                DropdownItem(
+                                    text = copyLabel,
+                                    onClick = { onAction(FileContextAction.Copy) },
+                                )
+                            )
+                            if (canMoveToOtherPane) {
+                                add(
+                                    DropdownItem(
+                                        text = moveLabel,
+                                        onClick = { onAction(FileContextAction.Move) },
+                                    )
+                                )
+                            }
+                        }
+                        add(
+                            DropdownItem(
+                                text = deleteLabel,
+                                onClick = { onAction(FileContextAction.Delete) },
+                            )
+                        )
+                        add(
+                            DropdownItem(
+                                text = renameLabel,
+                                onClick = { onAction(FileContextAction.Rename) },
+                            )
+                        )
+                    }
+                )
+            )
         }
     }
 
     OverlayCascadingListPopup(
-        show = true,
+        show = show,
         entries = entries,
         onDismissRequest = onDismiss,
-        alignment = if (paneId == PaneId.Left) {
-            PopupPositionProvider.Align.End
-        } else {
-            PopupPositionProvider.Align.Start
+        alignment = when (paneId) {
+            PaneId.Left -> PopupPositionProvider.Align.End
+            PaneId.Right -> PopupPositionProvider.Align.Start
         },
     )
 }
