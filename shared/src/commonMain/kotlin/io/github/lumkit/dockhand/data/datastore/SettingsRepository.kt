@@ -27,6 +27,8 @@ import io.github.lumkit.dockhand.shortcut.encodeShortcuts
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.io.IOException
 
+private const val DIRECTORY_SORT_PREFIX = "file_sort_dir:"
+
 /** DataStore 的 key 集中在这里，避免散落在各处。 */
 internal object SettingsKeys {
     val ColorSchemeMode = stringPreferencesKey("color_scheme_mode")
@@ -49,6 +51,7 @@ internal object SettingsKeys {
     val CompressToOtherPane = booleanPreferencesKey("compress_to_other_pane")
     val FileLayoutMode = stringPreferencesKey("file_layout_mode")
     val FileSortMode = stringPreferencesKey("file_sort_mode")
+    val FileSortDefaultMode = stringPreferencesKey("file_sort_default_mode")
     val IgnoredUpdateVersion = stringPreferencesKey("ignored_update_version")
     val UpdateScrollVersion = stringPreferencesKey("update_scroll_version")
 
@@ -218,8 +221,49 @@ class SettingsRepository(
                 ?: FileSortMode.NameAsc
         }
 
+    /** 新目录默认排序；兼容旧版单一 file_sort_mode。 */
+    val defaultFileSortMode: Flow<FileSortMode> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            FileSortMode.entries.firstOrNull { it.name == prefs[SettingsKeys.FileSortDefaultMode] }
+                ?: FileSortMode.entries.firstOrNull { it.name == prefs[SettingsKeys.FileSortMode] }
+                ?: FileSortMode.NameAsc
+        }
+
+    /** 已单独设置排序的目录。key 由 FileLocation.sortStorageKey() 生成。 */
+    val directorySortModes: Flow<Map<String, FileSortMode>> = dataStore.data
+        .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
+        .map { prefs ->
+            prefs.asMap().entries.mapNotNull { (key, value) ->
+                if (!key.name.startsWith(DIRECTORY_SORT_PREFIX)) return@mapNotNull null
+                val modeName = value as? String ?: return@mapNotNull null
+                val mode = FileSortMode.entries.firstOrNull { it.name == modeName }
+                    ?: return@mapNotNull null
+                key.name.removePrefix(DIRECTORY_SORT_PREFIX) to mode
+            }.toMap()
+        }
+
     suspend fun setFileSortMode(mode: FileSortMode) {
         dataStore.edit { prefs -> prefs[SettingsKeys.FileSortMode] = mode.name }
+    }
+
+    suspend fun setDirectorySortMode(locationKey: String, mode: FileSortMode) {
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey(DIRECTORY_SORT_PREFIX + locationKey)] = mode.name
+        }
+    }
+
+    /**
+     * 把当前排序设为默认排序，并把所有已单独设置的目录改成同一排序。
+     */
+    suspend fun applyFileSortModeToAllDirectories(mode: FileSortMode) {
+        dataStore.edit { prefs ->
+            prefs[SettingsKeys.FileSortDefaultMode] = mode.name
+            prefs.asMap().keys
+                .map { it.name }
+                .filter { it.startsWith(DIRECTORY_SORT_PREFIX) }
+                .forEach { name -> prefs[stringPreferencesKey(name)] = mode.name }
+        }
     }
 
     /** 用户忽略的版本；新版本仍然会重新提示。 */

@@ -107,6 +107,7 @@ import dockhand.shared.generated.resources.menu_sort_size_asc
 import dockhand.shared.generated.resources.menu_sort_size_desc
 import dockhand.shared.generated.resources.menu_sort_type_asc
 import dockhand.shared.generated.resources.menu_sort_type_desc
+import dockhand.shared.generated.resources.menu_sort_apply_to_all
 import dockhand.shared.generated.resources.menu_view
 import dockhand.shared.generated.resources.task_cancel_message
 import dockhand.shared.generated.resources.task_cancel_title
@@ -308,6 +309,7 @@ fun HomeScreen() {
         onRefreshCacheSize = homeViewModel::refreshCacheSize,
         onFileLayoutModeChange = homeViewModel::onFileLayoutModeChange,
         onFileSortModeChange = homeViewModel::onFileSortModeChange,
+        onFileSortModeApplyToAll = homeViewModel::onFileSortModeApplyToAll,
         onBreadcrumbClick = homeViewModel::onBreadcrumbClick,
         onBreadcrumbTerminal = homeViewModel::onBreadcrumbTerminal,
         onRetry = homeViewModel::onRefresh,
@@ -431,6 +433,7 @@ private fun HomeScreenContent(
     onRefreshCacheSize: () -> Unit,
     onFileLayoutModeChange: (FileLayoutMode) -> Unit,
     onFileSortModeChange: (FileSortMode) -> Unit,
+    onFileSortModeApplyToAll: () -> Unit,
     onBreadcrumbClick: (FileBreadcrumb) -> Unit,
     onBreadcrumbTerminal: (FileBreadcrumb, Boolean) -> Unit,
     onBreadcrumbSecondaryClick: (FileBreadcrumb) -> Unit = {},
@@ -575,10 +578,11 @@ private fun HomeScreenContent(
                                 onDismissTask = onDismissTask,
                                 onTaskProgressOpen = onTaskProgressOpen,
                                 layoutMode = uiState.fileLayoutMode,
-                                sortMode = uiState.fileSortMode,
+                                sortMode = uiState.focusedSortMode,
                                 showHiddenItems = uiState.showHiddenItems,
                                 onLayoutModeChange = onFileLayoutModeChange,
                                 onSortModeChange = onFileSortModeChange,
+                                onSortModeApplyToAll = onFileSortModeApplyToAll,
                                 onShowHiddenItemsChange = onShowHiddenItemsChange,
                             )
                         }
@@ -667,10 +671,11 @@ private fun HomeScreenContent(
                                     onDismissTask = onDismissTask,
                                     onTaskProgressOpen = onTaskProgressOpen,
                                     layoutMode = uiState.fileLayoutMode,
-                                    sortMode = uiState.fileSortMode,
+                                    sortMode = uiState.focusedSortMode,
                                     showHiddenItems = uiState.showHiddenItems,
                                     onLayoutModeChange = onFileLayoutModeChange,
                                     onSortModeChange = onFileSortModeChange,
+                                    onSortModeApplyToAll = onFileSortModeApplyToAll,
                                     onShowHiddenItemsChange = onShowHiddenItemsChange,
                                 )
                             }
@@ -883,20 +888,31 @@ private fun HomeScreenContent(
 private fun sortMenuItems(
     selected: FileSortMode,
     onSelected: (FileSortMode) -> Unit,
-): List<DropdownItem> = listOf(
-    FileSortMode.NameAsc to Res.string.menu_sort_name_asc,
-    FileSortMode.NameDesc to Res.string.menu_sort_name_desc,
-    FileSortMode.ModifiedDesc to Res.string.menu_sort_modified_desc,
-    FileSortMode.ModifiedAsc to Res.string.menu_sort_modified_asc,
-    FileSortMode.SizeDesc to Res.string.menu_sort_size_desc,
-    FileSortMode.SizeAsc to Res.string.menu_sort_size_asc,
-    FileSortMode.TypeAsc to Res.string.menu_sort_type_asc,
-    FileSortMode.TypeDesc to Res.string.menu_sort_type_desc,
-).map { (mode, label) ->
-    DropdownItem(
-        text = stringResource(label),
-        selected = selected == mode,
-        onClick = { onSelected(mode) },
+    onApplyToAll: () -> Unit,
+): List<DropdownItem> = buildList {
+    addAll(
+        listOf(
+            FileSortMode.NameAsc to Res.string.menu_sort_name_asc,
+            FileSortMode.NameDesc to Res.string.menu_sort_name_desc,
+            FileSortMode.ModifiedDesc to Res.string.menu_sort_modified_desc,
+            FileSortMode.ModifiedAsc to Res.string.menu_sort_modified_asc,
+            FileSortMode.SizeDesc to Res.string.menu_sort_size_desc,
+            FileSortMode.SizeAsc to Res.string.menu_sort_size_asc,
+            FileSortMode.TypeAsc to Res.string.menu_sort_type_asc,
+            FileSortMode.TypeDesc to Res.string.menu_sort_type_desc,
+        ).map { (mode, label) ->
+            DropdownItem(
+                text = stringResource(label),
+                selected = selected == mode,
+                onClick = { onSelected(mode) },
+            )
+        },
+    )
+    add(
+        DropdownItem(
+            text = stringResource(Res.string.menu_sort_apply_to_all),
+            onClick = onApplyToAll,
+        ),
     )
 }
 
@@ -912,6 +928,7 @@ private fun TopBarActions(
     showHiddenItems: Boolean,
     onLayoutModeChange: (FileLayoutMode) -> Unit,
     onSortModeChange: (FileSortMode) -> Unit,
+    onSortModeApplyToAll: () -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
 ) {
     var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
@@ -1053,6 +1070,10 @@ private fun TopBarActions(
                                 selected = sortMode,
                                 onSelected = {
                                     onSortModeChange(it)
+                                    moreMenuShow = false
+                                },
+                                onApplyToAll = {
+                                    onSortModeApplyToAll()
                                     moreMenuShow = false
                                 },
                             ),

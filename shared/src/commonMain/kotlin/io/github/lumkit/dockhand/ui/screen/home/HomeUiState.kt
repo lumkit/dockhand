@@ -19,6 +19,7 @@ import io.github.lumkit.dockhand.domain.model.TaskPreferences
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FileSortMode
+import io.github.lumkit.dockhand.domain.model.sortStorageKey
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
@@ -194,7 +195,10 @@ data class HomeUiState(
     val keyColor: Color = DEFAULT_KEY_COLOR,
     val showHiddenItems: Boolean = false,
     val fileLayoutMode: FileLayoutMode = FileLayoutMode.List,
-    val fileSortMode: FileSortMode = FileSortMode.NameAsc,
+    /** 新目录默认排序；单个目录未自定义时使用它。 */
+    val defaultFileSortMode: FileSortMode = FileSortMode.NameAsc,
+    /** 目录级别的排序覆盖；key 由 FileLocation.sortStorageKey() 生成。 */
+    val directorySortModes: Map<String, FileSortMode> = emptyMap(),
     val cacheBreakdown: CacheBreakdown = CacheBreakdown(),
     val taskPreferences: TaskPreferences = TaskPreferences(),
     val language: AppLanguage = AppLanguage.System,
@@ -253,6 +257,13 @@ data class HomeUiState(
 
     val focusedLocation: FileLocation?
         get() = focusedPaneState.location
+
+    fun sortModeFor(location: FileLocation?): FileSortMode =
+        location?.let { directorySortModes[it.sortStorageKey()] } ?: defaultFileSortMode
+
+    /** 焦点列表当前生效的排序方式。 */
+    val focusedSortMode: FileSortMode
+        get() = sortModeFor(focusedLocation)
 
     /** 两个面板都还没有首屏路径。 */
     val isBootstrapping: Boolean

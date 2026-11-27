@@ -35,6 +35,8 @@ import io.github.lumkit.dockhand.domain.model.FileLocation
 import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
 import io.github.lumkit.dockhand.domain.model.FileSortMode
+import io.github.lumkit.dockhand.domain.model.fileEntryComparator
+import io.github.lumkit.dockhand.domain.model.sortStorageKey
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.displayPath
 import io.github.lumkit.dockhand.domain.model.isTrashLocation
@@ -455,17 +457,25 @@ class HomeViewModel(
                 }
         }
     }
-    private val fileSortModeJob: Job? = settings?.let { repository ->
+    private val defaultFileSortModeJob: Job? = settings?.let { repository ->
         scope.launch {
-            repository.fileSortMode
+            repository.defaultFileSortMode
                 .catch { }
                 .collect { mode ->
-                    val changed = _state.value.fileSortMode != mode
-                    _state.update { it.copy(fileSortMode = mode) }
-                    if (changed && (_state.value.leftPane.location != null ||
-                            _state.value.rightPane.location != null)) {
-                        refreshAllPanes()
-                    }
+                    val changed = _state.value.defaultFileSortMode != mode
+                    _state.update { it.copy(defaultFileSortMode = mode) }
+                    if (changed) resortAllPanes()
+                }
+        }
+    }
+    private val directorySortModesJob: Job? = settings?.let { repository ->
+        scope.launch {
+            repository.directorySortModes
+                .catch { }
+                .collect { modes ->
+                    val changed = _state.value.directorySortModes != modes
+                    _state.update { it.copy(directorySortModes = modes) }
+                    if (changed) resortAllPanes()
                 }
         }
     }
@@ -741,12 +751,68 @@ class HomeViewModel(
     }
 
     fun onFileSortModeChange(mode: FileSortMode) {
-        if (_state.value.fileSortMode == mode) return
-        _state.update { it.copy(fileSortMode = mode) }
-        settings?.let { repository ->
-            scope.launch { repository.setFileSortMode(mode) }
+        val location = _state.value.focusedPaneState.location ?: return
+        if (_state.value.sortModeFor(location) == mode) return
+        val locationKey = location.sortStorageKey()
+        _state.update {
+            it.copy(directorySortModes = it.directorySortModes + (locationKey to mode))
         }
-        refreshAllPanes()
+        resortPanesAt(location, mode)
+        settings?.let { repository ->
+            scope.launch { repository.setDirectorySortMode(locationKey, mode) }
+        }
+    }
+
+    /**
+     * 将焦点目录的排序设为默认排序，并把所有已自定义排序的目录也改成该排序。
+     */
+    fun onFileSortModeApplyToAll() {
+        val location = _state.value.focusedPaneState.location ?: return
+        val mode = _state.value.sortModeFor(location)
+        _state.update { state ->
+            state.copy(
+                defaultFileSortMode = mode,
+                directorySortModes = state.directorySortModes.mapValues { mode },
+            )
+        }
+        resortAllPanes()
+        settings?.let { repository ->
+            scope.launch { repository.applyFileSortModeToAllDirectories(mode) }
+        }
+    }
+
+    private fun resortPanesAt(location: FileLocation, mode: FileSortMode) {
+        val comparator = fileEntryComparator(mode)
+        _state.update { state ->
+            PaneId.entries.fold(state) { acc, paneId ->
+                val pane = acc.pane(paneId)
+                if (pane.location != location) return@fold acc
+                acc.updatePane(paneId) {
+                    it.copy(
+                        entries = it.entries.sortedWith { a, b ->
+                            comparator.compare(a.entry, b.entry)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun resortAllPanes() {
+        _state.update { state ->
+            PaneId.entries.fold(state) { acc, paneId ->
+                val pane = acc.pane(paneId)
+                val location = pane.location ?: return@fold acc
+                val comparator = fileEntryComparator(acc.sortModeFor(location))
+                acc.updatePane(paneId) {
+                    it.copy(
+                        entries = it.entries.sortedWith { a, b ->
+                            comparator.compare(a.entry, b.entry)
+                        },
+                    )
+                }
+            }
+        }
     }
 
     /** 语言切换后重新生成文件行 summary 等本地化文本。 */
@@ -2419,7 +2485,7 @@ class HomeViewModel(
         moreJobs[paneId] = scope.launch {
             try {
                 val page = files.listPage(location, offset, PAGE_SIZE)
-                val sorted = page.entries.sortedFor(_state.value.fileSortMode)
+                val sorted = page.entries.sortedFor(_state.value.sortModeFor(location))
                 val itemCountTexts = sorted
                     .mapNotNull { it.childCount }
                     .distinct()
@@ -2435,8 +2501,8 @@ class HomeViewModel(
                     val current = state.pane(paneId)
                     if (current.location != location || current.entries.size != offset) state
                     else state.updatePane(paneId) {
-                        val comparator = io.github.lumkit.dockhand.domain.model.fileEntryComparator(
-                            state.fileSortMode
+                        val comparator = fileEntryComparator(
+                            state.sortModeFor(location)
                         )
                         it.copy(
                             entries = (current.entries + rows).sortedWith { a, b ->
@@ -2619,7 +2685,7 @@ class HomeViewModel(
 
                 // 列表加载阶段一次性完成排序 + summary 格式化。
                 // LazyColumn 滚动/重组时只读 FileRowUi.summary，不再做任何时间或大小计算。
-                val sorted = entries.sortedFor(_state.value.fileSortMode)
+                val sorted = entries.sortedFor(_state.value.sortModeFor(location))
                 val itemCountTexts = sorted
                     .mapNotNull { it.childCount }
                     .distinct()

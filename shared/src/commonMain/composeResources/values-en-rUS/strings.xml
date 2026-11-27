@@ -94,6 +94,7 @@ Changes take effect after restart.</string>
     <string name="menu_sort_size_asc">Size, smallest first</string>
     <string name="menu_sort_type_asc">Type A-Z</string>
     <string name="menu_sort_type_desc">Type Z-A</string>
+    <string name="menu_sort_apply_to_all">Apply to other folders</string>
     <string name="menu_view">View</string>
     <string name="menu_hidden_items">Hidden items</string>
 

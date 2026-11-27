@@ -87,6 +87,7 @@
     <string name="menu_sort_size_asc">大小 小到大</string>
     <string name="menu_sort_type_asc">类型 A-Z</string>
     <string name="menu_sort_type_desc">类型 Z-A</string>
+    <string name="menu_sort_apply_to_all">应用到其他目录</string>
     <string name="menu_view">查看</string>
     <string name="menu_hidden_items">隐藏项目</string>
 

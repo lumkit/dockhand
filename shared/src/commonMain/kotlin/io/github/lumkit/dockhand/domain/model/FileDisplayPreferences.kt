@@ -35,3 +35,8 @@ fun fileEntryComparator(mode: FileSortMode): Comparator<FileEntry> {
 
 fun Iterable<FileEntry>.sortedFor(mode: FileSortMode): List<FileEntry> =
     sortedWith(fileEntryComparator(mode))
+
+/**
+ * 目录排序设置的稳定 key。source id 使用长度前缀避免和 path 拼接后产生歧义。
+ */
+fun FileLocation.sortStorageKey(): String = "${source.id.length}:${source.id}${path}"

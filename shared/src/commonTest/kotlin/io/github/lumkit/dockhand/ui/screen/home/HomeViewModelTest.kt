@@ -7,7 +7,9 @@ import io.github.lumkit.dockhand.domain.model.FilePlace
 import io.github.lumkit.dockhand.domain.model.FilePlaceGroup
 import io.github.lumkit.dockhand.domain.model.FilePlaceKind
 import io.github.lumkit.dockhand.domain.model.FileSource
+import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
+import io.github.lumkit.dockhand.domain.model.sortStorageKey
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
 import io.github.lumkit.dockhand.core.update.AppUpdate
 import io.github.lumkit.dockhand.core.update.UpdateRepository
@@ -54,6 +56,35 @@ class HomeViewModelTest {
         assertEquals(fixture.desktop.path, viewModel.state.value.leftPane.location?.path)
         assertEquals(fixture.desktop.path, viewModel.state.value.rightPane.location?.path)
         assertEquals(listOf("Documents", "readme.txt"), viewModel.state.value.leftPane.entries.map { it.name })
+    }
+
+    @Test
+    fun sortModeIsPerDirectoryAndApplyToAllUpdatesEveryDirectory() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        viewModel.onFileSortModeChange(FileSortMode.NameDesc)
+        assertEquals(
+            FileSortMode.NameDesc,
+            viewModel.state.value.directorySortModes[fixture.desktop.sortStorageKey()],
+        )
+
+        val documents = viewModel.state.value.rightPane.entries.first { it.name == "Documents" }
+        viewModel.onEntryDoubleClick(PaneId.Right, documents.entry)
+        assertEquals(FileSortMode.NameAsc, viewModel.state.value.focusedSortMode)
+
+        viewModel.onFileSortModeChange(FileSortMode.SizeAsc)
+        assertEquals(FileSortMode.SizeAsc, viewModel.state.value.sortModeFor(fixture.documents))
+        assertEquals(FileSortMode.NameDesc, viewModel.state.value.sortModeFor(fixture.desktop))
+
+        viewModel.onFileSortModeApplyToAll()
+        assertEquals(FileSortMode.SizeAsc, viewModel.state.value.defaultFileSortMode)
+        assertEquals(FileSortMode.SizeAsc, viewModel.state.value.sortModeFor(fixture.desktop))
+        assertEquals(FileSortMode.SizeAsc, viewModel.state.value.sortModeFor(fixture.documents))
     }
 
     @Test
