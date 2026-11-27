@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import io.github.lumkit.dockhand.core.app.AppLanguage
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.about_licenses_title
 import io.github.lumkit.dockhand.core.app.OPEN_SOURCE_LIBRARIES
@@ -39,6 +40,8 @@ fun OpenSourceLicensesBottomSheet(
         AppLanguage.System -> systemLocale.language.startsWith("en")
     }
     val scrollState = rememberScrollState()
+
+    DialogModalityEffect(open = show)
 
     val maxSheetHeight = windowSheetMaxHeight()
     OverlayBottomSheet(

@@ -35,6 +35,7 @@ import io.github.lumkit.dockhand.core.app.APP_VERSION
 import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.app.PROJECT_URL
 import io.github.lumkit.dockhand.core.update.AppUpdate
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_cancel
 import dockhand.shared.generated.resources.action_confirm
@@ -189,6 +190,12 @@ fun SettingsBottomSheet(
     val latestVersionMessage = stringResource(Res.string.update_latest)
     val emptyNotesMessage = stringResource(Res.string.update_notes_empty)
     val update = latestUpdate
+
+    DialogModalityEffect(
+        open = show && (
+            showUpdateDialog || showColorDialog || showCacheDialog || showScaleDialog
+        ),
+    )
 
     // 有新版本且未忽略时，打开设置自动滚动到版本选项；一个版本只滚动一次。
     LaunchedEffect(show, update?.version, ignoredUpdateVersion, updateScrollVersion) {

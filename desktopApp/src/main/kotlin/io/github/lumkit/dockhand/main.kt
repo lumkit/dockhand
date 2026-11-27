@@ -8,7 +8,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.focus.FocusRequester
@@ -35,6 +39,9 @@ import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.window.MiuixWindow
 import top.yukonga.miuix.kmp.window.MiuixWindowBackgroundType
 import top.yukonga.miuix.kmp.window.MiuixWindowProperties
+import java.awt.KeyEventDispatcher
+import java.awt.KeyboardFocusManager
+import java.awt.event.KeyEvent as AwtKeyEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 
@@ -90,7 +97,6 @@ fun main() = application {
         title = "Dockhand",
         icon = appLogoPainter(),
         state = windowState,
-        onPreviewKeyEvent = { event -> ShortcutDispatcher.dispatch(event) },
         properties = MiuixWindowProperties.default(
             minSize = DpSize(1000.dp, 600.dp),
             backgroundType = MiuixWindowBackgroundType.Vibrancy,
@@ -108,6 +114,18 @@ fun main() = application {
                 ExternalFileDragHost.uninstall(window)
                 ExternalFileDropHost.uninstall(window, externalDropController)
             }
+        }
+
+        DisposableEffect(window) {
+            val keyEventDispatcher = KeyEventDispatcher { event ->
+                if (event.id != AwtKeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
+                val focusManager = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                if (focusManager.activeWindow !== window) return@KeyEventDispatcher false
+                ShortcutDispatcher.dispatch(event.toComposeKeyEvent())
+            }
+            val focusManager = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+            focusManager.addKeyEventDispatcher(keyEventDispatcher)
+            onDispose { focusManager.removeKeyEventDispatcher(keyEventDispatcher) }
         }
 
         DisposableEffect(window) {
@@ -134,6 +152,13 @@ fun main() = application {
             }
         }
 
+        DisposableEffect(window, focusRequester) {
+            ShortcutDispatcher.setModalClosedCallback {
+                restoreWindowFocus(window, focusRequester)
+            }
+            onDispose { ShortcutDispatcher.setModalClosedCallback(null) }
+        }
+
         CompositionLocalProvider(LocalExternalDropController provides externalDropController) {
             Box(
                 modifier = Modifier
@@ -146,6 +171,18 @@ fun main() = application {
         }
     }
 }
+
+@OptIn(InternalComposeUiApi::class)
+private fun AwtKeyEvent.toComposeKeyEvent(): ComposeKeyEvent = ComposeKeyEvent(
+    key = Key(keyCode.toLong()),
+    type = KeyEventType.KeyDown,
+    codePoint = keyChar.code,
+    isCtrlPressed = isControlDown,
+    isMetaPressed = isMetaDown,
+    isAltPressed = isAltDown,
+    isShiftPressed = isShiftDown,
+    nativeEvent = this,
+)
 
 private fun restoreWindowFocus(window: ComposeWindow, focusRequester: FocusRequester) {
     if (!window.isActive) return

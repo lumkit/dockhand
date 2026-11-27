@@ -16,6 +16,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dockhand.shared.generated.resources.*
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -171,6 +172,8 @@ private fun CreateItemDialog(
 ) {
     val name = itemName.text.toString().trim()
     val canCreate = name.isNotEmpty() && name != "." && name != ".." && '/' !in name
+
+    DialogModalityEffect(open = show)
 
     WindowDialog(
         show = show,

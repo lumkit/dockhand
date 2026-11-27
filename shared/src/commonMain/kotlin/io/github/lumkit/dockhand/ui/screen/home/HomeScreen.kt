@@ -66,6 +66,7 @@ import io.github.lumkit.dockhand.shortcut.DefaultShortcutRegistry
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutBinding
 import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.shortcut.ShortcutRegistry
 import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
@@ -469,7 +470,6 @@ private fun HomeScreenContent(
     DisposableEffect(shortcutHandlerOwner) {
         ShortcutDispatcher.setHandler(shortcutHandlerOwner) { event ->
             val modalOpen = inlineRenameBounds.value != null ||
-                    currentUiState.activeTaskId != null ||
                     currentUiState.copyRequest != null ||
                     currentUiState.moveRequest != null ||
                     currentUiState.deleteRequest != null ||
@@ -477,7 +477,6 @@ private fun HomeScreenContent(
                     currentUiState.compressRequest != null ||
                     currentUiState.extractRequest != null ||
                     currentUiState.extractPasswordRequest != null ||
-                    currentUiState.openWith != null ||
                     currentUiState.trashRequest != null
             if (modalOpen) {
                 false
@@ -808,6 +807,7 @@ private fun HomeScreenContent(
                         showProgressCancelConfirm = false
                     }
                 }
+                DialogModalityEffect(open = showProgressCancelConfirm && activeTask != null)
                 OverlayDialog(
                     show = showProgressCancelConfirm && activeTask != null,
                     title = stringResource(Res.string.task_cancel_title),
@@ -1070,6 +1070,7 @@ private fun TopBarActions(
     }
 
     val taskToCancel = pendingCancel
+    DialogModalityEffect(open = taskToCancel != null)
     OverlayDialog(
         show = taskToCancel != null,
         title = stringResource(Res.string.task_cancel_title),

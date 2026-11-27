@@ -39,9 +39,16 @@ data class ShortcutKey(
     val shift: Boolean = false,
     val alt: Boolean = false,
 ) {
+    fun sameCombination(other: ShortcutKey): Boolean =
+        key.normalizedKeyCode() == other.key.normalizedKeyCode() &&
+            meta == other.meta &&
+            ctrl == other.ctrl &&
+            shift == other.shift &&
+            alt == other.alt
+
     fun matches(event: KeyEvent): Boolean =
         event.type == KeyEventType.KeyDown &&
-            event.key == key &&
+            event.key.normalizedKeyCode() == key.normalizedKeyCode() &&
             event.isMetaPressed == meta &&
             event.isCtrlPressed == ctrl &&
             event.isShiftPressed == shift &&
@@ -116,7 +123,8 @@ fun ShortcutKey.display(): String {
     if (ctrl) parts += "⌃"
     if (alt) parts += "⌥"
     if (shift) parts += "⇧"
-    parts += when (key) {
+    val normalizedKey = Key(key.normalizedKeyCode())
+    parts += when (normalizedKey) {
             Key.A -> "A"
             Key.B -> "B"
             Key.C -> "C"
@@ -153,7 +161,7 @@ fun ShortcutKey.display(): String {
             Key.DirectionDown -> "↓"
             Key.DirectionLeft -> "←"
             Key.DirectionRight -> "→"
-            else -> key.keyCode.toString()
+            else -> normalizedKey.keyCode.toString()
         }
     return parts.joinToString("+")
 }

@@ -65,6 +65,7 @@ import dockhand.shared.generated.resources.shortcut_reset_tooltip
 import dockhand.shared.generated.resources.shortcut_sheet_title
 import io.github.lumkit.dockhand.shortcut.ShortcutAction
 import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
 import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.shortcut.display
 import io.github.lumkit.dockhand.shortcut.isModifierKey
@@ -100,6 +101,8 @@ fun ShortcutSettingsBottomSheet(
     onResetShortcuts: () -> Unit,
 ) {
     var editingAction by remember { mutableStateOf<ShortcutAction?>(null) }
+
+    DialogModalityEffect(open = show)
 
     val maxSheetHeight = windowSheetMaxHeight()
     OverlayBottomSheet(
@@ -205,7 +208,7 @@ private fun ShortcutCaptureDialog(
     var captured by remember(action) { mutableStateOf<ShortcutKey?>(null) }
     val conflictAction = captured?.let { key ->
         ShortcutAction.entries.firstOrNull { other ->
-            bindings[other].orEmpty().contains(key)
+            bindings[other].orEmpty().any { it.sameCombination(key) }
         }
     }
     val scrollState = rememberScrollState()
