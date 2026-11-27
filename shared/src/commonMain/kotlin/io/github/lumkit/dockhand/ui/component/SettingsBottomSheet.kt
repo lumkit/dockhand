@@ -86,6 +86,7 @@ import dockhand.shared.generated.resources.startup_section
 import dockhand.shared.generated.resources.text_desktop
 import dockhand.shared.generated.resources.text_documents
 import dockhand.shared.generated.resources.text_downloads
+import dockhand.shared.generated.resources.text_icloud_drive
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_music
 import dockhand.shared.generated.resources.text_trash
@@ -673,6 +674,7 @@ private fun FilePlace.settingsLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
+    FilePlaceKind.ICloudDrive -> stringResource(Res.string.text_icloud_drive)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,

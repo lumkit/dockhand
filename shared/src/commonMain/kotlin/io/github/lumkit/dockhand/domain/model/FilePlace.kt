@@ -9,6 +9,7 @@ enum class FilePlaceKind {
     Pictures,
     Music,
     Movies,
+    ICloudDrive,
     Volume,
     MtpDevice,
     MtpStorage,

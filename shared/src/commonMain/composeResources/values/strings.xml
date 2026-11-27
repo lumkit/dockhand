@@ -96,6 +96,7 @@
     <string name="text_camera">相片</string>
     <string name="text_music">音乐</string>
     <string name="text_movies">影片</string>
+    <string name="text_icloud_drive">iCloud 云盘</string>
     <string name="text_trash">废纸篓</string>
     <string name="text_no_mtp_devices">未连接 MTP 设备</string>
     <string name="text_mtp_hint">通过 USB 连接 Android 设备后，这里会出现它的存储。</string>

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.ic_camara
+import dockhand.shared.generated.resources.ic_cloud_queue
 import dockhand.shared.generated.resources.ic_mtp
 import dockhand.shared.generated.resources.ic_storage
 import dockhand.shared.generated.resources.ic_user
@@ -47,6 +48,7 @@ import dockhand.shared.generated.resources.text_downloads
 import dockhand.shared.generated.resources.text_local
 import dockhand.shared.generated.resources.text_mounted_disks
 import dockhand.shared.generated.resources.text_no_local_places
+import dockhand.shared.generated.resources.text_icloud_drive
 import dockhand.shared.generated.resources.text_movies
 import dockhand.shared.generated.resources.text_trash
 import dockhand.shared.generated.resources.text_mtp_devices
@@ -82,6 +84,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.CloudFill
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.ExpandLess
@@ -590,6 +593,7 @@ private fun FilePlace.displayLabel(): String = when (kind) {
     FilePlaceKind.Pictures -> stringResource(Res.string.text_pictures)
     FilePlaceKind.Music -> stringResource(Res.string.text_music)
     FilePlaceKind.Movies -> stringResource(Res.string.text_movies)
+    FilePlaceKind.ICloudDrive -> stringResource(Res.string.text_icloud_drive)
     FilePlaceKind.Home,
     FilePlaceKind.Volume,
     FilePlaceKind.MtpDevice,
@@ -610,6 +614,7 @@ private fun FilePlace.icon(): Any = when (kind) {
     FilePlaceKind.Pictures -> MiuixIcons.Image
     FilePlaceKind.Music -> MiuixIcons.Music
     FilePlaceKind.Movies -> MiuixIcons.Play
+    FilePlaceKind.ICloudDrive -> painterResource(Res.drawable.ic_cloud_queue)
     FilePlaceKind.Volume -> painterResource(Res.drawable.ic_storage)
     FilePlaceKind.MtpDevice,
     FilePlaceKind.MtpStorage -> painterResource(Res.drawable.ic_mtp)

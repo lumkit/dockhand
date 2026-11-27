@@ -595,6 +595,16 @@ class LocalFileSystemProvider(
             label = homeDirectory.fileName?.toString()?.takeIf { it.isNotBlank() } ?: "Home",
         )
 
+        addPlace(
+            places = places,
+            kind = FilePlaceKind.ICloudDrive,
+            path = homeDirectory
+                .resolve("Library")
+                .resolve("Mobile Documents")
+                .resolve("com~apple~CloudDocs"),
+            label = "iCloud Drive",
+        )
+
         for ((placeKind, directoryName) in quickAccess) {
             addPlace(
                 places = places,

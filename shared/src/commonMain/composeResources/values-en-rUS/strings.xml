@@ -103,6 +103,7 @@ Changes take effect after restart.</string>
     <string name="text_camera">Camera</string>
     <string name="text_music">Music</string>
     <string name="text_movies">Movies</string>
+    <string name="text_icloud_drive">iCloud Drive</string>
     <string name="text_trash">Trash</string>
     <string name="text_no_mtp_devices">No MTP devices connected</string>
     <string name="text_mtp_hint">Connect an Android device over USB to see its storage here.</string>
