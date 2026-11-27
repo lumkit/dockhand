@@ -18,12 +18,14 @@ Browse, compare, and transfer files between two panes, and manage Android device
 
 - Two independent panes with separate history and navigation
 - Quickly copy or move selected items to the other pane
+- Local folders, mounted volumes, iCloud Drive, and MTP devices in the sidebar
 - Open either pane in Terminal
 - Restore the last location and window size on launch
 
 ### File management
 
 - Copy, move, rename, delete, and move to Trash
+- Copy selected items to the system clipboard; paste files copied from Finder or other apps after confirmation
 - Create ZIP, 7z, TAR, TAR.GZ, TAR.XZ, TAR.BZ2, TAR.ZST, GZIP, XZ, and ZSTD archives
 - Extract those formats by double-clicking or from the context menu
 - Optional passwords for ZIP/7z and split archives for ZIP
@@ -47,14 +49,30 @@ Browse, compare, and transfer files between two panes, and manage Android device
 - Shift + arrow keys to extend or shrink a selection in list and grid views
 - Previous/next item navigation with configurable shortcuts
 - Customizable shortcut mappings, including multiple shortcuts per action
+- System clipboard copy/paste, with readable key labels in shortcut settings
+- Global shortcuts pause while the search field has focus, then resume when it loses focus
 
 ### Views and organization
 
 - Linear list and adaptive grid layouts
-- Sort by name, modification date, size, or type
-- Ascending and descending order
+- Per-folder sort modes, with Name A-Z as the default
+- Sort by name, modification date, size, or type, ascending or descending
+- Apply the focused folder's sort mode to every other folder and make it the new default
 - Show or hide hidden files from the More menu
-- File type icons and image/video thumbnails
+- File type icons, real macOS app icons, and image/video thumbnails
+
+### macOS apps
+
+- App icons appear on both list and grid items
+- Launch an app from its context menu, or open/double-click it to run it
+- Apps open through the same system launcher as Finder
+
+### Search
+
+- Search the focused folder or include all subfolders
+- Filter results by all items, files, or folders
+- Results replace the file list and follow the current sort mode and list/grid layout
+- Live match count, search progress, and a clear exit action
 
 ### Previews
 
