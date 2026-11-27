@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -862,7 +863,10 @@ private fun TopBarActions(
     val textFieldState = rememberTextFieldState()
     val searchActive = searchQuery != null
     val searchFocusRequester = remember { FocusRequester() }
+    var searchFieldFocused by remember { mutableStateOf(false) }
     var filterMenuShow by remember { mutableStateOf(false) }
+    // 只有搜索框自身持有焦点时才放行文本编辑快捷键；搜索状态但焦点在列表时仍使用全局快捷键。
+    DialogModalityEffect(open = searchActive && searchFieldFocused)
     LaunchedEffect(searchActive) {
         if (!searchActive) {
             filterMenuShow = false
@@ -930,7 +934,8 @@ private fun TopBarActions(
                             state = textFieldState,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .focusRequester(searchFocusRequester),
+                                .focusRequester(searchFocusRequester)
+                                .onFocusChanged { searchFieldFocused = it.isFocused },
                             lineLimits = TextFieldLineLimits.SingleLine,
                             textStyle = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurface),
                             cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
