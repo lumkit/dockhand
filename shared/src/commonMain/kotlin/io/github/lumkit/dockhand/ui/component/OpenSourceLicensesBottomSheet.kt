@@ -3,6 +3,7 @@ package io.github.lumkit.dockhand.ui.component
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -39,8 +40,10 @@ fun OpenSourceLicensesBottomSheet(
     }
     val scrollState = rememberScrollState()
 
+    val maxSheetHeight = windowSheetMaxHeight()
     OverlayBottomSheet(
         show = show,
+        modifier = Modifier.heightIn(max = maxSheetHeight),
         title = stringResource(Res.string.about_licenses_title),
         onDismissRequest = onDismissRequest,
     ) {

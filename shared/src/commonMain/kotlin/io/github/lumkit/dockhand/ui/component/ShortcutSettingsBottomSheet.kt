@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -100,8 +101,10 @@ fun ShortcutSettingsBottomSheet(
 ) {
     var editingAction by remember { mutableStateOf<ShortcutAction?>(null) }
 
+    val maxSheetHeight = windowSheetMaxHeight()
     OverlayBottomSheet(
         show = show,
+        modifier = Modifier.heightIn(max = maxSheetHeight),
         title = stringResource(Res.string.shortcut_sheet_title),
         endAction = {
             TooltipBox(text = stringResource(Res.string.shortcut_reset_tooltip)) {

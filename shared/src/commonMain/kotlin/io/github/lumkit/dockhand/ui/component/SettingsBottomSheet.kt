@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -203,9 +204,10 @@ fun SettingsBottomSheet(
         onUpdateScrollShown(release.version)
     }
 
+    val maxSheetHeight = windowSheetMaxHeight()
     OverlayBottomSheet(
         show = show,
-        modifier = modifier,
+        modifier = modifier.heightIn(max = maxSheetHeight),
         title = stringResource(Res.string.text_settings),
         onDismissRequest = onDismissRequest,
     ) {
