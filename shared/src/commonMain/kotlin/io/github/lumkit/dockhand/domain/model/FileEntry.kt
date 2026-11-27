@@ -23,4 +23,6 @@ data class FileEntry(
     /** 不包含点的扩展名，例如 `png`；没有扩展名时为 null。 */
     val extension: String? = null,
     val isHidden: Boolean = false,
+    /** macOS 应用包：目录形态，但可以运行并显示应用图标。 */
+    val isMacApp: Boolean = false,
 )

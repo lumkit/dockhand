@@ -235,6 +235,7 @@
     <string name="action_rename">重命名</string>
     <string name="action_compress">压缩</string>
     <string name="action_extract">解压</string>
+    <string name="action_run">运行</string>
     <string name="action_open">打开</string>
     <string name="action_open_with">打开方式</string>
     <string name="open_with_title">打开方式</string>

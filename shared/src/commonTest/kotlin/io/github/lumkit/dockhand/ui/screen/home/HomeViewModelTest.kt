@@ -11,6 +11,7 @@ import io.github.lumkit.dockhand.domain.model.FileSortMode
 import io.github.lumkit.dockhand.domain.model.FileSourceKind
 import io.github.lumkit.dockhand.domain.model.sortStorageKey
 import io.github.lumkit.dockhand.domain.model.breadcrumbs
+import io.github.lumkit.dockhand.core.platform.FileOpener
 import io.github.lumkit.dockhand.core.update.AppUpdate
 import io.github.lumkit.dockhand.core.update.UpdateRepository
 import io.github.lumkit.dockhand.domain.repository.FileBrowserRepository
@@ -85,6 +86,36 @@ class HomeViewModelTest {
         assertEquals(FileSortMode.SizeAsc, viewModel.state.value.defaultFileSortMode)
         assertEquals(FileSortMode.SizeAsc, viewModel.state.value.sortModeFor(fixture.desktop))
         assertEquals(FileSortMode.SizeAsc, viewModel.state.value.sortModeFor(fixture.documents))
+    }
+
+    @Test
+    fun runActionLaunchesMacApplication() = runBlocking {
+        val fixture = Fixture()
+        val opened = mutableListOf<String>()
+        val opener = object : FileOpener {
+            override suspend fun open(location: FileLocation) = Unit
+
+            override suspend fun runApplication(location: FileLocation) {
+                opened += location.path
+            }
+        }
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            fileOpener = opener,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+        val app = FileEntry(
+            id = "/Applications/Safari.app",
+            name = "Safari.app",
+            location = FileLocation(fixture.desktop.source, "/Applications/Safari.app"),
+            isDirectory = true,
+            isMacApp = true,
+        )
+
+        viewModel.onEntryContextAction(PaneId.Left, app, FileContextAction.Run)
+
+        assertEquals(listOf("/Applications/Safari.app"), opened)
     }
 
     @Test

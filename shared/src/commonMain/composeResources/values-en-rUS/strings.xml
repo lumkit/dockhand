@@ -242,6 +242,7 @@ Changes take effect after restart.</string>
     <string name="action_rename">Rename</string>
     <string name="action_compress">Compress</string>
     <string name="action_extract">Extract</string>
+    <string name="action_run">Run</string>
     <string name="action_open">Open</string>
     <string name="action_open_with">Open With</string>
     <string name="open_with_title">Open With</string>

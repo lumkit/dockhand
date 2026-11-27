@@ -12,6 +12,9 @@ data class ExternalApplication(
 interface FileOpener {
     suspend fun open(location: FileLocation)
 
+    /** 运行 macOS 应用包。 */
+    suspend fun runApplication(location: FileLocation) = open(location)
+
     suspend fun applications(location: FileLocation): List<ExternalApplication> = emptyList()
 
     suspend fun openWith(location: FileLocation, application: ExternalApplication) {

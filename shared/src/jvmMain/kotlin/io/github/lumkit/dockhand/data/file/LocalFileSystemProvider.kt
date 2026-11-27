@@ -693,6 +693,11 @@ class LocalFileSystemProvider(
 
         val normalized = path.toAbsolutePath().normalize()
         val isDirectory = attributes.isDirectory
+        val isMacApp = isDirectory && name.endsWith(".app", ignoreCase = true) &&
+            runCatching {
+                Files.isRegularFile(path.resolve("Contents/Info.plist")) &&
+                    Files.isDirectory(path.resolve("Contents/MacOS"))
+            }.getOrDefault(false)
         val extension = if (!isDirectory && name.contains('.')) {
             name.substringAfterLast('.').takeIf { it.isNotEmpty() }
         } else {
@@ -709,6 +714,7 @@ class LocalFileSystemProvider(
             modifiedAt = attributes.lastModifiedTime().toMillis(),
             extension = extension,
             isHidden = hidden,
+            isMacApp = isMacApp,
         )
     }
 

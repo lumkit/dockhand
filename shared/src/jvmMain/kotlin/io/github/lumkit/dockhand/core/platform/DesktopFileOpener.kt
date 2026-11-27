@@ -10,6 +10,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -39,6 +40,22 @@ class DesktopFileOpener : FileOpener {
             throw FileBrowserException(error.message ?: "无法打开文件")
         }
     }
+
+    override suspend fun runApplication(location: FileLocation) =
+        withContext(Dispatchers.IO) {
+            val file = File(location.path)
+            if (!file.exists()) throw FileBrowserException("文件不存在")
+            try {
+                val process = ProcessBuilder("/usr/bin/open", file.absolutePath).inheritIO().start()
+                if (process.waitFor() != 0) {
+                    throw FileBrowserException("无法运行应用")
+                }
+            } catch (error: FileBrowserException) {
+                throw error
+            } catch (error: Throwable) {
+                throw FileBrowserException(error.message ?: "无法运行应用")
+            }
+        }
 
     override suspend fun applications(location: FileLocation): List<ExternalApplication> =
         withContext(Dispatchers.IO) {
@@ -137,11 +154,24 @@ class DesktopFileOpener : FileOpener {
                 val process = ProcessBuilder(
                     "/usr/bin/osascript", "-l", "JavaScript", "-e", script, application.path,
                 ).redirectErrorStream(true).start()
+                // osascript 会一次性输出完整 PNG 的 base64（可能超过 1MB）。
+                // 必须先并发消费 stdout，否则管道写满后进程会阻塞，waitFor 必然超时。
+                val output = ByteArrayOutputStream()
+                val reader = Thread {
+                    runCatching {
+                        process.inputStream.use { input -> input.copyTo(output) }
+                    }
+                }.apply {
+                    isDaemon = true
+                    start()
+                }
                 if (!process.waitFor(5, TimeUnit.SECONDS)) {
                     process.destroyForcibly()
+                    reader.interrupt()
                     return@runCatching null
                 }
-                val base64 = process.inputStream.bufferedReader().use { it.readText() }.trim()
+                reader.join(5_000)
+                val base64 = output.toString(Charsets.UTF_8.name()).trim()
                 if (base64.isEmpty()) return@runCatching null
                 target.writeBytes(Base64.getDecoder().decode(base64))
                 target.toURI().toString()

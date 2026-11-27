@@ -93,6 +93,7 @@ import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.action_compress
 import dockhand.shared.generated.resources.action_extract
 import dockhand.shared.generated.resources.action_open
+import dockhand.shared.generated.resources.action_run
 import dockhand.shared.generated.resources.action_open_with
 import dockhand.shared.generated.resources.open_with_empty
 import dockhand.shared.generated.resources.open_with_loading
@@ -118,7 +119,9 @@ import dockhand.shared.generated.resources.search_exit
 import dockhand.shared.generated.resources.search_in_directory
 import dockhand.shared.generated.resources.search_matches
 import dockhand.shared.generated.resources.search_no_matches
+import io.github.lumkit.dockhand.LocalAppContainer
 import io.github.lumkit.dockhand.core.archive.archiveFormatForName
+import io.github.lumkit.dockhand.core.platform.ExternalApplication
 import io.github.lumkit.dockhand.ui.component.LocalOpenWithSelect
 import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
 import io.github.lumkit.dockhand.domain.model.FileEntry
@@ -129,6 +132,8 @@ import io.github.lumkit.dockhand.ui.screen.home.FilePaneState
 import io.github.lumkit.dockhand.ui.screen.home.FileRowUi
 import io.github.lumkit.dockhand.ui.screen.home.PaneId
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -850,35 +855,46 @@ private fun FileEntryRow(
                 }
                 .then(dragSource),
             startAction = {
-                if (row.thumbnailModel != null) {
-                    // 初始就用 Crop：占位图标是方形，不会裁切；同时保证 onSuccess 缓存的是裁切后的缩略图。
-                    var isError by remember(row) { mutableStateOf(false) }
+                Box(modifier = Modifier.size(36.dp)) {
+                    if (row.thumbnailModel != null) {
+                        // 初始就用 Crop：占位图标是方形，不会裁切；同时保证 onSuccess 缓存的是裁切后的缩略图。
+                        var isError by remember(row) { mutableStateOf(false) }
 
-                    AsyncImage(
-                        model = row.thumbnailModel,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .squircleClip(8.dp),
-                        placeholder = iconPainter,
-                        error = iconPainter,
-                        contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
-                        onError = { isError = true },
-                        onSuccess = { state ->
-                            isError = false
-                            DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
-                        },
-                    )
-                } else {
-                    Image(
-                        painter = iconPainter,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                    )
+                        AsyncImage(
+                            model = row.thumbnailModel,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .squircleClip(8.dp),
+                            placeholder = iconPainter,
+                            error = iconPainter,
+                            contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
+                            onError = { isError = true },
+                            onSuccess = { state ->
+                                isError = false
+                                DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
+                            },
+                        )
+                    } else {
+                        Image(
+                            painter = iconPainter,
+                            contentDescription = null,
+                            modifier = Modifier.size(36.dp),
+                        )
+                    }
+                    if (row.entry.isMacApp) {
+                        AppIconBadge(
+                            appPath = row.entry.location.path,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(16.dp)
+                                .squircleClip(4.dp),
+                        )
+                    }
                 }
             },
             endActions = {
-                if (row.isDirectory) {
+                if (row.isDirectory && !row.entry.isMacApp) {
                     Icon(
                         imageVector = MiuixIcons.ChevronForward,
                         contentDescription = null,
@@ -963,6 +979,37 @@ private fun FileEntryRow(
                 onContextAction(action)
                 onDismissContextMenu()
             },
+        )
+    }
+}
+
+@Composable
+private fun AppIconBadge(
+    appPath: String,
+    modifier: Modifier = Modifier,
+) {
+    val fileOpener = LocalAppContainer.current.fileOpener
+    var model by remember(appPath) { mutableStateOf<String?>(null) }
+    LaunchedEffect(appPath, fileOpener) {
+        model = runCatching {
+            fileOpener.icon(
+                ExternalApplication(
+                    name = appPath.substringAfterLast('/').removeSuffix(".app"),
+                    path = appPath,
+                ),
+            )
+        }.onFailure {
+            if (it is CancellationException) {
+                ensureActive()
+            }
+        }.getOrNull()
+    }
+    if (model != null) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Fit,
         )
     }
 }
@@ -1497,28 +1544,39 @@ private fun FileGridItem(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            if (row.thumbnailModel != null) {
-                var isError by remember(row) { mutableStateOf(false) }
+            Box(modifier = Modifier.size(64.dp)) {
+                if (row.thumbnailModel != null) {
+                    var isError by remember(row) { mutableStateOf(false) }
 
-                AsyncImage(
-                    model = row.thumbnailModel,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp).squircleClip(12.dp),
-                    placeholder = iconPainter,
-                    error = iconPainter,
-                    contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
-                    onError = { isError = true },
-                    onSuccess = { state ->
-                        isError = false
-                        DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
-                    },
-                )
-            } else {
-                Image(
-                    painter = iconPainter,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                )
+                    AsyncImage(
+                        model = row.thumbnailModel,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp).squircleClip(12.dp),
+                        placeholder = iconPainter,
+                        error = iconPainter,
+                        contentScale = if (isError) ContentScale.Fit else ContentScale.Crop,
+                        onError = { isError = true },
+                        onSuccess = { state ->
+                            isError = false
+                            DragPreviewCache.putThumbnail(row.entry.location.path, state.painter, previewSizePx)
+                        },
+                    )
+                } else {
+                    Image(
+                        painter = iconPainter,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                    )
+                }
+                if (row.entry.isMacApp) {
+                    AppIconBadge(
+                        appPath = row.entry.location.path,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(28.dp)
+                            .squircleClip(6.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             if (editing) {
@@ -1622,6 +1680,7 @@ private fun FileEntryContextMenu(
 ) {
     val isLocal = row.entry.location.source.kind == FileSourceKind.Local
     val infoLabel = stringResource(Res.string.action_view_info)
+    val runLabel = stringResource(Res.string.action_run)
     val openLabel = stringResource(Res.string.action_open)
     val openWithLabel = stringResource(Res.string.action_open_with)
     val openWithState = LocalOpenWithState.current
@@ -1660,6 +1719,9 @@ private fun FileEntryContextMenu(
 
         if (isLocal) {
             val fileActions = buildList {
+                if (row.entry.isMacApp) {
+                    add(DropdownItem(text = runLabel, onClick = { onAction(FileContextAction.Run) }))
+                }
                 add(DropdownItem(text = openLabel, onClick = { onAction(FileContextAction.Open) }))
                 if (!row.isDirectory) {
                     val current = openWithState?.takeIf { it.entry.id == row.entry.id }

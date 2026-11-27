@@ -1837,6 +1837,10 @@ class HomeViewModel(
     }
 
     private fun openEntry(entry: FileEntry, paneId: PaneId? = null) {
+        if (entry.isMacApp) {
+            runMacApplication(entry)
+            return
+        }
         if (entry.isDirectory) {
             paneId?.let { navigate(it, entry.location) }
         } else if (archiveFormatForName(entry.name) != null) {
@@ -1854,6 +1858,10 @@ class HomeViewModel(
     }
 
     private fun openDirectly(entry: FileEntry, paneId: PaneId) {
+        if (entry.isMacApp) {
+            runMacApplication(entry)
+            return
+        }
         if (entry.isDirectory) {
             navigate(paneId, entry.location)
             return
@@ -1865,6 +1873,16 @@ class HomeViewModel(
         scope.launch {
             runCatching { fileOpener.open(entry.location) }
                 .onFailure { error -> setOperationError(error.message ?: "无法打开文件") }
+        }
+    }
+
+    private fun runMacApplication(entry: FileEntry) {
+        if (!entry.isMacApp) return
+        scope.launch {
+            runCatching { fileOpener.runApplication(entry.location) }
+                .onFailure { error ->
+                    setOperationError(error.userMessage())
+                }
         }
     }
 
@@ -1970,6 +1988,7 @@ class HomeViewModel(
         }
         when (action) {
             FileContextAction.ViewInfo -> openFileInfo(targets)
+            FileContextAction.Run -> runMacApplication(entry)
             FileContextAction.Open -> openDirectly(entry, paneId)
             FileContextAction.OpenWith -> openWith(entry)
             FileContextAction.Copy -> {

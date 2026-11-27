@@ -64,6 +64,38 @@ class LocalFileSystemProviderTest {
     }
 
     @Test
+    fun detectsMacAppBundlesOnlyWhenTheyLookLikeApps(): Unit = runBlocking {
+        val root = Files.createTempDirectory("dockhand-mac-app")
+        try {
+            val home = Files.createDirectories(root.resolve("home"))
+            val safari = Files.createDirectories(home.resolve("Safari.app"))
+            Files.createDirectories(safari.resolve("Contents/MacOS"))
+            Files.writeString(safari.resolve("Contents/Info.plist"), "<plist/>")
+
+            val fake = Files.createDirectories(home.resolve("Fake.app"))
+            Files.createDirectories(fake.resolve("Contents"))
+            Files.writeString(fake.resolve("Contents/Info.plist"), "<plist/>")
+
+            Files.createDirectories(home.resolve("Plain.app"))
+
+            val provider = LocalFileSystemProvider(
+                homeDirectory = home,
+                volumesDirectory = root.resolve("Volumes"),
+            )
+            val homePlace = provider.observePlaces().first()
+                .first { it.kind == FilePlaceKind.Home }
+            val entries = provider.list(homePlace.location).associateBy { it.name }
+
+            assertTrue(entries.getValue("Safari.app").isMacApp)
+            assertTrue(!entries.getValue("Fake.app").isMacApp)
+            assertTrue(!entries.getValue("Plain.app").isMacApp)
+            assertTrue(entries.getValue("Safari.app").isDirectory)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun entriesForLocalPathsKeepsHiddenAndDropsMissing(): Unit = runBlocking {
         val root = Files.createTempDirectory("dockhand-drop")
         try {
