@@ -939,6 +939,7 @@ private fun TopBarActions(
                         painter = painterResource(Res.drawable.ic_backend_task),
                         contentDescription = stringResource(Res.string.tasks_tooltip_title),
                         modifier = Modifier.size(20.dp),
+                        tint = MiuixTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -1007,6 +1008,7 @@ private fun TopBarActions(
                 imageVector = MiuixIcons.More,
                 contentDescription = stringResource(Res.string.text_more),
                 modifier = Modifier.size(20.dp),
+                tint = MiuixTheme.colorScheme.onSurface,
             )
         }
 
@@ -1208,6 +1210,7 @@ private fun TaskRow(
                 imageVector = MiuixIcons.Close,
                 contentDescription = stringResource(Res.string.task_cancel_title),
                 modifier = Modifier.size(18.dp),
+                tint = MiuixTheme.colorScheme.onSurface,
             )
         }
     }
