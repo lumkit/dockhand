@@ -85,6 +85,14 @@ val OPEN_SOURCE_LIBRARIES = listOf(
         url = "https://github.com/Kotlin/kotlinx.serialization",
     ),
     OpenSourceLibrary(
+        name = "Ktor",
+        version = "3.6.2",
+        description = "Kotlin 跨平台 HTTP 客户端，用于检查 GitHub Release 更新。",
+        descriptionEn = "Cross-platform HTTP client for Kotlin, used for GitHub Release update checks.",
+        author = "JetBrains",
+        url = "https://github.com/ktorio/ktor",
+    ),
+    OpenSourceLibrary(
         name = "Apache Commons Compress",
         version = "1.28.0",
         description = "7z、tar、gzip、bzip2 等归档格式支持。",
