@@ -88,6 +88,48 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun searchMatchesLoadedEntriesAndClearsWhenFocusChanges() = runBlocking {
+        val fixture = Fixture()
+        val viewModel = HomeViewModel(
+            files = fixture.repository,
+            computeDispatcher = Dispatchers.Unconfined,
+            externalScope = scope,
+        )
+
+        viewModel.onSearchStart()
+        assertEquals("", viewModel.state.value.focusedPaneState.searchQuery)
+
+        viewModel.onSearchQueryChange("doc")
+        assertTrue(viewModel.state.value.focusedPaneState.isSearching)
+        withTimeout(2_000) {
+            while (viewModel.state.value.focusedPaneState.isSearching) delay(10)
+        }
+        assertEquals(
+            listOf("Documents"),
+            viewModel.state.value.leftPane.searchResults?.map { it.name },
+        )
+
+        viewModel.onSearchTypeChange(FileSearchType.Files)
+        withTimeout(2_000) {
+            while (viewModel.state.value.focusedPaneState.isSearching) delay(10)
+        }
+        assertTrue(viewModel.state.value.leftPane.searchResults?.isEmpty() == true)
+
+        viewModel.onSearchTypeChange(FileSearchType.Folders)
+        withTimeout(2_000) {
+            while (viewModel.state.value.focusedPaneState.isSearching) delay(10)
+        }
+        assertEquals(
+            listOf("Documents"),
+            viewModel.state.value.leftPane.searchResults?.map { it.name },
+        )
+
+        viewModel.onPaneFocus(PaneId.Right)
+        assertNull(viewModel.state.value.leftPane.searchQuery)
+        assertNull(viewModel.state.value.leftPane.searchResults)
+    }
+
+    @Test
     fun doubleClickingDirectoryNavigatesFocusedPaneAndUpdatesTopBarPath() = runBlocking {
         val fixture = Fixture()
         val viewModel = HomeViewModel(

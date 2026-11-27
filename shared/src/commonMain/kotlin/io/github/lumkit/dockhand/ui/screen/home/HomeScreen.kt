@@ -1,170 +1,58 @@
 package io.github.lumkit.dockhand.ui.screen.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dockhand.shared.generated.resources.*
 import io.github.lumkit.dockhand.LocalAppContainer
-import io.github.lumkit.dockhand.domain.model.FileBreadcrumb
-import io.github.lumkit.dockhand.domain.model.FileEntry
-import io.github.lumkit.dockhand.domain.model.FileLayoutMode
-import io.github.lumkit.dockhand.domain.model.FileSortMode
-import io.github.lumkit.dockhand.ui.component.ExternalDropAction
-import io.github.lumkit.dockhand.ui.component.ExternalDropBridge
-import io.github.lumkit.dockhand.ui.component.FileContextAction
-import io.github.lumkit.dockhand.ui.component.LocalExternalDropController
-import io.github.lumkit.dockhand.domain.model.FilePlace
-import io.github.lumkit.dockhand.shortcut.DefaultShortcutRegistry
-import io.github.lumkit.dockhand.shortcut.ShortcutAction
-import io.github.lumkit.dockhand.shortcut.ShortcutBinding
-import io.github.lumkit.dockhand.shortcut.ShortcutDispatcher
-import io.github.lumkit.dockhand.ui.DialogModalityEffect
-import io.github.lumkit.dockhand.shortcut.ShortcutKey
-import io.github.lumkit.dockhand.shortcut.ShortcutRegistry
-import io.github.lumkit.dockhand.ui.component.DualPaneBrowser
+import io.github.lumkit.dockhand.domain.model.*
+import io.github.lumkit.dockhand.shortcut.*
 import io.github.lumkit.dockhand.task.AppTask
 import io.github.lumkit.dockhand.task.TaskState
-import io.github.lumkit.dockhand.ui.component.CompressRequestDialog
-import io.github.lumkit.dockhand.ui.component.ExtractPasswordDialog
-import io.github.lumkit.dockhand.ui.component.ExtractRequestDialog
-import io.github.lumkit.dockhand.ui.component.LocalOpenWithSelect
-import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
-import io.github.lumkit.dockhand.ui.component.CopyRequestDialog
-import io.github.lumkit.dockhand.ui.component.DeleteRequestDialog
-import io.github.lumkit.dockhand.ui.component.MoveRequestDialog
-import io.github.lumkit.dockhand.ui.component.SelectionMode
-import io.github.lumkit.dockhand.ui.component.RenameRequestDialog
-import io.github.lumkit.dockhand.ui.component.TaskProgressDialog
-import io.github.lumkit.dockhand.ui.component.TrashRequestDialog
-import io.github.lumkit.dockhand.ui.component.FileInfoDialogContent
-import io.github.lumkit.dockhand.ui.component.FileInfoDialogWindow
-import io.github.lumkit.dockhand.ui.component.LocalInlineRenameBounds
-import dockhand.shared.generated.resources.Res
-import dockhand.shared.generated.resources.action_cancel
-import dockhand.shared.generated.resources.action_confirm
-import dockhand.shared.generated.resources.action_retry
-import dockhand.shared.generated.resources.file_info_title
-import dockhand.shared.generated.resources.ic_backend_task
-import dockhand.shared.generated.resources.ic_home
-import dockhand.shared.generated.resources.menu_arrangement
-import dockhand.shared.generated.resources.menu_hidden_items
-import dockhand.shared.generated.resources.menu_layout_grid
-import dockhand.shared.generated.resources.menu_layout_list
-import dockhand.shared.generated.resources.menu_sort
-import dockhand.shared.generated.resources.menu_sort_modified_asc
-import dockhand.shared.generated.resources.menu_sort_modified_desc
-import dockhand.shared.generated.resources.menu_sort_name_asc
-import dockhand.shared.generated.resources.menu_sort_name_desc
-import dockhand.shared.generated.resources.menu_sort_size_asc
-import dockhand.shared.generated.resources.menu_sort_size_desc
-import dockhand.shared.generated.resources.menu_sort_type_asc
-import dockhand.shared.generated.resources.menu_sort_type_desc
-import dockhand.shared.generated.resources.menu_sort_apply_to_all
-import dockhand.shared.generated.resources.menu_view
-import dockhand.shared.generated.resources.task_cancel_message
-import dockhand.shared.generated.resources.task_cancel_title
-import dockhand.shared.generated.resources.task_cancelled
-import dockhand.shared.generated.resources.task_completed
-import dockhand.shared.generated.resources.task_failed
-import dockhand.shared.generated.resources.task_progress_unknown
-import dockhand.shared.generated.resources.task_running
-import dockhand.shared.generated.resources.task_waiting
-import dockhand.shared.generated.resources.task_eta_days_hours
-import dockhand.shared.generated.resources.task_eta_hours_minutes
-import dockhand.shared.generated.resources.task_eta_less_than_second
-import dockhand.shared.generated.resources.task_eta_minutes_seconds
-import dockhand.shared.generated.resources.task_eta_seconds
-import dockhand.shared.generated.resources.task_speed
-import dockhand.shared.generated.resources.task_speed_eta
-import dockhand.shared.generated.resources.tasks_badge_overflow
-import dockhand.shared.generated.resources.tasks_empty
-import dockhand.shared.generated.resources.tasks_tooltip_title
-import dockhand.shared.generated.resources.text_loading_more
-import dockhand.shared.generated.resources.text_more
-import kotlinx.coroutines.launch
+import io.github.lumkit.dockhand.ui.DialogModalityEffect
+import io.github.lumkit.dockhand.ui.component.*
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import top.yukonga.miuix.kmp.basic.Badge
-import top.yukonga.miuix.kmp.basic.BadgedBox
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.RichTooltip
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.verticalScrollBar
-import top.yukonga.miuix.kmp.basic.SnackbarHost
-import top.yukonga.miuix.kmp.basic.SnackbarHostState
-import top.yukonga.miuix.kmp.basic.SnackbarResult
-import top.yukonga.miuix.kmp.basic.Surface
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TooltipAnchorPosition
-import top.yukonga.miuix.kmp.basic.TooltipBox
-import top.yukonga.miuix.kmp.basic.TooltipDefaults
-import top.yukonga.miuix.kmp.basic.TooltipState
-import top.yukonga.miuix.kmp.basic.rememberTooltipState
+import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.icon.extended.Tasks
+import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.basic.DropdownEntry
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -231,6 +119,11 @@ fun HomeScreen() {
         onShortcutRename = homeViewModel::onShortcutRename,
         onShortcutCompress = homeViewModel::onShortcutCompress,
         onShortcutTrash = homeViewModel::onShortcutTrash,
+        onSearchStart = homeViewModel::onSearchStart,
+        onSearchQueryChange = homeViewModel::onSearchQueryChange,
+        onSearchScopeChange = homeViewModel::onSearchScopeChange,
+        onSearchTypeChange = homeViewModel::onSearchTypeChange,
+        onSearchExit = homeViewModel::onSearchExit,
         onExtendSelectionUp = homeViewModel::onExtendSelectionUp,
         onExtendSelectionDown = homeViewModel::onExtendSelectionDown,
         onExtendSelectionLeft = homeViewModel::onExtendSelectionLeft,
@@ -355,6 +248,11 @@ private fun HomeScreenContent(
     onShortcutRename: () -> Boolean,
     onShortcutCompress: () -> Boolean,
     onShortcutTrash: () -> Boolean,
+    onSearchStart: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchScopeChange: (FileSearchScope) -> Unit,
+    onSearchTypeChange: (FileSearchType) -> Unit,
+    onSearchExit: (PaneId) -> Unit,
     onExtendSelectionUp: () -> Boolean,
     onExtendSelectionDown: () -> Boolean,
     onExtendSelectionLeft: () -> Boolean,
@@ -584,6 +482,14 @@ private fun HomeScreenContent(
                                 onSortModeChange = onFileSortModeChange,
                                 onSortModeApplyToAll = onFileSortModeApplyToAll,
                                 onShowHiddenItemsChange = onShowHiddenItemsChange,
+                                searchQuery = uiState.focusedPaneState.searchQuery,
+                                onSearchStart = onSearchStart,
+                                onSearchQueryChange = onSearchQueryChange,
+                                searchScope = uiState.focusedPaneState.searchScope,
+                                searchType = uiState.focusedPaneState.searchType,
+                                onSearchScopeChange = onSearchScopeChange,
+                                onSearchTypeChange = onSearchTypeChange,
+                                onSearchExit = { onSearchExit(uiState.focusedPane) },
                             )
                         }
                     }
@@ -677,6 +583,14 @@ private fun HomeScreenContent(
                                     onSortModeChange = onFileSortModeChange,
                                     onSortModeApplyToAll = onFileSortModeApplyToAll,
                                     onShowHiddenItemsChange = onShowHiddenItemsChange,
+                                    searchQuery = uiState.focusedPaneState.searchQuery,
+                                    onSearchStart = onSearchStart,
+                                    onSearchQueryChange = onSearchQueryChange,
+                                    searchScope = uiState.focusedPaneState.searchScope,
+                                    searchType = uiState.focusedPaneState.searchType,
+                                    onSearchScopeChange = onSearchScopeChange,
+                                    onSearchTypeChange = onSearchTypeChange,
+                                    onSearchExit = { onSearchExit(uiState.focusedPane) },
                                 )
                             }
                         }
@@ -725,6 +639,7 @@ private fun HomeScreenContent(
                                 onEntryContextAction = onEntryContextAction,
                                 onInlineRename = onInlineRename,
                                 onDragMoveOut = onDragMoveOut,
+                                onSearchExit = onSearchExit,
                                 onRetry = onRetry,
                                 onLoadMore = onLoadMore,
                                 onBack = onBack,
@@ -930,11 +845,194 @@ private fun TopBarActions(
     onSortModeChange: (FileSortMode) -> Unit,
     onSortModeApplyToAll: () -> Unit,
     onShowHiddenItemsChange: (Boolean) -> Unit,
+    searchQuery: String?,
+    onSearchStart: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    searchScope: FileSearchScope,
+    searchType: FileSearchType,
+    onSearchScopeChange: (FileSearchScope) -> Unit,
+    onSearchTypeChange: (FileSearchType) -> Unit,
+    onSearchExit: () -> Unit,
 ) {
     var pendingCancel by remember { mutableStateOf<AppTask?>(null) }
     var popupShow by remember { mutableStateOf(false) }
     val runningBackgroundTasks = tasks.count {
         it.isBackground && (it.state == TaskState.Running || it.state == TaskState.Waiting)
+    }
+    val textFieldState = rememberTextFieldState()
+    val searchActive = searchQuery != null
+    val searchFocusRequester = remember { FocusRequester() }
+    var filterMenuShow by remember { mutableStateOf(false) }
+    LaunchedEffect(searchActive) {
+        if (!searchActive) {
+            filterMenuShow = false
+            textFieldState.clearText()
+            return@LaunchedEffect
+        }
+        if (textFieldState.text.toString() != searchQuery) {
+            textFieldState.setTextAndPlaceCursorAtEnd(searchQuery)
+        }
+        runCatching { searchFocusRequester.requestFocus() }
+        snapshotFlow { textFieldState.text.toString() }
+            .collect { onSearchQueryChange(it) }
+    }
+    val bgColor by animateColorAsState(
+        targetValue = if (searchActive) {
+            MiuixTheme.colorScheme.surfaceContainer
+        } else {
+            MiuixTheme.colorScheme.surface
+        }
+    )
+
+    TooltipBox(
+        text = stringResource(Res.string.search_tooltip),
+        enabled = !searchActive,
+    ) {
+        Row(
+            modifier = Modifier.squircleClip(16.dp)
+                .height(32.dp)
+                .background(color = bgColor),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = MiuixIcons.Search,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp)
+                    .clickable(
+                        enabled = !searchActive,
+                    ) {
+                        onSearchStart()
+                    }.clip(CircleShape)
+                    .padding(6.dp),
+                tint = MiuixTheme.colorScheme.onSurface,
+            )
+
+            AnimatedVisibility(visible = searchActive) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier.width(200.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (textFieldState.text.isEmpty()) {
+                            Text(
+                                text = stringResource(Res.string.search_placeholder),
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        BasicTextField(
+                            state = textFieldState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
+                            lineLimits = TextFieldLineLimits.SingleLine,
+                            textStyle = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box {
+                        TooltipBox(text = stringResource(Res.string.search_filter)) {
+                            Icon(
+                                imageVector = MiuixIcons.Filter,
+                                contentDescription = stringResource(Res.string.search_filter),
+                                modifier = Modifier.padding(end = 6.dp)
+                                    .size(24.dp)
+                                    .padding(4.dp)
+                                    .clip(CircleShape)
+                                    .clickable { filterMenuShow = true },
+                                tint = MiuixTheme.colorScheme.onSurface,
+                            )
+                        }
+
+                        OverlayCascadingListPopup(
+                            show = filterMenuShow,
+                            entries = listOf(
+                                DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem(
+                                            text = stringResource(Res.string.search_scope),
+                                            children = listOf(
+                                                DropdownItem(
+                                                    text = stringResource(Res.string.search_scope_current),
+                                                    selected = searchScope == FileSearchScope.CurrentFolder,
+                                                    onClick = {
+                                                        onSearchScopeChange(FileSearchScope.CurrentFolder)
+                                                        filterMenuShow = false
+                                                    },
+                                                ),
+                                                DropdownItem(
+                                                    text = stringResource(Res.string.search_scope_recursive),
+                                                    selected = searchScope == FileSearchScope.Recursive,
+                                                    onClick = {
+                                                        onSearchScopeChange(FileSearchScope.Recursive)
+                                                        filterMenuShow = false
+                                                    },
+                                                ),
+                                            ),
+                                        ),
+                                        DropdownItem(
+                                            text = stringResource(Res.string.search_type),
+                                            children = listOf(
+                                                DropdownItem(
+                                                    text = stringResource(Res.string.search_type_all),
+                                                    selected = searchType == FileSearchType.All,
+                                                    onClick = {
+                                                        onSearchTypeChange(FileSearchType.All)
+                                                        filterMenuShow = false
+                                                    },
+                                                ),
+                                                DropdownItem(
+                                                    text = stringResource(Res.string.search_type_files),
+                                                    selected = searchType == FileSearchType.Files,
+                                                    onClick = {
+                                                        onSearchTypeChange(FileSearchType.Files)
+                                                        filterMenuShow = false
+                                                    },
+                                                ),
+                                                DropdownItem(
+                                                    text = stringResource(Res.string.search_type_folders),
+                                                    selected = searchType == FileSearchType.Folders,
+                                                    onClick = {
+                                                        onSearchTypeChange(FileSearchType.Folders)
+                                                        filterMenuShow = false
+                                                    },
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            alignment = PopupPositionProvider.Align.End,
+                            onDismissRequest = { filterMenuShow = false },
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = MiuixIcons.Close,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp)
+                            .size(24.dp)
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                if (textFieldState.text.isNotEmpty()) {
+                                    textFieldState.clearText()
+                                } else {
+                                    onSearchExit()
+                                }
+                            },
+                        tint = MiuixTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
     }
 
     Box {
@@ -1023,7 +1121,6 @@ private fun TopBarActions(
         }
     }
 
-    // TODO 更多菜单，多级菜单实现
     var moreMenuShow by remember { mutableStateOf(false) }
     TooltipBox(text = stringResource(Res.string.text_more)) {
         IconButton(

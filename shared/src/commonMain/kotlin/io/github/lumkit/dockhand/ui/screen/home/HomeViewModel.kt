@@ -479,6 +479,7 @@ class HomeViewModel(
                 }
         }
     }
+    private var searchJob: Job? = null
     private val ignoredUpdateVersionJob: Job? = settings?.let { repository ->
         scope.launch {
             repository.ignoredUpdateVersion
@@ -781,6 +782,201 @@ class HomeViewModel(
         }
     }
 
+    /** 打开焦点目录的搜索状态，空关键字时先显示搜索栏。 */
+    fun onSearchStart() {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.location == null) return
+        searchJob?.cancel()
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    searchQuery = "",
+                    searchResults = null,
+                    isSearching = false,
+                    selectedIds = emptySet(),
+                    selectionAnchorId = null,
+                    selectionLeadId = null,
+                    contextMenuEntryId = null,
+                    inlineRenameEntryId = null,
+                )
+            }
+        }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.searchQuery == null) return
+        searchJob?.cancel()
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    searchQuery = query,
+                    searchResults = if (query.isBlank()) null else emptyList(),
+                    isSearching = query.isNotBlank(),
+                    selectedIds = emptySet(),
+                    selectionAnchorId = null,
+                    selectionLeadId = null,
+                    contextMenuEntryId = null,
+                    inlineRenameEntryId = null,
+                )
+            }
+        }
+        if (query.isNotBlank()) launchSearch(paneId, query)
+    }
+
+    fun onSearchScopeChange(searchScope: FileSearchScope) {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.searchQuery == null || pane.searchScope == searchScope) return
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(searchScope = searchScope) }
+        }
+        rerunSearch(paneId)
+    }
+
+    fun onSearchTypeChange(searchType: FileSearchType) {
+        val paneId = _state.value.focusedPane
+        val pane = _state.value.pane(paneId)
+        if (pane.searchQuery == null || pane.searchType == searchType) return
+        _state.update { state ->
+            state.updatePane(paneId) { it.copy(searchType = searchType) }
+        }
+        rerunSearch(paneId)
+    }
+
+    fun onSearchExit(paneId: PaneId = _state.value.focusedPane) {
+        searchJob?.cancel()
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    searchQuery = null,
+                    searchResults = null,
+                    isSearching = false,
+                    selectedIds = emptySet(),
+                    selectionAnchorId = null,
+                    selectionLeadId = null,
+                    contextMenuEntryId = null,
+                    inlineRenameEntryId = null,
+                )
+            }
+        }
+    }
+
+    private fun rerunSearch(paneId: PaneId) {
+        val pane = _state.value.pane(paneId)
+        val query = pane.searchQuery ?: return
+        if (query.isBlank()) {
+            _state.update { state ->
+                state.updatePane(paneId) {
+                    it.copy(searchResults = null, isSearching = false)
+                }
+            }
+            return
+        }
+        _state.update { state ->
+            state.updatePane(paneId) {
+                it.copy(
+                    searchResults = emptyList(),
+                    isSearching = true,
+                    selectedIds = emptySet(),
+                    selectionAnchorId = null,
+                    selectionLeadId = null,
+                    contextMenuEntryId = null,
+                    inlineRenameEntryId = null,
+                )
+            }
+        }
+        launchSearch(paneId, query)
+    }
+
+    private fun launchSearch(paneId: PaneId, query: String) {
+        searchJob?.cancel()
+        val pane = _state.value.pane(paneId)
+        val location = pane.location ?: return
+        val searchScope = pane.searchScope
+        val searchType = pane.searchType
+        searchJob = scope.launch {
+            delay(120)
+            if (_state.value.pane(paneId).searchQuery != query) return@launch
+            val matches = try {
+                when (searchScope) {
+                    FileSearchScope.CurrentFolder -> files.list(location)
+                        .filter { it.matchesSearch(query, searchType) }
+
+                    FileSearchScope.Recursive -> searchRecursively(location, query, searchType)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (_state.value.pane(paneId).searchQuery != query) return@launch
+            val sorted = matches.sortedWith(
+                fileEntryComparator(_state.value.sortModeFor(location)),
+            )
+            val itemCountTexts = sorted
+                .mapNotNull { it.childCount }
+                .distinct()
+                .associateWith { getString(Res.string.text_item_count, it) }
+            val rows = withContext(computeDispatcher) {
+                sorted.toRowUi(
+                    timeZone = TimeZone.currentSystemDefault(),
+                    itemCountTexts = itemCountTexts,
+                )
+            }
+            _state.update { state ->
+                val current = state.pane(paneId)
+                if (current.searchQuery != query ||
+                    current.location != location ||
+                    current.searchScope != searchScope ||
+                    current.searchType != searchType
+                ) {
+                    state
+                } else {
+                    state.updatePane(paneId) {
+                        it.copy(searchResults = rows, isSearching = false)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun FileEntry.matchesSearch(query: String, type: FileSearchType): Boolean =
+        name.contains(query, ignoreCase = true) && when (type) {
+            FileSearchType.All -> true
+            FileSearchType.Files -> !isDirectory
+            FileSearchType.Folders -> isDirectory
+        }
+
+    private suspend fun searchRecursively(
+        root: FileLocation,
+        query: String,
+        type: FileSearchType,
+    ): List<FileEntry> {
+        val results = mutableListOf<FileEntry>()
+        val pending = ArrayDeque<FileLocation>()
+        val visited = mutableSetOf<String>()
+        pending.add(root)
+        while (pending.isNotEmpty()) {
+            val location = pending.removeFirst()
+            if (!visited.add(location.sortStorageKey())) continue
+            val entries = try {
+                files.list(location)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                continue
+            }
+            for (entry in entries) {
+                if (entry.matchesSearch(query, type)) results += entry
+                if (entry.isDirectory) pending.add(entry.location)
+            }
+        }
+        return results
+    }
+
     private fun resortPanesAt(location: FileLocation, mode: FileSortMode) {
         val comparator = fileEntryComparator(mode)
         _state.update { state ->
@@ -790,6 +986,9 @@ class HomeViewModel(
                 acc.updatePane(paneId) {
                     it.copy(
                         entries = it.entries.sortedWith { a, b ->
+                            comparator.compare(a.entry, b.entry)
+                        },
+                        searchResults = it.searchResults?.sortedWith { a, b ->
                             comparator.compare(a.entry, b.entry)
                         },
                     )
@@ -807,6 +1006,9 @@ class HomeViewModel(
                 acc.updatePane(paneId) {
                     it.copy(
                         entries = it.entries.sortedWith { a, b ->
+                            comparator.compare(a.entry, b.entry)
+                        },
+                        searchResults = it.searchResults?.sortedWith { a, b ->
                             comparator.compare(a.entry, b.entry)
                         },
                     )
@@ -1111,8 +1313,40 @@ class HomeViewModel(
     // ---- 面板焦点 ----
 
     fun onPaneFocus(paneId: PaneId) {
-        _state.update {
-            if (it.focusedPane == paneId) it else it.copy(focusedPane = paneId)
+        val state = _state.value
+        if (state.focusedPane != paneId &&
+            (state.leftPane.searchQuery != null || state.rightPane.searchQuery != null)
+        ) {
+            searchJob?.cancel()
+            _state.update {
+                it.copy(
+                    focusedPane = paneId,
+                    leftPane = it.leftPane.copy(
+                        searchQuery = null,
+                        searchResults = null,
+                        isSearching = false,
+                        selectedIds = emptySet(),
+                        selectionAnchorId = null,
+                        selectionLeadId = null,
+                        contextMenuEntryId = null,
+                        inlineRenameEntryId = null,
+                    ),
+                    rightPane = it.rightPane.copy(
+                        searchQuery = null,
+                        searchResults = null,
+                        isSearching = false,
+                        selectedIds = emptySet(),
+                        selectionAnchorId = null,
+                        selectionLeadId = null,
+                        contextMenuEntryId = null,
+                        inlineRenameEntryId = null,
+                    ),
+                )
+            }
+        } else {
+            _state.update {
+                if (it.focusedPane == paneId) it else it.copy(focusedPane = paneId)
+            }
         }
     }
 
@@ -1127,7 +1361,7 @@ class HomeViewModel(
         onPaneFocus(paneId)
         _state.update { state ->
             val pane = state.pane(paneId)
-            val entries = pane.entries
+            val entries = pane.visibleEntries
             val selected = when (mode) {
                 SelectionMode.Replace -> setOf(entry.id)
                 SelectionMode.Toggle -> {
@@ -1228,7 +1462,7 @@ class HomeViewModel(
         val paneId = _state.value.focusedPane
         val pane = _state.value.pane(paneId)
         if (pane.selectedIds.isEmpty()) return false
-        val target = pane.entries.firstOrNull { it.id in pane.selectedIds } ?: return false
+        val target = pane.visibleEntries.firstOrNull { it.id in pane.selectedIds } ?: return false
         _state.update { state ->
             state.updatePane(paneId) { it.copy(contextMenuEntryId = target.id) }
         }
@@ -1508,11 +1742,12 @@ class HomeViewModel(
         if (pane.selectedIds.isEmpty()) return false
         val isGrid = _state.value.fileLayoutMode == FileLayoutMode.Grid
         if (!isGrid && columnDelta != 0) return false
-        val anchorIndex = pane.entries.indexOfFirst { it.id == pane.selectionAnchorId }
+        val visibleEntries = pane.visibleEntries
+        val anchorIndex = visibleEntries.indexOfFirst { it.id == pane.selectionAnchorId }
             .takeIf { it >= 0 }
-            ?: pane.entries.indexOfFirst { it.id in pane.selectedIds }
+            ?: visibleEntries.indexOfFirst { it.id in pane.selectedIds }
         if (anchorIndex < 0) return false
-        val selectedIndices = pane.entries.indices.filter { pane.entries[it].id in pane.selectedIds }
+        val selectedIndices = visibleEntries.indices.filter { visibleEntries[it].id in pane.selectedIds }
         val leadIndex = selectedIndices.maxByOrNull { kotlin.math.abs(it - anchorIndex) }
             ?: anchorIndex
         val step = if (isGrid) {
@@ -1521,16 +1756,16 @@ class HomeViewModel(
             itemDelta
         }
         val target = leadIndex + step
-        if (target !in pane.entries.indices) return false
+        if (target !in visibleEntries.indices) return false
         val from = minOf(anchorIndex, target)
         val to = maxOf(anchorIndex, target)
-        val ids = pane.entries.subList(from, to + 1).map { it.id }.toSet()
+        val ids = visibleEntries.subList(from, to + 1).map { it.id }.toSet()
         _state.update { state ->
             state.updatePane(paneId) {
                 it.copy(
                     selectedIds = ids,
-                    selectionAnchorId = pane.entries[anchorIndex].id,
-                    selectionLeadId = pane.entries[target].id,
+                    selectionAnchorId = visibleEntries[anchorIndex].id,
+                    selectionLeadId = visibleEntries[target].id,
                 )
             }
         }
@@ -1555,15 +1790,16 @@ class HomeViewModel(
         val paneId = _state.value.focusedPane
         val pane = _state.value.pane(paneId)
         if (pane.selectedIds.size != 1) return false
-        val current = pane.entries.indexOfFirst { it.id in pane.selectedIds }
+        val visibleEntries = pane.visibleEntries
+        val current = visibleEntries.indexOfFirst { it.id in pane.selectedIds }
         val step = if (_state.value.fileLayoutMode == FileLayoutMode.Grid) {
             if (horizontal) delta else delta * pane.gridColumnCount.coerceAtLeast(1)
         } else {
             delta
         }
         val target = current + step
-        if (current < 0 || target !in pane.entries.indices) return false
-        val entry = pane.entries[target]
+        if (current < 0 || target !in visibleEntries.indices) return false
+        val entry = visibleEntries[target]
         _state.update { state ->
             state.updatePane(paneId) {
                 it.copy(
@@ -1581,10 +1817,11 @@ class HomeViewModel(
         _state.update { state ->
             val pane = state.pane(paneId)
             state.updatePane(paneId) {
+                val visibleEntries = pane.visibleEntries
                 it.copy(
-                    selectedIds = pane.entries.map { row -> row.id }.toSet(),
-                    selectionAnchorId = pane.entries.firstOrNull()?.id,
-                    selectionLeadId = pane.entries.lastOrNull()?.id,
+                    selectedIds = visibleEntries.map { row -> row.id }.toSet(),
+                    selectionAnchorId = visibleEntries.firstOrNull()?.id,
+                    selectionLeadId = visibleEntries.lastOrNull()?.id,
                 )
             }
         }

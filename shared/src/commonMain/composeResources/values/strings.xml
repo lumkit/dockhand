@@ -109,6 +109,20 @@
     <string name="text_read_failed">读取失败</string>
     <string name="text_retry">重试</string>
     <string name="text_loading_more">加载更多…</string>
+    <string name="search_placeholder">搜索当前目录中的文件或目录</string>
+    <string name="search_tooltip">搜索当前目录</string>
+    <string name="search_filter">搜索筛选</string>
+    <string name="search_scope">搜索范围</string>
+    <string name="search_scope_current">当前文件夹</string>
+    <string name="search_scope_recursive">含子文件夹</string>
+    <string name="search_type">搜索类型</string>
+    <string name="search_type_all">所有项目</string>
+    <string name="search_type_files">文件</string>
+    <string name="search_type_folders">文件夹</string>
+    <string name="search_in_directory">搜索当前目录</string>
+    <string name="search_matches">找到 %1$d 个匹配项</string>
+    <string name="search_no_matches">没有匹配项</string>
+    <string name="search_exit">退出搜索</string>
 
     <!-- 外部文件拖入 -->
     <string name="text_drop_copy">松手复制到当前目录</string>

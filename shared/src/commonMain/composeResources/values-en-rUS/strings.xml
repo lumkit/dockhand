@@ -116,6 +116,20 @@ Changes take effect after restart.</string>
     <string name="text_read_failed">Failed to read</string>
     <string name="text_retry">Retry</string>
     <string name="text_loading_more">Loading more…</string>
+    <string name="search_placeholder">Search files or folders in this folder</string>
+    <string name="search_tooltip">Search this folder</string>
+    <string name="search_filter">Search filters</string>
+    <string name="search_scope">Search scope</string>
+    <string name="search_scope_current">Current folder</string>
+    <string name="search_scope_recursive">Include subfolders</string>
+    <string name="search_type">Search type</string>
+    <string name="search_type_all">All items</string>
+    <string name="search_type_files">Files</string>
+    <string name="search_type_folders">Folders</string>
+    <string name="search_in_directory">Search this folder</string>
+    <string name="search_matches">%1$d matches</string>
+    <string name="search_no_matches">No matches</string>
+    <string name="search_exit">Exit search</string>
 
     <!-- External file drop -->
     <string name="text_drop_copy">Drop to copy to this folder</string>

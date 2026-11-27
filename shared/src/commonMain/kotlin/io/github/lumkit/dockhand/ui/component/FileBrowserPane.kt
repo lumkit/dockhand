@@ -114,6 +114,10 @@ import dockhand.shared.generated.resources.text_empty_folder
 import dockhand.shared.generated.resources.text_loading_more
 import dockhand.shared.generated.resources.text_read_failed
 import dockhand.shared.generated.resources.text_retry
+import dockhand.shared.generated.resources.search_exit
+import dockhand.shared.generated.resources.search_in_directory
+import dockhand.shared.generated.resources.search_matches
+import dockhand.shared.generated.resources.search_no_matches
 import io.github.lumkit.dockhand.core.archive.archiveFormatForName
 import io.github.lumkit.dockhand.ui.component.LocalOpenWithSelect
 import io.github.lumkit.dockhand.ui.component.LocalOpenWithState
@@ -194,6 +198,7 @@ fun FileBrowserPane(
     onInlineRename: (FileEntry, String) -> Unit = { _, _ -> },
     onContextAction: (FileEntry, FileContextAction) -> Unit = { _, _ -> },
     onDragMoveOut: (List<FileEntry>) -> Unit = {},
+    onSearchExit: () -> Unit = {},
     modifier: Modifier = Modifier,
     overlayShape: Shape = RoundedCornerShape(0.dp),
 ) {
@@ -201,7 +206,7 @@ fun FileBrowserPane(
     val focusManager = LocalFocusManager.current
     val windowInfo = LocalWindowInfo.current
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
-    val currentEntries by rememberUpdatedState(pane.entries)
+    val currentEntries by rememberUpdatedState(pane.visibleEntries)
     val currentLayoutMode by rememberUpdatedState(layoutMode)
     val listState = rememberLazyListState()
     val inlineRenameBounds = LocalInlineRenameBounds.current
@@ -254,6 +259,7 @@ fun FileBrowserPane(
 
     LaunchedEffect(pane.location) {
         onContextMenuDismiss()
+        if (pane.searchQuery != null) onSearchExit()
     }
 
     DisposableEffect(pane.id, externalDrop) {
@@ -302,6 +308,38 @@ fun FileBrowserPane(
                 .fillMaxSize()
                 .alpha(if (isFocused) 1f else INACTIVE_PANE_ALPHA)
         ) {
+            AnimatedVisibility(visible = pane.searchQuery != null) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (pane.searchQuery.isNullOrEmpty()) {
+                                stringResource(Res.string.search_in_directory)
+                            } else {
+                                stringResource(Res.string.search_matches, pane.searchResults?.size ?: 0)
+                            },
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = stringResource(Res.string.search_exit),
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { onSearchExit() }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                    if (pane.isSearching) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
             AnimatedVisibility(visible = pane.isLoading && pane.entries.isNotEmpty()) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
@@ -389,9 +427,18 @@ fun FileBrowserPane(
                         }
                     }
 
+                    pane.searchQuery?.isNotEmpty() == true &&
+                        pane.searchResults != null &&
+                        pane.searchResults.isEmpty() &&
+                        !pane.isSearching -> {
+                        PaneStateBox {
+                            EmptyState(text = stringResource(Res.string.search_no_matches))
+                        }
+                    }
+
                     pane.isEmpty -> {
                         PaneStateBox {
-                            EmptyState()
+                            EmptyState(text = stringResource(Res.string.text_empty_folder))
                         }
                     }
 
@@ -481,7 +528,7 @@ fun FileBrowserPane(
 
                                 LaunchedEffect(pane.selectionLeadId) {
                                     val leadId = pane.selectionLeadId ?: return@LaunchedEffect
-                                    val index = pane.entries.indexOfFirst { it.id == leadId }
+                                    val index = pane.visibleEntries.indexOfFirst { it.id == leadId }
                                     if (index < 0) return@LaunchedEffect
                                     val info = listState.layoutInfo
                                     val visible = info.visibleItemsInfo
@@ -528,7 +575,7 @@ fun FileBrowserPane(
                                         .verticalScrollBar(listState),
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                                 ) {
-                                    items(pane.entries, key = { it.id }) { row ->
+                                    items(pane.visibleEntries, key = { it.id }) { row ->
                                         FileEntryRow(
                                             row = row,
                                             paneId = pane.id,
@@ -949,7 +996,7 @@ private fun FileGridContent(
     val currentLoadingMore by rememberUpdatedState(pane.isLoadingMore)
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
-    val currentEntries by rememberUpdatedState(pane.entries)
+    val currentEntries by rememberUpdatedState(pane.visibleEntries)
     val inlineBounds = LocalInlineRenameBounds.current
     var gridCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     /** 正在进行的框选；非空即表示按住鼠标拖动中。 */
@@ -1050,7 +1097,7 @@ private fun FileGridContent(
 
     LaunchedEffect(pane.selectionLeadId) {
         val leadId = pane.selectionLeadId ?: return@LaunchedEffect
-        val index = pane.entries.indexOfFirst { it.id == leadId }
+        val index = pane.visibleEntries.indexOfFirst { it.id == leadId }
         if (index < 0) return@LaunchedEffect
         val info = gridState.layoutInfo
         val visible = info.visibleItemsInfo
@@ -1187,7 +1234,7 @@ private fun FileGridContent(
             horizontalArrangement = Arrangement.spacedBy(GRID_ITEM_SPACING),
             verticalArrangement = Arrangement.spacedBy(GRID_ITEM_SPACING),
         ) {
-            gridItems(pane.entries, key = { it.id }) { row ->
+            gridItems(pane.visibleEntries, key = { it.id }) { row ->
                 FileGridItem(
                     row = row,
                     paneId = pane.id,
@@ -1747,7 +1794,7 @@ private fun PaneStateBox(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(text: String) {
     Column(
         modifier = Modifier.padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1760,7 +1807,7 @@ private fun EmptyState() {
             tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Text(
-            text = stringResource(Res.string.text_empty_folder),
+            text = text,
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )

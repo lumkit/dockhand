@@ -32,6 +32,19 @@ enum class PaneId {
         get() = if (this == Left) Right else Left
 }
 
+/** 搜索范围。 */
+enum class FileSearchScope {
+    CurrentFolder,
+    Recursive,
+}
+
+/** 搜索类型。 */
+enum class FileSearchType {
+    All,
+    Files,
+    Folders,
+}
+
 /**
  * 单个文件面板的状态。
  *
@@ -61,6 +74,14 @@ data class FilePaneState(
     /** 正在追加下一页。 */
     val isLoadingMore: Boolean = false,
     val errorMessage: String? = null,
+    /** 搜索状态；null 表示未搜索，空字符串表示搜索框已打开但还没有关键字。 */
+    val searchQuery: String? = null,
+    val searchScope: FileSearchScope = FileSearchScope.CurrentFolder,
+    val searchType: FileSearchType = FileSearchType.All,
+    /** 当前搜索结果；null 表示不在结果视图，空列表表示搜索完成但没有匹配。 */
+    val searchResults: List<FileRowUi>? = null,
+    /** 搜索任务进行中。 */
+    val isSearching: Boolean = false,
     val backStack: List<FileLocation> = emptyList(),
     val forwardStack: List<FileLocation> = emptyList(),
 ) {
@@ -68,8 +89,12 @@ data class FilePaneState(
     val canGoForward: Boolean get() = forwardStack.isNotEmpty()
     val canGoUp: Boolean get() = location?.breadcrumbs()?.size?.let { it > 1 } ?: false
 
+    /** 当前实际渲染的行：搜索时是搜索结果，否则是目录内容。 */
+    val visibleEntries: List<FileRowUi>
+        get() = searchResults ?: entries
+
     val selectedEntries: List<FileEntry>
-        get() = entries.asSequence()
+        get() = visibleEntries.asSequence()
             .filter { it.id in selectedIds }
             .map { it.entry }
             .toList()
