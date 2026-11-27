@@ -190,6 +190,7 @@ fun ShortcutSettingsBottomSheet(
     }
 }
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun ShortcutCaptureDialog(
     action: ShortcutAction,
@@ -204,6 +205,7 @@ private fun ShortcutCaptureDialog(
             bindings[other].orEmpty().contains(key)
         }
     }
+    val scrollState = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(action) {
         withFrameNanos { }
@@ -235,7 +237,14 @@ private fun ShortcutCaptureDialog(
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
@@ -284,6 +293,7 @@ private fun ShortcutCaptureDialog(
                     style = MiuixTheme.textStyles.footnote2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
+            }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

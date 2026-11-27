@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,9 +25,12 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun DeleteRequestDialog(
     request: DeleteRequestState?,
@@ -34,6 +39,7 @@ fun DeleteRequestDialog(
     onConfirm: () -> Unit,
 ) {
     if (request == null) return
+    val scrollState = rememberScrollState()
     OverlayDialog(
         show = true,
         title = stringResource(Res.string.delete_dialog_title),
@@ -45,10 +51,18 @@ fun DeleteRequestDialog(
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            BackgroundTaskRow(
-                checked = request.background,
-                onCheckedChange = onBackgroundChange,
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                BackgroundTaskRow(
+                    checked = request.background,
+                    onCheckedChange = onBackgroundChange,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

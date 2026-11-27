@@ -5,10 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.OutputTransformation
@@ -60,8 +57,10 @@ import io.github.lumkit.dockhand.core.archive.CompressionLevel
 import io.github.lumkit.dockhand.ui.screen.home.CompressRequestState
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.verticalScrollBar
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
@@ -119,58 +118,53 @@ fun CompressRequestDialog(
         summary = stringResource(Res.string.compress_dialog_summary, current.entries.size),
         onDismissRequest = onDismissRequest,
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(scrollState)
-                    .verticalScrollBar(scrollState),
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-            TextField(
-                state = nameState,
-                label = stringResource(Res.string.compress_field_name),
-                modifier = Modifier.fillMaxWidth(),
-                lineLimits = TextFieldLineLimits.SingleLine,
-            )
-            Spacer(Modifier.height(10.dp))
-            OverlayDropdownPreference(
-                items = ArchiveFormat.entries.map { archiveFormatLabel(it) },
-                selectedIndex = ArchiveFormat.entries.indexOf(current.format).coerceAtLeast(0),
-                title = stringResource(Res.string.compress_field_format),
-                summary = archiveFormatLabel(current.format),
-                onSelectedIndexChange = { onFormatChange(ArchiveFormat.entries[it]) },
-            )
-            Spacer(Modifier.height(10.dp))
-            OverlayDropdownPreference(
-                items = CompressionLevel.entries.map { compressionLevelLabel(it) },
-                selectedIndex = CompressionLevel.entries.indexOf(current.level).coerceAtLeast(0),
-                title = stringResource(Res.string.compress_field_level),
-                summary = compressionLevelLabel(current.level),
-                onSelectedIndexChange = { onLevelChange(CompressionLevel.entries[it]) },
-            )
-            Spacer(Modifier.height(10.dp))
-            AnimatedVisibility(visible = current.format.supportsPassword) {
-                Column {
-                    TextField(
-                        state = passwordState,
-                        label = stringResource(Res.string.compress_field_password),
-                        modifier = Modifier.fillMaxWidth(),
-                        useLabelAsPlaceholder = true,
-                        lineLimits = TextFieldLineLimits.SingleLine,
-                        outputTransformation = passwordMask,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(Res.string.compress_password_hint),
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                    Spacer(Modifier.height(10.dp))
+                TextField(
+                    state = nameState,
+                    label = stringResource(Res.string.compress_field_name),
+                    modifier = Modifier.fillMaxWidth(),
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                )
+                OverlayDropdownPreference(
+                    items = ArchiveFormat.entries.map { archiveFormatLabel(it) },
+                    selectedIndex = ArchiveFormat.entries.indexOf(current.format).coerceAtLeast(0),
+                    title = stringResource(Res.string.compress_field_format),
+                    summary = archiveFormatLabel(current.format),
+                    onSelectedIndexChange = { onFormatChange(ArchiveFormat.entries[it]) },
+                )
+                OverlayDropdownPreference(
+                    items = CompressionLevel.entries.map { compressionLevelLabel(it) },
+                    selectedIndex = CompressionLevel.entries.indexOf(current.level).coerceAtLeast(0),
+                    title = stringResource(Res.string.compress_field_level),
+                    summary = compressionLevelLabel(current.level),
+                    onSelectedIndexChange = { onLevelChange(CompressionLevel.entries[it]) },
+                )
+                AnimatedVisibility(visible = current.format.supportsPassword) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextField(
+                            state = passwordState,
+                            label = stringResource(Res.string.compress_field_password),
+                            modifier = Modifier.fillMaxWidth(),
+                            useLabelAsPlaceholder = true,
+                            lineLimits = TextFieldLineLimits.SingleLine,
+                            outputTransformation = passwordMask,
+                        )
+                        Text(
+                            text = stringResource(Res.string.compress_password_hint),
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                 }
-            }
-            AnimatedVisibility(visible = current.format.supportsSplit) {
-                Column {
+                AnimatedVisibility(visible = current.format.supportsSplit) {
                     TextField(
                         state = splitState,
                         label = stringResource(Res.string.compress_field_split),
@@ -188,52 +182,44 @@ fun CompressRequestDialog(
                             )
                         },
                     )
-                    Spacer(Modifier.height(10.dp))
                 }
+                CheckboxRow(
+                    title = stringResource(Res.string.compress_separate),
+                    checked = current.separateArchives,
+                    onCheckedChange = onSeparateChange,
+                )
+                CheckboxRow(
+                    title = stringResource(Res.string.compress_delete_source),
+                    checked = current.deleteSource,
+                    onCheckedChange = onDeleteSourceChange,
+                )
+                CheckboxRow(
+                    title = stringResource(Res.string.compress_to_other_pane),
+                    checked = current.toOtherPane,
+                    onCheckedChange = onToOtherPaneChange,
+                )
+                CheckboxRow(
+                    title = stringResource(Res.string.compress_dialog_background),
+                    checked = current.background,
+                    onCheckedChange = onBackgroundChange,
+                )
             }
-            CheckboxRow(
-                title = stringResource(Res.string.compress_separate),
-                checked = current.separateArchives,
-                onCheckedChange = onSeparateChange,
-            )
-            Spacer(Modifier.height(10.dp))
-            CheckboxRow(
-                title = stringResource(Res.string.compress_delete_source),
-                checked = current.deleteSource,
-                onCheckedChange = onDeleteSourceChange,
-            )
-            Spacer(Modifier.height(10.dp))
-            CheckboxRow(
-                title = stringResource(Res.string.compress_to_other_pane),
-                checked = current.toOtherPane,
-                onCheckedChange = onToOtherPaneChange,
-            )
-            Spacer(Modifier.height(10.dp))
-            CheckboxRow(
-                title = stringResource(Res.string.compress_dialog_background),
-                checked = current.background,
-                onCheckedChange = onBackgroundChange,
-            )
-            }
-            Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                top.yukonga.miuix.kmp.basic.Button(
+                TextButton(
+                    text = stringResource(Res.string.action_confirm),
                     onClick = onConfirm,
-                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary(),
                     modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
                     enabled = current.archiveName.isNotBlank(),
-                ) {
-                    Text(text = stringResource(Res.string.action_confirm))
-                }
-                top.yukonga.miuix.kmp.basic.Button(
+                )
+                TextButton(
+                    text = stringResource(Res.string.action_cancel),
                     onClick = onDismissRequest,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text(text = stringResource(Res.string.action_cancel))
-                }
+                )
             }
         }
     }

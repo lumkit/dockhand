@@ -1,6 +1,8 @@
 package io.github.lumkit.dockhand.ui.component
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
@@ -17,6 +19,7 @@ import dockhand.shared.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.icon.extended.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -156,6 +159,7 @@ private fun ToolbarAction(
     }
 }
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun CreateItemDialog(
     show: Boolean,
@@ -173,38 +177,47 @@ private fun CreateItemDialog(
         title = stringResource(Res.string.dialog_new),
         onDismissRequest = onDismiss,
     ) {
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            TextField(
-                state = itemName,
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(Res.string.field_name),
-                useLabelAsPlaceholder = true,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        indication = null,
-                        interactionSource = null,
-                    ) {
-                        onCheckedChange(!createFile)
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Checkbox(
-                    state = if (createFile) ToggleableState.On else ToggleableState.Off,
-                    onClick = null,
+                TextField(
+                    state = itemName,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(Res.string.field_name),
+                    useLabelAsPlaceholder = true,
                 )
-                Text(
-                    text = stringResource(Res.string.checkbox_create_file),
-                    style = MiuixTheme.textStyles.body1,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = null,
+                        ) {
+                            onCheckedChange(!createFile)
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Checkbox(
+                        state = if (createFile) ToggleableState.On else ToggleableState.Off,
+                        onClick = null,
+                    )
+                    Text(
+                        text = stringResource(Res.string.checkbox_create_file),
+                        style = MiuixTheme.textStyles.body1,
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

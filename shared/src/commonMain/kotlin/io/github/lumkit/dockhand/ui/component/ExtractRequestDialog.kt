@@ -5,12 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -36,9 +36,12 @@ import top.yukonga.miuix.kmp.basic.RadioButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun ExtractRequestDialog(
     request: ExtractRequestState?,
@@ -52,6 +55,7 @@ fun ExtractRequestDialog(
 ) {
     val current = request ?: return
     val folderState = rememberTextFieldState(current.folderName)
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(folderState.text) { onFolderNameChange(folderState.text.toString()) }
     LaunchedEffect(current.folderName) {
@@ -66,46 +70,48 @@ fun ExtractRequestDialog(
         summary = current.entry.name,
         onDismissRequest = onDismissRequest,
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            RadioRow(
-                title = stringResource(Res.string.extract_to_current),
-                selected = current.mode == ExtractDestinationMode.CurrentDirectory,
-                onClick = { onModeChange(ExtractDestinationMode.CurrentDirectory) },
-            )
-            RadioRow(
-                title = stringResource(Res.string.extract_to_folder),
-                selected = current.mode == ExtractDestinationMode.Folder,
-                onClick = { onModeChange(ExtractDestinationMode.Folder) },
-            )
-            AnimatedVisibility(visible = current.mode == ExtractDestinationMode.Folder) {
-                Column {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                RadioRow(
+                    title = stringResource(Res.string.extract_to_current),
+                    selected = current.mode == ExtractDestinationMode.CurrentDirectory,
+                    onClick = { onModeChange(ExtractDestinationMode.CurrentDirectory) },
+                )
+                RadioRow(
+                    title = stringResource(Res.string.extract_to_folder),
+                    selected = current.mode == ExtractDestinationMode.Folder,
+                    onClick = { onModeChange(ExtractDestinationMode.Folder) },
+                )
+                AnimatedVisibility(visible = current.mode == ExtractDestinationMode.Folder) {
                     TextField(
                         state = folderState,
                         label = stringResource(Res.string.extract_folder_name),
                         modifier = Modifier.fillMaxWidth(),
                         lineLimits = TextFieldLineLimits.SingleLine,
                     )
-                    Spacer(Modifier.height(10.dp))
                 }
+                CheckboxRow(
+                    title = stringResource(Res.string.extract_to_other_pane),
+                    checked = current.toOtherPane,
+                    onCheckedChange = onToOtherPaneChange,
+                )
+                CheckboxRow(
+                    title = stringResource(Res.string.extract_delete_source),
+                    checked = current.deleteSource,
+                    onCheckedChange = onDeleteSourceChange,
+                )
+                CheckboxRow(
+                    title = stringResource(Res.string.compress_dialog_background),
+                    checked = current.background,
+                    onCheckedChange = onBackgroundChange,
+                )
             }
-            CheckboxRow(
-                title = stringResource(Res.string.extract_to_other_pane),
-                checked = current.toOtherPane,
-                onCheckedChange = onToOtherPaneChange,
-            )
-            CheckboxRow(
-                title = stringResource(Res.string.extract_delete_source),
-                checked = current.deleteSource,
-                onCheckedChange = onDeleteSourceChange,
-            )
-            CheckboxRow(
-                title = stringResource(Res.string.compress_dialog_background),
-                checked = current.background,
-                onCheckedChange = onBackgroundChange,
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

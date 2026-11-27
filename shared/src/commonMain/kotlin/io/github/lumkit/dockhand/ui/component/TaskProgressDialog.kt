@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -32,9 +34,12 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun TaskProgressDialog(
     task: AppTask?,
@@ -42,6 +47,7 @@ fun TaskProgressDialog(
     onCancel: () -> Unit,
 ) {
     if (task == null) return
+    val scrollState = rememberScrollState()
     val status = when (task.state) {
         TaskState.Waiting -> stringResource(Res.string.task_waiting)
         TaskState.Running -> stringResource(Res.string.task_running)
@@ -64,7 +70,14 @@ fun TaskProgressDialog(
         summary = summary,
         onDismissRequest = {},
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             Text(
                 text = task.error ?: status,
                 style = MiuixTheme.textStyles.footnote2,
@@ -123,6 +136,7 @@ fun TaskProgressDialog(
                     style = MiuixTheme.textStyles.footnote2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
+            }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

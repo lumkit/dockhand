@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -322,6 +324,7 @@ fun HomeScreen() {
     )
 }
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun HomeScreenContent(
     uiState: HomeUiState,
@@ -813,24 +816,35 @@ private fun HomeScreenContent(
                     },
                     onDismissRequest = { showProgressCancelConfirm = false },
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TextButton(
-                            text = stringResource(Res.string.action_confirm),
-                            onClick = {
-                                showProgressCancelConfirm = false
-                                onActiveTaskCancel()
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary(),
-                        )
-                        TextButton(
-                            text = stringResource(Res.string.action_cancel),
-                            onClick = { showProgressCancelConfirm = false },
-                            modifier = Modifier.weight(1f),
-                        )
+                    val scrollState = rememberScrollState()
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .weight(1f, false)
+                                .verticalScrollBar(scrollState)
+                                .verticalScroll(scrollState),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            TextButton(
+                                text = stringResource(Res.string.action_confirm),
+                                onClick = {
+                                    showProgressCancelConfirm = false
+                                    onActiveTaskCancel()
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.textButtonColorsPrimary(),
+                            )
+                            TextButton(
+                                text = stringResource(Res.string.action_cancel),
+                                onClick = { showProgressCancelConfirm = false },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
@@ -1062,24 +1076,35 @@ private fun TopBarActions(
         },
         onDismissRequest = { pendingCancel = null },
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TextButton(
-                text = stringResource(Res.string.action_confirm),
-                onClick = {
-                    taskToCancel?.let { onCancelTask(it.id) }
-                    pendingCancel = null
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-            )
-            TextButton(
-                text = stringResource(Res.string.action_cancel),
-                onClick = { pendingCancel = null },
-                modifier = Modifier.weight(1f),
-            )
+        val scrollState = rememberScrollState()
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    text = stringResource(Res.string.action_confirm),
+                    onClick = {
+                        taskToCancel?.let { onCancelTask(it.id) }
+                        pendingCancel = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+                TextButton(
+                    text = stringResource(Res.string.action_cancel),
+                    onClick = { pendingCancel = null },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

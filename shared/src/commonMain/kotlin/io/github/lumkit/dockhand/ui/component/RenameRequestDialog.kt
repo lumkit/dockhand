@@ -8,6 +8,8 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
@@ -30,9 +32,12 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun RenameRequestDialog(
     request: RenameRequestState?,
@@ -42,6 +47,7 @@ fun RenameRequestDialog(
     onConfirm: () -> Unit,
 ) {
     if (request == null) return
+    val scrollState = rememberScrollState()
     val nameState = rememberTextFieldState(request.newName)
     LaunchedEffect(request.entry.id) {
         nameState.setTextAndPlaceCursorAtEnd(request.newName)
@@ -66,15 +72,23 @@ fun RenameRequestDialog(
         onDismissRequest = onDismiss,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextField(
-                state = nameState,
-                modifier = Modifier.fillMaxWidth(),
-                lineLimits = TextFieldLineLimits.SingleLine,
-            )
-            BackgroundTaskRow(
-                checked = request.background,
-                onCheckedChange = onBackgroundChange,
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextField(
+                    state = nameState,
+                    modifier = Modifier.fillMaxWidth(),
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                )
+                BackgroundTaskRow(
+                    checked = request.background,
+                    onCheckedChange = onBackgroundChange,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

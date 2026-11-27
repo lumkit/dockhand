@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -99,7 +98,6 @@ import io.github.lumkit.dockhand.shortcut.ShortcutKey
 import io.github.lumkit.dockhand.ui.screen.home.STARTUP_PATH_LAST
 import io.github.lumkit.dockhand.ui.screen.home.formatFileSize
 import org.jetbrains.compose.resources.stringResource
-import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
@@ -114,6 +112,7 @@ import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.menu.OverlayDropdownMenu
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
@@ -410,40 +409,41 @@ fun SettingsBottomSheet(
             summary = update.name ?: update.tagName,
             onDismissRequest = { showUpdateDialog = false },
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = update.body.ifBlank { emptyNotesMessage },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
+            val updateScrollState = rememberScrollState()
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .weight(1f, false)
+                        .verticalScrollBar(updateScrollState)
+                        .verticalScroll(updateScrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = update.body.ifBlank { emptyNotesMessage },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Button(
+                    TextButton(
+                        text = stringResource(Res.string.update_download),
                         onClick = {
                             runCatching { uriHandler.openUri(update.downloadUrl) }
                             showUpdateDialog = false
                         },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.update_download))
-                    }
-                    Button(
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                    TextButton(
+                        text = stringResource(Res.string.update_ignore),
                         onClick = {
                             onIgnoreUpdate(update.version)
                             showUpdateDialog = false
                         },
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.update_ignore))
-                    }
+                    )
                 }
             }
         }
@@ -456,35 +456,39 @@ fun SettingsBottomSheet(
             summary = dialogColor.toHexString(),
             onDismissRequest = { showColorDialog = false },
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ColorPalette(
-                    color = dialogColor,
-                    onColorChanged = { dialogColor = it },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            val colorScrollState = rememberScrollState()
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .weight(1f, false)
+                        .verticalScrollBar(colorScrollState)
+                        .verticalScroll(colorScrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ColorPalette(
+                        color = dialogColor,
+                        onColorChanged = { dialogColor = it },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Button(
+                    TextButton(
+                        text = stringResource(Res.string.action_confirm),
                         onClick = {
                             onKeyColorChange(dialogColor)
                             showColorDialog = false
                         },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.action_confirm))
-                    }
-                    Button(
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                    TextButton(
+                        text = stringResource(Res.string.action_cancel),
                         onClick = { showColorDialog = false },
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.action_cancel))
-                    }
+                    )
                 }
             }
         }
@@ -502,25 +506,34 @@ fun SettingsBottomSheet(
             ),
             onDismissRequest = { showCacheDialog = false },
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(
-                    onClick = {
-                        onClearCache()
-                        showCacheDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f),
+            val cacheScrollState = rememberScrollState()
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .weight(1f, false)
+                        .verticalScrollBar(cacheScrollState)
+                        .verticalScroll(cacheScrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(text = stringResource(Res.string.action_confirm))
                 }
-                Button(
-                    onClick = { showCacheDialog = false },
-                    modifier = Modifier.weight(1f),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(text = stringResource(Res.string.action_cancel))
+                    TextButton(
+                        text = stringResource(Res.string.action_confirm),
+                        onClick = {
+                            onClearCache()
+                            showCacheDialog = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                    TextButton(
+                        text = stringResource(Res.string.action_cancel),
+                        onClick = { showCacheDialog = false },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -548,20 +561,27 @@ fun SettingsBottomSheet(
             summary = stringResource(Res.string.interface_scale_range),
             onDismissRequest = { showScaleDialog = false },
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TextField(
-                    state = scaleInput,
-                    modifier = Modifier.fillMaxWidth(),
-                    lineLimits = TextFieldLineLimits.SingleLine,
-                )
+            val scaleScrollState = rememberScrollState()
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .weight(1f, false)
+                        .verticalScrollBar(scaleScrollState)
+                        .verticalScroll(scaleScrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TextField(
+                        state = scaleInput,
+                        modifier = Modifier.fillMaxWidth(),
+                        lineLimits = TextFieldLineLimits.SingleLine,
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Button(
+                    TextButton(
+                        text = stringResource(Res.string.action_confirm),
                         onClick = {
                             val percent = scaleInput.text.toString().toIntOrNull()
                                 ?: (scale * 100).roundToInt()
@@ -570,17 +590,14 @@ fun SettingsBottomSheet(
                             onInterfaceScaleChange((safeScale * 100).roundToInt())
                             showScaleDialog = false
                         },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.action_confirm))
-                    }
-                    Button(
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                    TextButton(
+                        text = stringResource(Res.string.action_cancel),
                         onClick = { showScaleDialog = false },
                         modifier = Modifier.weight(1f),
-                    ) {
-                        Text(text = stringResource(Res.string.action_cancel))
-                    }
+                    )
                 }
             }
         }

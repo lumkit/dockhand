@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -22,8 +24,11 @@ import org.jetbrains.compose.resources.stringResource
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.verticalScrollBar
+import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 fun ExtractPasswordDialog(
     request: ExtractPasswordState?,
@@ -32,6 +37,7 @@ fun ExtractPasswordDialog(
     onConfirm: () -> Unit,
 ) {
     val current = request ?: return
+    val scrollState = rememberScrollState()
     val state = rememberTextFieldState(current.password)
     val mask = OutputTransformation {
         if (length > 0) replace(0, length, "•".repeat(length))
@@ -50,14 +56,22 @@ fun ExtractPasswordDialog(
         onDismissRequest = onDismissRequest,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextField(
-                state = state,
-                label = stringResource(Res.string.extract_password),
-                modifier = Modifier.fillMaxWidth(),
-                useLabelAsPlaceholder = true,
-                lineLimits = TextFieldLineLimits.SingleLine,
-                outputTransformation = mask,
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .weight(1f, false)
+                    .verticalScrollBar(scrollState)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextField(
+                    state = state,
+                    label = stringResource(Res.string.extract_password),
+                    modifier = Modifier.fillMaxWidth(),
+                    useLabelAsPlaceholder = true,
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    outputTransformation = mask,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
