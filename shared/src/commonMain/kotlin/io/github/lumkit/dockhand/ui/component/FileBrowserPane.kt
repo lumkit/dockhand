@@ -145,6 +145,7 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.overlay.OverlayCascadingListPopup
+import top.yukonga.miuix.kmp.squircle.squircleBorder
 import top.yukonga.miuix.kmp.squircle.squircleClip
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -671,7 +672,12 @@ private fun FileEntryRow(
     onContextAction: (FileContextAction) -> Unit,
 ) {
     val rowColor = if (selected) {
-        MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+        MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+    } else {
+        Color.Transparent
+    }
+    val rowBorderColor = if (selected) {
+        MiuixTheme.colorScheme.primary
     } else {
         Color.Transparent
     }
@@ -759,6 +765,11 @@ private fun FileEntryRow(
                 .padding(horizontal = 8.dp, vertical = 1.dp)
                 .squircleClip(10.dp)
                 .background(rowColor)
+                .squircleBorder(
+                    width = if (selected) 1.5.dp else 0.dp,
+                    color = rowBorderColor,
+                    cornerRadius = 10.dp,
+                )
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
                 .combinedClickable(
                     onClick = {
@@ -1286,7 +1297,12 @@ private fun FileGridItem(
     onDragMoveOut: (List<FileEntry>) -> Unit,
 ) {
     val color = if (selected) {
-        MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+        MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+    } else {
+        Color.Transparent
+    }
+    val borderColor = if (selected) {
+        MiuixTheme.colorScheme.primary
     } else {
         Color.Transparent
     }
@@ -1375,6 +1391,11 @@ private fun FileGridItem(
                 .height(GRID_ITEM_HEIGHT)
                 .squircleClip(12.dp)
                 .background(color)
+                .squircleBorder(
+                    width = if (selected) 1.5.dp else 0.dp,
+                    color = borderColor,
+                    cornerRadius = 12.dp,
+                )
                 .alpha(if (row.entry.isHidden) 0.45f else 1f)
                 .onGloballyPositioned { itemCoordinates = it }
                 .pointerInput(editing) {
