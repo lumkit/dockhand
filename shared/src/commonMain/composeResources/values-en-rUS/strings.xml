@@ -42,6 +42,8 @@ Changes take effect after restart.</string>
     <string name="shortcut_action_select_right">Select right</string>
     <string name="shortcut_action_context_menu">Open context menu</string>
     <string name="shortcut_action_copy">Copy</string>
+    <string name="shortcut_action_copy_to_clipboard">Copy to clipboard</string>
+    <string name="shortcut_action_paste">Paste</string>
     <string name="shortcut_action_move">Move</string>
     <string name="shortcut_action_delete">Delete</string>
     <string name="shortcut_action_rename">Rename</string>
@@ -121,6 +123,14 @@ Changes take effect after restart.</string>
     <string name="text_drop_unavailable">Target folder is unavailable</string>
     <string name="text_drop_skip_self">Cannot copy or move a folder into itself</string>
     <string name="action_copy_path">Copy path</string>
+    <string name="paste_dialog_title">Paste</string>
+    <string name="paste_dialog_summary">Paste %1$s to %2$s?</string>
+    <string name="paste_dialog_summary_multiple">Paste %1$d items to %2$s?</string>
+    <string name="paste_no_files">No files in the clipboard</string>
+    <string name="paste_failed">Paste failed</string>
+    <string name="copy_clipboard_empty">Select items to copy</string>
+    <string name="copy_clipboard_mtp">MTP items cannot be copied to the system clipboard</string>
+    <string name="copy_clipboard_failed">Failed to copy to the system clipboard</string>
     <string name="copy_dialog_title">Copy items</string>
     <string name="move_dialog_title">Move items</string>
     <string name="delete_dialog_title">Delete items</string>

@@ -41,10 +41,12 @@ import dockhand.shared.generated.resources.action_confirm
 import dockhand.shared.generated.resources.shortcut_action_clear_selection
 import dockhand.shared.generated.resources.shortcut_action_context_menu
 import dockhand.shared.generated.resources.shortcut_action_copy
+import dockhand.shared.generated.resources.shortcut_action_copy_to_clipboard
 import dockhand.shared.generated.resources.shortcut_action_compress
 import dockhand.shared.generated.resources.shortcut_action_delete
 import dockhand.shared.generated.resources.shortcut_action_move
 import dockhand.shared.generated.resources.shortcut_action_next
+import dockhand.shared.generated.resources.shortcut_action_paste
 import dockhand.shared.generated.resources.shortcut_action_previous
 import dockhand.shared.generated.resources.shortcut_action_extend_down
 import dockhand.shared.generated.resources.shortcut_action_extend_left
@@ -332,6 +334,8 @@ private fun ShortcutAction.label(): String = when (this) {
     ShortcutAction.SelectRight -> stringResource(Res.string.shortcut_action_select_right)
     ShortcutAction.OpenContextMenu -> stringResource(Res.string.shortcut_action_context_menu)
     ShortcutAction.Copy -> stringResource(Res.string.shortcut_action_copy)
+    ShortcutAction.CopyToClipboard -> stringResource(Res.string.shortcut_action_copy_to_clipboard)
+    ShortcutAction.Paste -> stringResource(Res.string.shortcut_action_paste)
     ShortcutAction.Move -> stringResource(Res.string.shortcut_action_move)
     ShortcutAction.Delete -> stringResource(Res.string.shortcut_action_delete)
     ShortcutAction.Rename -> stringResource(Res.string.shortcut_action_rename)

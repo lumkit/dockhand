@@ -9,6 +9,7 @@ import io.github.lumkit.dockhand.core.platform.DesktopFileOpener
 import io.github.lumkit.dockhand.core.platform.MacTerminalLauncher
 import io.github.lumkit.dockhand.core.platform.cleanupTaskTempDirectories
 import io.github.lumkit.dockhand.core.platform.defaultAppDataDirectory
+import io.github.lumkit.dockhand.data.clipboard.AwtFileClipboard
 import io.github.lumkit.dockhand.data.database.createDatabase
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.data.datastore.createSettingsDataStore
@@ -58,6 +59,7 @@ fun createAppContainer(): AppContainer {
         archiveService = LocalArchiveService(),
         fileOpener = DesktopFileOpener(),
         updates = GithubUpdateRepository(),
+        clipboard = AwtFileClipboard(),
         onClose = {
             scope.cancel()
             database.close()

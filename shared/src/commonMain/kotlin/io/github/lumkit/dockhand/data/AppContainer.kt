@@ -7,6 +7,8 @@ import io.github.lumkit.dockhand.core.cache.CacheManager
 import io.github.lumkit.dockhand.core.platform.FileOpener
 import io.github.lumkit.dockhand.core.platform.NoopFileOpener
 import io.github.lumkit.dockhand.core.cache.NoopCacheManager
+import io.github.lumkit.dockhand.data.clipboard.FileClipboard
+import io.github.lumkit.dockhand.data.clipboard.NoopFileClipboard
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.platform.NoopTerminalLauncher
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
@@ -31,6 +33,7 @@ class AppContainer(
     val archiveService: ArchiveService = NoopArchiveService,
     val fileOpener: FileOpener = NoopFileOpener,
     val updates: UpdateRepository = NoopUpdateRepository,
+    val clipboard: FileClipboard = NoopFileClipboard,
     private val onClose: () -> Unit = {},
 ) {
     private var closed = false

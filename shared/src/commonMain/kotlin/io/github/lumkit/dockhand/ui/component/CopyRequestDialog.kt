@@ -21,6 +21,9 @@ import dockhand.shared.generated.resources.copy_dialog_background
 import dockhand.shared.generated.resources.copy_dialog_summary
 import dockhand.shared.generated.resources.copy_dialog_summary_multiple
 import dockhand.shared.generated.resources.copy_dialog_title
+import dockhand.shared.generated.resources.paste_dialog_summary
+import dockhand.shared.generated.resources.paste_dialog_summary_multiple
+import dockhand.shared.generated.resources.paste_dialog_title
 import io.github.lumkit.dockhand.domain.model.displayPath
 import io.github.lumkit.dockhand.ui.screen.home.CopyRequestState
 import org.jetbrains.compose.resources.stringResource
@@ -47,16 +50,26 @@ fun CopyRequestDialog(
 
     OverlayDialog(
         show = true,
-        title = stringResource(Res.string.copy_dialog_title),
+        title = stringResource(
+            if (request.isPaste) Res.string.paste_dialog_title else Res.string.copy_dialog_title,
+        ),
         summary = if (request.entries.size > 1) {
             stringResource(
-                Res.string.copy_dialog_summary_multiple,
+                if (request.isPaste) {
+                    Res.string.paste_dialog_summary_multiple
+                } else {
+                    Res.string.copy_dialog_summary_multiple
+                },
                 request.entries.size,
                 request.destination.displayPath(),
             )
         } else {
             stringResource(
-                Res.string.copy_dialog_summary,
+                if (request.isPaste) {
+                    Res.string.paste_dialog_summary
+                } else {
+                    Res.string.copy_dialog_summary
+                },
                 request.entry.name,
                 request.destination.displayPath(),
             )

@@ -98,6 +98,8 @@ data class CopyRequestState(
     val destination: FileLocation,
     val background: Boolean = false,
     val entries: List<FileEntry> = listOf(entry),
+    /** 从系统剪贴板粘贴时，确认框使用“粘贴”文案。 */
+    val isPaste: Boolean = false,
 )
 
 @Immutable

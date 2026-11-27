@@ -3,6 +3,8 @@ package io.github.lumkit.dockhand.ui.screen.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.lumkit.dockhand.core.platform.TerminalLauncher
+import io.github.lumkit.dockhand.data.clipboard.FileClipboard
+import io.github.lumkit.dockhand.data.clipboard.NoopFileClipboard
 import io.github.lumkit.dockhand.data.datastore.SettingsRepository
 import io.github.lumkit.dockhand.core.app.AppLanguage
 import io.github.lumkit.dockhand.core.archive.ArchiveFormat
@@ -50,10 +52,15 @@ import io.github.lumkit.dockhand.ui.component.SelectionMode
 import androidx.compose.ui.graphics.Color
 import dockhand.shared.generated.resources.Res
 import dockhand.shared.generated.resources.cache_clear_pending
+import dockhand.shared.generated.resources.copy_clipboard_empty
+import dockhand.shared.generated.resources.copy_clipboard_failed
+import dockhand.shared.generated.resources.copy_clipboard_mtp
 import dockhand.shared.generated.resources.compress_multiple_single_file
 import dockhand.shared.generated.resources.compress_name_empty
 import dockhand.shared.generated.resources.compress_single_file_only
 import dockhand.shared.generated.resources.extract_name_empty
+import dockhand.shared.generated.resources.paste_failed
+import dockhand.shared.generated.resources.paste_no_files
 import dockhand.shared.generated.resources.task_extract_detail
 import dockhand.shared.generated.resources.task_extract_title
 import dockhand.shared.generated.resources.task_compress_detail
@@ -120,6 +127,7 @@ class HomeViewModel(
     private val archiveService: ArchiveService = NoopArchiveService,
     private val fileOpener: FileOpener = NoopFileOpener,
     private val updates: UpdateRepository? = null,
+    private val clipboard: FileClipboard = NoopFileClipboard,
     taskNotifier: TaskNotifier = NoopTaskNotifier,
     /** 列表排序 + summary 格式化的线程；测试里可注入 Unconfined。 */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -1238,6 +1246,65 @@ class HomeViewModel(
     }
 
     fun onShortcutCopy(): Boolean = runShortcutTransfer(copy = true)
+
+    /**
+     * 把焦点面板选中的本地项目写入系统文件剪贴板，其他 App 可以直接粘贴。
+     * MTP 条目没有本地路径，无法放进系统剪贴板。
+     */
+    fun onShortcutCopyToClipboard(): Boolean {
+        val pane = _state.value.pane(_state.value.focusedPane)
+        val entries = pane.selectedEntries
+        if (entries.isEmpty()) {
+            scope.launch { setOperationError(getString(Res.string.copy_clipboard_empty)) }
+            return true
+        }
+        if (entries.any { it.location.source.kind != FileSourceKind.Local }) {
+            scope.launch { setOperationError(getString(Res.string.copy_clipboard_mtp)) }
+            return true
+        }
+        val paths = entries.map { it.location.path }
+        scope.launch {
+            if (!clipboard.copyLocalPaths(paths)) {
+                setOperationError(getString(Res.string.copy_clipboard_failed))
+            }
+        }
+        return true
+    }
+
+    /**
+     * 读取系统剪贴板中的本地文件，弹出复制确认框，确认后粘贴到焦点面板当前目录。
+     */
+    fun onShortcutPaste(): Boolean {
+        val destination = _state.value.pane(_state.value.focusedPane).location
+        if (destination == null) return true
+        scope.launch {
+            val paths = clipboard.readLocalPaths()
+            if (paths.isEmpty()) {
+                setOperationError(getString(Res.string.paste_no_files))
+                return@launch
+            }
+            val entries = runCatching { files.entriesForLocalPaths(paths) }.getOrElse {
+                setOperationError(getString(Res.string.paste_failed))
+                return@launch
+            }
+            if (entries.isEmpty()) {
+                setOperationError(getString(Res.string.paste_no_files))
+                return@launch
+            }
+            _state.update { state ->
+                state.copy(
+                    copyRequest = CopyRequestState(
+                        entry = entries.first(),
+                        destination = destination,
+                        background = state.taskPreferences.background,
+                        entries = entries,
+                        isPaste = true,
+                    ),
+                )
+            }
+        }
+        return true
+    }
 
     fun onShortcutMove(): Boolean = runShortcutTransfer(copy = false)
 

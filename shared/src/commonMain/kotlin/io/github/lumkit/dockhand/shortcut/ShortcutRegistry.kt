@@ -20,6 +20,8 @@ enum class ShortcutAction {
     SelectRight,
     OpenContextMenu,
     Copy,
+    CopyToClipboard,
+    Paste,
     Move,
     Delete,
     Rename,
@@ -75,6 +77,8 @@ val DefaultShortcutBindings: Map<ShortcutAction, ShortcutKey> = mapOf(
     ShortcutAction.SelectRight to ShortcutKey(Key.DirectionRight, alt = true),
     ShortcutAction.OpenContextMenu to ShortcutKey(Key.Enter, meta = true, shift = true),
     ShortcutAction.Copy to ShortcutKey(Key.C, meta = true, shift = true),
+    ShortcutAction.CopyToClipboard to ShortcutKey(Key.C, meta = true),
+    ShortcutAction.Paste to ShortcutKey(Key.V, meta = true),
     ShortcutAction.Move to ShortcutKey(Key.M, meta = true, shift = true),
     ShortcutAction.Delete to ShortcutKey(Key.Backspace, meta = true, shift = true),
     ShortcutAction.Rename to ShortcutKey(Key.R, meta = true, shift = true),
@@ -123,57 +127,60 @@ fun ShortcutKey.display(): String {
     if (ctrl) parts += "⌃"
     if (alt) parts += "⌥"
     if (shift) parts += "⇧"
-    val normalizedKey = Key(key.normalizedKeyCode())
-    parts += when (normalizedKey) {
-            Key.A -> "A"
-            Key.B -> "B"
-            Key.C -> "C"
-            Key.D -> "D"
-            Key.E -> "E"
-            Key.F -> "F"
-            Key.G -> "G"
-            Key.H -> "H"
-            Key.I -> "I"
-            Key.J -> "J"
-            Key.K -> "K"
-            Key.L -> "L"
-            Key.M -> "M"
-            Key.N -> "N"
-            Key.O -> "O"
-            Key.P -> "P"
-            Key.Q -> "Q"
-            Key.R -> "R"
-            Key.S -> "S"
-            Key.T -> "T"
-            Key.U -> "U"
-            Key.V -> "V"
-            Key.W -> "W"
-            Key.X -> "X"
-            Key.Y -> "Y"
-            Key.Z -> "Z"
-            Key.Escape -> "Esc"
-            Key.Enter -> "Enter"
-            Key.Spacebar -> "Space"
-            Key.Delete -> "Delete"
-            Key.Backspace -> "Backspace"
-            Key.Tab -> "Tab"
-            Key.DirectionUp -> "↑"
-            Key.DirectionDown -> "↓"
-            Key.DirectionLeft -> "←"
-            Key.DirectionRight -> "→"
-            else -> normalizedKey.keyCode.toString()
+    val normalizedCode = key.normalizedKeyCode()
+    parts += when (normalizedCode) {
+            Key.A.normalizedKeyCode() -> "A"
+            Key.B.normalizedKeyCode() -> "B"
+            Key.C.normalizedKeyCode() -> "C"
+            Key.D.normalizedKeyCode() -> "D"
+            Key.E.normalizedKeyCode() -> "E"
+            Key.F.normalizedKeyCode() -> "F"
+            Key.G.normalizedKeyCode() -> "G"
+            Key.H.normalizedKeyCode() -> "H"
+            Key.I.normalizedKeyCode() -> "I"
+            Key.J.normalizedKeyCode() -> "J"
+            Key.K.normalizedKeyCode() -> "K"
+            Key.L.normalizedKeyCode() -> "L"
+            Key.M.normalizedKeyCode() -> "M"
+            Key.N.normalizedKeyCode() -> "N"
+            Key.O.normalizedKeyCode() -> "O"
+            Key.P.normalizedKeyCode() -> "P"
+            Key.Q.normalizedKeyCode() -> "Q"
+            Key.R.normalizedKeyCode() -> "R"
+            Key.S.normalizedKeyCode() -> "S"
+            Key.T.normalizedKeyCode() -> "T"
+            Key.U.normalizedKeyCode() -> "U"
+            Key.V.normalizedKeyCode() -> "V"
+            Key.W.normalizedKeyCode() -> "W"
+            Key.X.normalizedKeyCode() -> "X"
+            Key.Y.normalizedKeyCode() -> "Y"
+            Key.Z.normalizedKeyCode() -> "Z"
+            Key.Escape.normalizedKeyCode() -> "Esc"
+            Key.Enter.normalizedKeyCode() -> "Enter"
+            Key.Spacebar.normalizedKeyCode() -> "Space"
+            Key.Delete.normalizedKeyCode() -> "Delete"
+            Key.Backspace.normalizedKeyCode() -> "Backspace"
+            Key.Tab.normalizedKeyCode() -> "Tab"
+            Key.DirectionUp.normalizedKeyCode() -> "↑"
+            Key.DirectionDown.normalizedKeyCode() -> "↓"
+            Key.DirectionLeft.normalizedKeyCode() -> "←"
+            Key.DirectionRight.normalizedKeyCode() -> "→"
+            else -> normalizedCode.toString()
         }
     return parts.joinToString("+")
 }
 
-fun Key.isModifierKey(): Boolean = this == Key.ShiftLeft ||
-    this == Key.ShiftRight ||
-    this == Key.CtrlLeft ||
-    this == Key.CtrlRight ||
-    this == Key.AltLeft ||
-    this == Key.AltRight ||
-    this == Key.MetaLeft ||
-    this == Key.MetaRight
+fun Key.isModifierKey(): Boolean {
+    val code = normalizedKeyCode()
+    return code == Key.ShiftLeft.normalizedKeyCode() ||
+        code == Key.ShiftRight.normalizedKeyCode() ||
+        code == Key.CtrlLeft.normalizedKeyCode() ||
+        code == Key.CtrlRight.normalizedKeyCode() ||
+        code == Key.AltLeft.normalizedKeyCode() ||
+        code == Key.AltRight.normalizedKeyCode() ||
+        code == Key.MetaLeft.normalizedKeyCode() ||
+        code == Key.MetaRight.normalizedKeyCode()
+}
 
 class ShortcutRegistry(
     bindings: List<ShortcutBinding>,

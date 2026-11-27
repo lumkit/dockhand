@@ -7,6 +7,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import java.awt.event.KeyEvent.KEY_LOCATION_STANDARD
 import java.awt.event.KeyEvent as AwtKeyEvent
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ShortcutKeyTest {
@@ -23,5 +24,12 @@ class ShortcutKeyTest {
             isMetaPressed = true,
         )
         assertTrue(ShortcutKey(Key.A, meta = true).matches(event))
+    }
+
+    @Test
+    fun displayUsesReadableKeyNames() {
+        assertEquals("⌘+A", ShortcutKey(Key.A, meta = true).display())
+        assertEquals("Esc", ShortcutKey(Key.Escape).display())
+        assertEquals("↑", ShortcutKey(Key.DirectionUp).display())
     }
 }

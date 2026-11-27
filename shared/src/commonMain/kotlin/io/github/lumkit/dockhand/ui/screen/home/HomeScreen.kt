@@ -183,6 +183,7 @@ fun HomeScreen() {
             archiveService = container.archiveService,
             fileOpener = container.fileOpener,
             updates = container.updates,
+            clipboard = container.clipboard,
         )
     }
     val uiState by homeViewModel.state.collectAsState()
@@ -222,6 +223,8 @@ fun HomeScreen() {
         onSelectRight = homeViewModel::onSelectRight,
         onOpenContextMenu = homeViewModel::onOpenContextMenu,
         onShortcutCopy = homeViewModel::onShortcutCopy,
+        onShortcutCopyToClipboard = homeViewModel::onShortcutCopyToClipboard,
+        onShortcutPaste = homeViewModel::onShortcutPaste,
         onShortcutMove = homeViewModel::onShortcutMove,
         onShortcutDelete = homeViewModel::onShortcutDelete,
         onShortcutRename = homeViewModel::onShortcutRename,
@@ -343,6 +346,8 @@ private fun HomeScreenContent(
     onSelectRight: () -> Boolean,
     onOpenContextMenu: () -> Boolean,
     onShortcutCopy: () -> Boolean,
+    onShortcutCopyToClipboard: () -> Boolean,
+    onShortcutPaste: () -> Boolean,
     onShortcutMove: () -> Boolean,
     onShortcutDelete: () -> Boolean,
     onShortcutRename: () -> Boolean,
@@ -456,6 +461,8 @@ private fun HomeScreenContent(
     val currentSelectRight by rememberUpdatedState(onSelectRight)
     val currentOpenContextMenu by rememberUpdatedState(onOpenContextMenu)
     val currentShortcutCopy by rememberUpdatedState(onShortcutCopy)
+    val currentShortcutCopyToClipboard by rememberUpdatedState(onShortcutCopyToClipboard)
+    val currentShortcutPaste by rememberUpdatedState(onShortcutPaste)
     val currentShortcutMove by rememberUpdatedState(onShortcutMove)
     val currentShortcutDelete by rememberUpdatedState(onShortcutDelete)
     val currentShortcutRename by rememberUpdatedState(onShortcutRename)
@@ -498,6 +505,8 @@ private fun HomeScreenContent(
                     ShortcutAction.SelectRight -> currentSelectRight()
                     ShortcutAction.OpenContextMenu -> currentOpenContextMenu()
                     ShortcutAction.Copy -> currentShortcutCopy()
+                    ShortcutAction.CopyToClipboard -> currentShortcutCopyToClipboard()
+                    ShortcutAction.Paste -> currentShortcutPaste()
                     ShortcutAction.Move -> currentShortcutMove()
                     ShortcutAction.Delete -> currentShortcutDelete()
                     ShortcutAction.Rename -> currentShortcutRename()
